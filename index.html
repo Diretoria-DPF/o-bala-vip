@@ -108,14 +108,27 @@
         </div>
 
         <!-- Etapa 4: Credencial Gerada / QR Code -->
+       <!-- Etapa 4: Credencial Digital / Crachá Acadêmico -->
         <div id="credentialScreen" class="auth-step hidden">
-          <h3>Credencial Digital Emitida</h3>
-          <div class="qr-container">
-            <img id="credentialQrImage" src="" alt="QR Code da Credencial">
+          <div style="text-align: center; margin-bottom: 16px;">
+            <span class="badge-role" id="credRoleBadge" style="font-size: 0.85rem; padding: 4px 12px;">Membro LAIFT</span>
+            <h3 id="credUserName" style="color: var(--primary); margin: 10px 0 2px; font-size: 1.4rem;">Nome do Participante</h3>
+            <p id="credUserId" style="color: var(--gray); font-size: 0.9rem; margin-bottom: 12px;">Matrícula/CPF: ---</p>
           </div>
-          <p class="credential-caption">Apresente este código na portaria dos eventos presenciais ou salve-o em seu dispositivo.</p>
-          <button id="enterPlatformBtn" class="btn btn-success" type="button" onclick="transitionToDashboard()">Acessar Plataforma de Estudos</button>
-          <button id="resendCredentialButton" class="btn btn-secondary" type="button" onclick="resendCredentialEmail()">Reenviar para meu E-mail</button>
+
+          <div class="qr-container" style="background: #f8fafc; padding: 18px; border-radius: 12px; border: 2px dashed #cbd5e1; display: inline-block; width: 100%; box-sizing: border-box; text-align: center;">
+            <img id="credentialQrImage" src="" alt="QR Code Oficial" style="max-width: 260px; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+            <p class="credential-caption" style="margin-top: 10px; font-size: 0.8rem; color: var(--gray);">Apresente este código na portaria para registro automático de presença.</p>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+            <button id="enterPlatformBtn" class="btn btn-primary" style="padding: 14px; font-size: 1.05rem; background: #00695c;" type="button" onclick="transitionToDashboard()">
+              🚀 Acessar Plataforma de Estudos
+            </button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="logout()">
+              Trocar de Usuário / Sair
+            </button>
+          </div>
         </div>
 
         <!-- Terminal Fiscal / Validador Administrativo -->
