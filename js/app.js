@@ -8,11 +8,25 @@ const SESSION_TTL_DAYS = 7;
 
 const appState = {
   activeView: 'authSection',
-  user: null,
-  fiscalSession: '',
-  scanInProgress: false,
-  scannerInstance: null
+  user: null
 };
+
+// =========================================================
+// EXPOSIÇÃO GLOBAL IMEDIATA (Evita erros de onclick no HTML)
+// =========================================================
+window.transitionToDashboard = transitionToDashboard;
+window.launchModule = launchModule;
+window.navigateTo = navigateTo;
+window.logout = logout;
+window.requestAccessCode = requestAccessCode;
+window.sendRegistrationCode = sendRegistrationCode;
+window.validateAccessCode = validateAccessCode;
+window.returnToIdentity = returnToIdentity;
+window.restartPublicFlow = restartPublicFlow;
+window.resetVisualMetrics = resetVisualMetrics;
+window.showUserCredentialModal = showUserCredentialModal;
+window.closeCredentialModal = closeCredentialModal;
+window.closePreceptorModal = closePreceptorModal;
 
 // =========================================================
 // ROTEAMENTO E TRANSIÇÃO DE TELAS SPA
@@ -31,13 +45,12 @@ function navigateTo(viewId) {
     appState.activeView = viewId;
   }
 
-  // Atualiza botões no cabeçalho
   const controls = document.getElementById('sessionHeaderControls');
   if (viewId === 'authSection') {
-    controls.classList.add('hidden');
+    if (controls) controls.classList.add('hidden');
     document.body.className = 'theme-default';
   } else {
-    controls.classList.remove('hidden');
+    if (controls) controls.classList.remove('hidden');
   }
 }
 
@@ -45,28 +58,39 @@ function launchModule(moduleType) {
   switch (moduleType) {
     case 'farmaco':
       document.body.className = 'theme-default';
-      // Garante recarregamento limpo do quiz ao acessar
-      const frame = document.getElementById('quizFrame');
-      if (frame && frame.contentWindow) {
-        frame.contentWindow.location.reload();
+      const quizFrame = document.getElementById('quizFrame');
+      if (quizFrame && quizFrame.contentWindow) {
+        quizFrame.contentWindow.location.reload();
       }
       navigateTo('quizSection');
       break;
 
     case 'clinica':
       document.body.className = 'theme-clinic';
-      ClinicEngine.startCase('caso_tox_01');
+      if (typeof ClinicEngine !== 'undefined') {
+        ClinicEngine.startCase('caso_tox_01');
+      }
       navigateTo('clinicSection');
       break;
 
     case 'lab':
       document.body.className = 'theme-default';
+      const labFrame = document.querySelector('#labSection iframe');
+      if (labFrame && labFrame.contentWindow) {
+        labFrame.contentWindow.location.reload();
+      }
       navigateTo('labSection');
       break;
 
     default:
       navigateTo('dashboardSection');
   }
+}
+
+function transitionToDashboard() {
+  navigateTo('dashboardSection');
+  document.body.className = 'theme-default';
+  refreshDashboard();
 }
 
 // =========================================================
@@ -104,20 +128,28 @@ function persistSession(userData) {
 }
 
 function applyUserToUI(user) {
-  document.getElementById('headerUserName').textContent = user.name || 'Estudante';
-  document.getElementById('headerUserBadge').textContent = user.type || 'Membro';
-  
-  document.getElementById('dashUserName').textContent = user.name || 'Estudante';
-  document.getElementById('dashUserRole').textContent = user.type || 'Membro';
-  document.getElementById('dashUserId').textContent = user.identifier || '---';
+  const hName = document.getElementById('headerUserName');
+  const hBadge = document.getElementById('headerUserBadge');
+  const dName = document.getElementById('dashUserName');
+  const dRole = document.getElementById('dashUserRole');
+  const dId = document.getElementById('dashUserId');
+  const dInitials = document.getElementById('userInitials');
 
-  const initials = (user.name || 'LA')
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map(p => p[0].toUpperCase())
-    .join('');
-  document.getElementById('userInitials').textContent = initials || 'LF';
+  if (hName) hName.textContent = user.name || 'Estudante';
+  if (hBadge) hBadge.textContent = user.type || 'Membro';
+  if (dName) dName.textContent = user.name || 'Estudante';
+  if (dRole) dRole.textContent = user.type || 'Membro';
+  if (dId) dId.textContent = user.identifier || '---';
+
+  if (dInitials) {
+    const initials = (user.name || 'LA')
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(p => p[0].toUpperCase())
+      .join('');
+    dInitials.textContent = initials || 'LF';
+  }
 }
 
 function logout() {
@@ -130,7 +162,7 @@ function logout() {
 }
 
 // =========================================================
-// SINCRONIZAÇÃO DO DASHBOARD E MÉTRICAS
+// DASHBOARD E MÉTRICAS
 // =========================================================
 
 async function refreshDashboard() {
@@ -139,11 +171,14 @@ async function refreshDashboard() {
   try {
     const data = await ApiService.obterDashboardAluno(appState.user.identifier);
     if (data.sucesso && data.aluno) {
-      document.getElementById('statAccuracy').textContent = `${data.aluno.taxaAcertoGeral}%`;
-      document.getElementById('statAnswered').textContent = data.aluno.totalQuestoes;
-      document.getElementById('statCasesSolved').textContent = data.aluno.simuladosConcluidos;
+      const elAcc = document.getElementById('statAccuracy');
+      const elAns = document.getElementById('statAnswered');
+      const elCases = document.getElementById('statCasesSolved');
 
-      // Desbloqueio dinâmico de medalhas
+      if (elAcc) elAcc.textContent = `${data.aluno.taxaAcertoGeral}%`;
+      if (elAns) elAns.textContent = data.aluno.totalQuestoes;
+      if (elCases) elCases.textContent = data.aluno.simuladosConcluidos;
+
       if (data.aluno.totalQuestoes > 0) {
         document.getElementById('badgeTox')?.classList.remove('locked');
       }
@@ -152,44 +187,54 @@ async function refreshDashboard() {
       }
     }
   } catch (err) {
-    console.warn('Dashboard carregado em modo offline.');
+    console.warn('Dashboard em modo local offline.');
   }
 }
 
 function resetVisualMetrics() {
   if (confirm('Deseja zerar os contadores visuais locais da tela?')) {
-    document.getElementById('statAccuracy').textContent = '0%';
-    document.getElementById('statAnswered').textContent = '0';
-    document.getElementById('statCasesSolved').textContent = '0';
+    const elAcc = document.getElementById('statAccuracy');
+    const elAns = document.getElementById('statAnswered');
+    const elCases = document.getElementById('statCasesSolved');
+    if (elAcc) elAcc.textContent = '0%';
+    if (elAns) elAns.textContent = '0';
+    if (elCases) elCases.textContent = '0';
   }
 }
 
 // =========================================================
-// FLUXO PÚBLICO DE AUTENTICAÇÃO (OTP / CADASTRO)
+// FLUXO PÚBLICO DE AUTENTICAÇÃO
 // =========================================================
 
 function showPublicStep(stepId) {
   ['identityForm', 'registrationForm', 'otpForm', 'credentialScreen'].forEach(id => {
-    document.getElementById(id).classList.add('hidden');
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
   });
-  document.getElementById(stepId).classList.remove('hidden');
+  const target = document.getElementById(stepId);
+  if (target) target.classList.remove('hidden');
 }
 
 function showStatus(msg, type) {
   const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = `status-banner ${type}`;
-  el.classList.remove('hidden');
+  if (el) {
+    el.textContent = msg;
+    el.className = `status-banner ${type}`;
+    el.classList.remove('hidden');
+  }
 }
 
 function hideStatus() {
-  document.getElementById('status').classList.add('hidden');
+  const el = document.getElementById('status');
+  if (el) el.classList.add('hidden');
 }
 
 async function requestAccessCode() {
   hideStatus();
-  const identifier = document.getElementById('studentId').value.trim();
-  const email = document.getElementById('studentEmail').value.trim().toLowerCase();
+  const idInput = document.getElementById('studentId');
+  const emailInput = document.getElementById('studentEmail');
+  const identifier = idInput ? idInput.value.trim() : '';
+  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
 
   if (!identifier || !email) {
     showStatus('Preencha a matrícula/CPF e seu e-mail.', 'error');
@@ -251,7 +296,8 @@ async function validateAccessCode() {
   hideStatus();
   const identifier = document.getElementById('studentId').value.trim();
   const email = document.getElementById('studentEmail').value.trim().toLowerCase();
-  const code = document.getElementById('otpCode').value.replace(/\D/g, '');
+  const codeInput = document.getElementById('otpCode');
+  const code = codeInput ? codeInput.value.replace(/\D/g, '') : '';
 
   if (code.length !== 6) {
     showStatus('Digite o código de 6 dígitos enviado por e-mail.', 'error');
@@ -268,34 +314,17 @@ async function validateAccessCode() {
       persistSession({
         identifier,
         email,
-        name: document.getElementById('participantName').value.trim() || 'Estudante',
-        type: document.getElementById('participantType').value || 'Membro',
+        name: document.getElementById('participantName')?.value.trim() || 'Estudante',
+        type: document.getElementById('participantType')?.value || 'Membro',
         sessionToken: res.sessao
       });
 
-      // Carrega QR Code da credencial
-      loadCredential(res.sessao);
+      transitionToDashboard();
     } else {
       showStatus(res.mensagem || 'Código incorreto ou expirado.', 'error');
     }
   } catch (err) {
     showStatus('Falha ao autenticar o código.', 'error');
-  }
-}
-
-async function loadCredential(tokenSessao) {
-  try {
-    const cred = await ApiService.obterCredencial(tokenSessao);
-    if (cred.sucesso && cred.qrcodeUrl) {
-      document.getElementById('credentialQrImage').src = cred.qrcodeUrl;
-      document.getElementById('modalQrImage').src = cred.qrcodeUrl;
-      document.getElementById('modalQrMeta').textContent = `Matrícula: ${appState.user.identifier}`;
-      showPublicStep('credentialScreen');
-    } else {
-      transitionToDashboard();
-    }
-  } catch (err) {
-    transitionToDashboard();
   }
 }
 
@@ -306,9 +335,12 @@ function returnToIdentity() {
 
 function restartPublicFlow() {
   hideStatus();
-  document.getElementById('studentId').value = '';
-  document.getElementById('studentEmail').value = '';
-  document.getElementById('otpCode').value = '';
+  const id = document.getElementById('studentId');
+  const email = document.getElementById('studentEmail');
+  const otp = document.getElementById('otpCode');
+  if (id) id.value = '';
+  if (email) email.value = '';
+  if (otp) otp.value = '';
   showPublicStep('identityForm');
 }
 
@@ -317,46 +349,55 @@ function restartPublicFlow() {
 // =========================================================
 
 function showUserCredentialModal() {
-  document.getElementById('credentialModal').classList.add('active');
+  const session = JSON.parse(localStorage.getItem(STORAGE_SESSION_KEY) || '{}');
+  const modalQr = document.getElementById('modalQrImage');
+  const modalMeta = document.getElementById('modalQrMeta');
+
+  if (session && session.identifier) {
+    if (modalMeta) modalMeta.textContent = `Participante: ${session.name || 'Estudante'} | ID: ${session.identifier}`;
+    const qrPayload = session.sessionToken ? `LAIFT:v1:${session.sessionToken}` : `LAIFT:ID:${session.identifier}`;
+    if (modalQr) modalQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=12&data=${encodeURIComponent(qrPayload)}`;
+  }
+
+  document.getElementById('credentialModal')?.classList.add('active');
 }
 
 function closeCredentialModal() {
-  document.getElementById('credentialModal').classList.remove('active');
+  document.getElementById('credentialModal')?.classList.remove('active');
 }
 
 function closePreceptorModal() {
-  document.getElementById('preceptorModal').classList.remove('active');
+  document.getElementById('preceptorModal')?.classList.remove('active');
   transitionToDashboard();
 }
 
 // =========================================================
-// INICIALIZAÇÃO DO ECOSSISTEMA
+// INICIALIZAÇÃO
 // =========================================================
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Inicialização dos submotores
-  QuizEngine.init();
-  ClinicEngine.init();
-  LabEngine.init();
+  // Inicializa apenas o motor da Clínica Médica
+  if (typeof ClinicEngine !== 'undefined') {
+    ClinicEngine.init();
+  }
 
-  // Listeners de navegação fixa
-  document.getElementById('navHubBtn').addEventListener('click', transitionToDashboard);
-  document.getElementById('globalLogoutBtn').addEventListener('click', logout);
-  document.getElementById('infoBtn').addEventListener('click', () => {
-    document.getElementById('instructionsModal').classList.add('active');
+  // Listeners dos botões fixos de cabeçalho
+  document.getElementById('navHubBtn')?.addEventListener('click', transitionToDashboard);
+  document.getElementById('globalLogoutBtn')?.addEventListener('click', logout);
+  document.getElementById('infoBtn')?.addEventListener('click', () => {
+    document.getElementById('instructionsModal')?.classList.add('active');
   });
-  document.getElementById('closeModal').addEventListener('click', () => {
-    document.getElementById('instructionsModal').classList.remove('active');
+  document.getElementById('closeModal')?.addEventListener('click', () => {
+    document.getElementById('instructionsModal')?.classList.remove('active');
   });
 
-  // Listener para fechamento de modais clicando fora
   window.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {
       e.target.classList.remove('active');
     }
   });
 
-  // Verifica se já existe sessão persistida válida
+  // Checa se já existe sessão salva
   const hasSession = checkExistingSession();
   if (!hasSession) {
     navigateTo('authSection');
