@@ -45,13 +45,11 @@ function launchModule(moduleType) {
   switch (moduleType) {
     case 'farmaco':
       document.body.className = 'theme-default';
-      QuizEngine.setModule('farmaco');
-      navigateTo('quizSection');
-      break;
-
-    case 'toxico':
-      document.body.className = 'theme-toxico';
-      QuizEngine.setModule('toxico');
+      // Garante recarregamento limpo do quiz ao acessar
+      const frame = document.getElementById('quizFrame');
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.location.reload();
+      }
       navigateTo('quizSection');
       break;
 
@@ -69,12 +67,6 @@ function launchModule(moduleType) {
     default:
       navigateTo('dashboardSection');
   }
-}
-
-function transitionToDashboard() {
-  navigateTo('dashboardSection');
-  document.body.className = 'theme-default';
-  refreshDashboard();
 }
 
 // =========================================================
