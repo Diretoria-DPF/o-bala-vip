@@ -275,7 +275,7 @@
         <h3 style="color: var(--primary); font-size: 1.15rem;">💊 Simulador de Farmacologia</h3>
         <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
       </div>
-      <iframe id="quizFrame" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
+      <iframe id="quizFrame" title="Simulador de Farmacologia Básica" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
     </section>
 
     <!-- =========================================================
@@ -286,9 +286,20 @@
         <h3 style="color: #004d40; font-size: 1.15rem;">🧪 Simulador de Toxicologia Clínica & Forense</h3>
         <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
       </div>
-      <iframe id="toxicoFrame" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
+      <iframe id="toxicoFrame" title="Simulador de Toxicologia Clínica e Forense" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
     </section>
 
+       <!-- =========================================================
+         5. MÓDULO: LABORATÓRIO VIRTUAL (IFRAME)
+    ========================================================= -->
+   <section id="labSection" class="view-panel hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="color: var(--primary); font-size: 1.15rem;">🔬 Laboratório Virtual</h3>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+      </div>
+      <iframe id="labFrame" title="Laboratório Virtual de Bancada e Ensaios Químicos" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
+    </section>
+    
     <!-- =========================================================
          4. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE)
     ========================================================= -->
@@ -354,16 +365,17 @@
         </div>
 
         <!-- Abas da Consulta Clínica -->
-        <nav class="clinic-tabs" role="tablist">
-          <button class="clinic-tab-btn active" data-tab="prontuarioTab">📋 Prontuário & Sinais</button>
-          <button class="clinic-tab-btn" data-tab="dialogoTab">🗣️ Anamnese (Chat)</button>
-          <button class="clinic-tab-btn" data-tab="examesTab">🔬 Laboratório & Exames</button>
-          <button class="clinic-tab-btn highlight" data-tab="fechamentoTab">📝 Diagnóstico & Conduta</button>
+       <!-- Abas da Consulta com ARIA Completo -->
+        <nav class="clinic-tabs" role="tablist" aria-label="Navegação da Consulta Médica">
+          <button class="clinic-tab-btn active" role="tab" aria-selected="true" aria-controls="prontuarioTab" id="tab-prontuario" data-tab="prontuarioTab">📋 Prontuário & Sinais</button>
+          <button class="clinic-tab-btn" role="tab" aria-selected="false" aria-controls="dialogoTab" id="tab-dialogo" data-tab="dialogoTab">🗣️ Anamnese (Chat)</button>
+          <button class="clinic-tab-btn" role="tab" aria-selected="false" aria-controls="examesTab" id="tab-exames" data-tab="examesTab">🔬 Laboratório & Exames</button>
+          <button class="clinic-tab-btn highlight" role="tab" aria-selected="false" aria-controls="fechamentoTab" id="tab-fechamento" data-tab="fechamentoTab">📝 Diagnóstico & Conduta</button>
         </nav>
 
         <div class="clinic-tab-viewport">
           <!-- Aba 1: Prontuário -->
-          <div id="prontuarioTab" class="clinic-tab-pane active">
+          <div id="prontuarioTab" class="clinic-tab-pane active" role="tabpanel" aria-labelledby="tab-prontuario">
             <div class="prontuario-grid">
               <div class="sheet-box">
                 <h4>Queixa Principal & Admissão</h4>
@@ -386,8 +398,8 @@
             </div>
           </div>
 
-          <!-- Aba 2: Anamnese (Chat com o Paciente) -->
-          <div id="dialogoTab" class="clinic-tab-pane">
+          <!-- Aba 2: Anamnese -->
+          <div id="dialogoTab" class="clinic-tab-pane" role="tabpanel" aria-labelledby="tab-dialogo">
             <div class="chat-container">
               <div id="chatHistory" class="chat-viewport">
                 <div class="chat-bubble patient">
@@ -408,8 +420,8 @@
             </div>
           </div>
 
-          <!-- Aba 3: Laboratório e Exames -->
-          <div id="examesTab" class="clinic-tab-pane">
+          <!-- Aba 3: Exames -->
+          <div id="examesTab" class="clinic-tab-pane" role="tabpanel" aria-labelledby="tab-exames">
             <div class="exams-workspace">
               <div class="exams-catalog">
                 <h4>Painel de Exames Disponíveis</h4>
@@ -426,8 +438,8 @@
             </div>
           </div>
 
-          <!-- Aba 4: Diagnóstico e Conduta -->
-          <div id="fechamentoTab" class="clinic-tab-pane">
+          <!-- Aba 4: Fechamento -->
+          <div id="fechamentoTab" class="clinic-tab-pane" role="tabpanel" aria-labelledby="tab-fechamento">
             <div class="resolution-form">
               <div class="form-group">
                 <label for="studentDiagnosisInput">Hipótese Diagnóstica Principal:</label>
@@ -445,19 +457,6 @@
             </div>
           </div>
         </div>
-
-      </div>
-    </section>
-
-    <!-- =========================================================
-         5. MÓDULO: LABORATÓRIO VIRTUAL (IFRAME)
-    ========================================================= -->
-    <section id="labSection" class="view-panel hidden">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="color: var(--primary); font-size: 1.15rem;">🔬 Laboratório Virtual</h3>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
-      </div>
-      <iframe id="labFrame" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
     </section>
 
   </main>
