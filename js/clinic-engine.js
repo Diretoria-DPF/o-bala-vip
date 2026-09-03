@@ -152,38 +152,83 @@ const ClinicEngine = (() => {
     if (!topico || !topico.trim()) return;
 
     if (typeof showStatus === 'function') {
-      showStatus('Conectando à IA Groq para sintetizar um caso clínico original...', 'loading');
+      showStatus('Sintetizando novo caso clínico com IA...', 'loading');
     }
 
     try {
       let res = null;
       if (typeof ApiService !== 'undefined' && typeof ApiService.gerarCasoProcedural === 'function') {
         res = await ApiService.gerarCasoProcedural(topico.trim(), 'Avançado');
-      } else if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
-        res = await ApiService.callAppsScript({
-          acao: 'gerarCasoProcedural',
-          topicoAlvo: topico.trim(),
-          dificuldade: 'Avançado'
-        });
       }
 
       if (typeof hideStatus === 'function') hideStatus();
 
       if (res && res.sucesso && res.caso) {
-        if (typeof clinicalCases !== 'undefined') {
-          clinicalCases.push(res.caso);
-        }
+        clinicalCases.push(res.caso);
         renderBedsGrid();
-        alert(`✅ Novo paciente admitido no plantão: ${res.caso.paciente.nome}! Abrindo leito...`);
+        alert(`✅ Caso criado com sucesso: ${res.caso.paciente.nome} (${res.caso.titulo})!`);
         openBed(res.caso.id);
-      } else {
-        alert((res && res.mensagem) || 'Não foi possível sintetizar o caso no momento.');
+        return;
       }
+      
+      throw new Error((res && res.mensagem) || 'Falha no retorno da API');
     } catch (err) {
       if (typeof hideStatus === 'function') hideStatus();
-      console.error('[ClinicEngine] Erro na síntese procedural:', err);
-      alert('Erro de conexão com o servidor ao gerar caso com IA.');
+      console.warn('[ClinicEngine] Acionando síntese local de contingência:', err);
+
+      // Gerador Local Dinâmico para nunca travar a aula
+      const casoBackup = gerarCasoLocalContingencia(topico.trim());
+      clinicalCases.push(casoBackup);
+      renderBedsGrid();
+      alert(`⚡ Caso gerado pelo simulador local: ${casoBackup.paciente.nome} (${casoBackup.titulo})!`);
+      openBed(casoBackup.id);
     }
+  }
+
+  function gerarCasoLocalContingencia(tema) {
+    const idUnico = 'caso_proc_' + Date.now();
+    return {
+      id: idUnico,
+      titulo: `Caso Simulado: ${tema}`,
+      tipo: "emergencia",
+      dificuldade: "Avançado",
+      vitalidadeInicial: 85,
+      pacienciaInicial: 80,
+      taxaDecaimento: { vitalidadePorMinuto: 2, pacienciaPorMinuto: 1 },
+      paciente: {
+        nome: "Valdir Monteiro",
+        idade: 48,
+        peso: "76 kg",
+        profissao: "Autônomo",
+        alergias: "Nega alergias conhecidas",
+        imagem: "🧑"
+      },
+      queixaPrincipal: `Doutor(a)... passei mal de repente depois que tive contato com ${tema}... tô zonzo e com falta de ar.`,
+      historicoAdmissao: `Admitido na emergência com relato de exposição aguda a ${tema}. Apresenta mal-estar súbito, astenia e alterações nos sinais vitais.`,
+      sinaisVitais: { pa: "100/65 mmHg", fc: "96 bpm", fr: "22 irpm", temp: "36.7 °C", spo2: "93%", glasgow: "15" },
+      contextoOculto: {
+        nome: "Valdir",
+        idade: 48,
+        pacienteProfissao: "Autônomo",
+        exposicaoReal: `Exposição recente e desprotegida a ${tema}.`,
+        sintomas: "tontura forte, fraqueza no corpo, sensação de peito pesado",
+        comportamento: "Assustado, colaborativo, buscando socorro imediato."
+      },
+      perguntasSugeridas: [
+        "Há quanto tempo ocorreu o contato com a substância?",
+        "Quais foram os primeiros sintomas que o senhor sentiu?",
+        "O senhor utilizava algum equipamento de proteção?"
+      ],
+      examesDisponiveis: [
+        { id: "lab_triagem", nome: "Triagem Toxicológica e Bioquímica Geral", custoTempoMin: 15, impactoVitalidade: 0, impactoPaciencia: -1, essencial: true, resultado: `Alterações metabólicas sugestivas de intoxicação por ${tema}.` },
+        { id: "gasometria_base", nome: "Gasometria Arterial e Eletrólitos", custoTempoMin: 8, impactoVitalidade: 0, impactoPaciencia: -1, essencial: true, resultado: "Acidose metabólica discreta com gasometria compensada." }
+      ],
+      gabaritoPreceptor: {
+        diagnostico: `Intoxicação Exógena / Agravo Clínico compatível com ${tema}`,
+        conduta: "Estabilização clínica ABCDE, afastamento da fonte de exposição, medidas de descontaminação e suporte farmacológico específico.",
+        palavrasChave: ["estabilização", "suporte", "descontaminação", tema.toLowerCase()]
+      }
+    };
   }
 
   // =========================================================
