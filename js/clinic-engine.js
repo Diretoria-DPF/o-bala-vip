@@ -139,6 +139,31 @@ const ClinicEngine = (() => {
       `;
       dom.availableExamsList.appendChild(row);
     });
+
+    function gerarRespostaLocalPaciente(pergunta) {
+  const p = pergunta.toLowerCase();
+  const caso = currentCase;
+
+  if (p.includes('remédio') || p.includes('medicamento') || p.includes('veneno') || p.includes('produto') || p.includes('passou') || p.includes('usou')) {
+    return caso.tipo === 'emergencia' 
+      ? "Eu tava passando veneno de mato na roça, doutor... tinha cheiro forte de alho estragado, mas não li a embalagem." 
+      : "Eu tomo remédio pro colesterol todo dia há uns anos, e tomei um antibiótico forte pro peito que me passaram no posto.";
+  }
+  if (p.includes('tempo') || p.includes('quando') || p.includes('começou')) {
+    return caso.tipo === 'emergencia' 
+      ? "Começou faz nem uma hora! Eu comecei a vomitar e as forças foram sumindo do nada." 
+      : "Essa moleza nas pernas já tem uns 3 dias, mas hoje piorou porque a urina saiu cor de café.";
+  }
+  if (p.includes('proteção') || p.includes('epi') || p.includes('máscara') || p.includes('luva')) {
+    return "Tava muito quente... tirei a máscara de pano e a camisa ficou molhada do líquido.";
+  }
+  if (p.includes('dor') || p.includes('onde')) {
+    return caso.tipo === 'emergencia' 
+      ? "Meu peito tá apertado, parece que tô afogando no seco!" 
+      : "Minhas pernas e meus braços doem muito, parece que carreguei saco de cimento.";
+  }
+  return "Doutor(a), tô fraco demais... me ajuda a melhorar isso.";
+}
   }
 
   function resetChat() {
