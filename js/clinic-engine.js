@@ -1,13 +1,6 @@
 /**
- * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPLATAFORMA LAIFT)
+ * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE & PLANTÃO LAIFT)
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
- * 
- * Funcionalidades:
- * - Integração com API de IA (Groq / DeepSeek / Gemini) via Google Apps Script
- * - Motor Cognitivo Heurístico Local com classificação semântica de intenções
- * - Simulação de exame físico interativo direto pelo diálogo
- * - Modulação dinâmica de fala por nível de vitalidade (fadiga, dispneia, confusão)
- * - Avaliador Pedagógico Heurístico com parecer técnico e notas proporcionais
  */
 
 const ClinicEngine = (() => {
@@ -19,8 +12,8 @@ const ClinicEngine = (() => {
   let isCaseActive = false;
   let conversationHistory = [];
   let requestedExams = [];
-  let intentHistory = {}; // Rastreia repetições para gerar respostas variadas
-  let caseOutcome = 'EM_ANDAMENTO'; // 'EM_ANDAMENTO' | 'CONCLUIDO' | 'OBITO' | 'ABANDONO'
+  let intentHistory = {};
+  let caseOutcome = 'EM_ANDAMENTO';
 
   // Cache dos elementos do DOM
   const dom = {};
@@ -34,7 +27,12 @@ const ClinicEngine = (() => {
     dom.patienceFill = document.getElementById('patienceFill');
     dom.timeElapsed = document.getElementById('clinicTimeElapsed');
 
-    // Abas de navegação
+    // Navegação de Telas do Módulo Clínico
+    dom.dashboardView = document.getElementById('clinicDashboardView');
+    dom.workspaceView = document.getElementById('clinicWorkspaceView');
+    dom.bedsGrid = document.getElementById('patientBedsGrid');
+
+    // Abas de navegação da consulta
     dom.tabButtons = document.querySelectorAll('.clinic-tab-btn');
     dom.tabPanes = document.querySelectorAll('.clinic-tab-pane');
 
@@ -48,7 +46,7 @@ const ClinicEngine = (() => {
     dom.vitalSpO2 = document.getElementById('vitalSpO2');
     dom.vitalGlasgow = document.getElementById('vitalGlasgow');
 
-    // Diálogo e Anamnese
+    // Diálogo / Anamnese
     dom.chatHistory = document.getElementById('chatHistory');
     dom.chatInitialGreeting = document.getElementById('chatInitialGreeting');
     dom.suggestionsList = document.getElementById('suggestionsList');
@@ -71,7 +69,125 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // INICIALIZAÇÃO DO CASO CLÍNICO
+  // GESTÃO DA GRADE DE LEITOS (PLANTÃO)
+  // =========================================================
+
+  function renderBedsGrid() {
+    initDomReferences();
+    if (!dom.bedsGrid) return;
+
+    dom.bedsGrid.innerHTML = '';
+
+    if (typeof clinicalCases === 'undefined' || !Array.isArray(clinicalCases) || clinicalCases.length === 0) {
+      dom.bedsGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--gray);">
+          <h3>Nenhum paciente cadastrado no momento.</h3>
+          <p>Clique em <strong>⚡ Gerar Caso com IA</strong> para admitir um paciente no plantão.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const resolvidos = JSON.parse(localStorage.getItem('laift_resolved_cases') || '[]');
+
+    clinicalCases.forEach((c, index) => {
+      const isConcluido = resolvidos.includes(c.id);
+      const card = document.createElement('div');
+      card.className = `bed-card ${c.tipo === 'emergencia' ? 'emergency' : 'ambulatory'} ${isConcluido ? 'completed' : ''}`;
+
+      const idade = c.paciente ? c.paciente.idade : '--';
+      const nome = c.paciente ? c.paciente.nome : 'Paciente';
+      const queixa = c.queixaPrincipal ? (c.queixaPrincipal.length > 80 ? c.queixaPrincipal.substring(0, 80) + '...' : c.queixaPrincipal) : 'Sem queixa registrada';
+
+      card.innerHTML = `
+        <div class="bed-header">
+          <span class="bed-tag">${c.tipo === 'emergencia' ? '🚨 Emergência' : '🩺 Ambulatório'}</span>
+          <span class="bed-status" style="font-weight: bold; color: ${isConcluido ? 'var(--success)' : 'var(--primary)'};">
+            ${isConcluido ? '✅ Concluído' : '🟡 Aguardando'}
+          </span>
+        </div>
+        <h4 style="margin: 8px 0 4px; font-size: 1.15rem; color: var(--primary);">Leito 0${index + 1}: ${nome}</h4>
+        <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 44px;">"${queixa}"</p>
+        <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--gray); border-top: 1px solid #e2e8f0; padding-top: 8px; margin-bottom: 14px;">
+          <span>Idade: <strong>${idade} anos</strong></span>
+          <span>Dificuldade: <strong>${c.dificuldade || 'Média'}</strong></span>
+        </div>
+        <button class="btn btn-primary" style="width: 100%;" type="button" onclick="ClinicEngine.openBed('${c.id}')">
+          ${isConcluido ? '🔄 Reatender Paciente' : '🩺 Assumir Atendimento'}
+        </button>
+      `;
+
+      dom.bedsGrid.appendChild(card);
+    });
+  }
+
+  function showBedsDashboard() {
+    initDomReferences();
+    if (dom.workspaceView) dom.workspaceView.classList.add('hidden');
+    if (dom.dashboardView) dom.dashboardView.classList.remove('hidden');
+    renderBedsGrid();
+  }
+
+  function openBed(caseId) {
+    initDomReferences();
+    if (dom.dashboardView) dom.dashboardView.classList.add('hidden');
+    if (dom.workspaceView) dom.workspaceView.classList.remove('hidden');
+    startCase(caseId);
+  }
+
+  function returnToBeds() {
+    if (isCaseActive) {
+      if (!confirm('Deseja pausar o atendimento atual e retornar ao painel de leitos?')) return;
+      clearInterval(clockInterval);
+      isCaseActive = false;
+    }
+    showBedsDashboard();
+  }
+
+  async function solicitarCasoProcedural() {
+    const topico = prompt(
+      'Digite o tema clínico ou toxicológico que deseja treinar:\n(Ex: Intoxicação por Chumbo, Picada de Escorpião, Paracetamol, Monóxido de Carbono)',
+      'Intoxicação por Praguicidas'
+    );
+    if (!topico || !topico.trim()) return;
+
+    if (typeof showStatus === 'function') {
+      showStatus('Conectando à IA Groq para sintetizar um caso clínico original...', 'loading');
+    }
+
+    try {
+      let res = null;
+      if (typeof ApiService !== 'undefined' && typeof ApiService.gerarCasoProcedural === 'function') {
+        res = await ApiService.gerarCasoProcedural(topico.trim(), 'Avançado');
+      } else if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'gerarCasoProcedural',
+          topicoAlvo: topico.trim(),
+          dificuldade: 'Avançado'
+        });
+      }
+
+      if (typeof hideStatus === 'function') hideStatus();
+
+      if (res && res.sucesso && res.caso) {
+        if (typeof clinicalCases !== 'undefined') {
+          clinicalCases.push(res.caso);
+        }
+        renderBedsGrid();
+        alert(`✅ Novo paciente admitido no plantão: ${res.caso.paciente.nome}! Abrindo leito...`);
+        openBed(res.caso.id);
+      } else {
+        alert((res && res.mensagem) || 'Não foi possível sintetizar o caso no momento.');
+      }
+    } catch (err) {
+      if (typeof hideStatus === 'function') hideStatus();
+      console.error('[ClinicEngine] Erro na síntese procedural:', err);
+      alert('Erro de conexão com o servidor ao gerar caso com IA.');
+    }
+  }
+
+  // =========================================================
+  // ATENDIMENTO CLÍNICO DO LEITO ATIVO
   // =========================================================
 
   function startCase(caseId) {
@@ -82,7 +198,7 @@ const ClinicEngine = (() => {
       : null;
 
     if (!selected) {
-      console.error('[ClinicEngine] Nenhum caso clínico localizado na base.');
+      console.error('[ClinicEngine] Nenhum caso clínico localizado.');
       return;
     }
 
@@ -138,7 +254,7 @@ const ClinicEngine = (() => {
   function renderSuggestions() {
     if (!dom.suggestionsList || !currentCase) return;
     dom.suggestionsList.innerHTML = '';
-    
+
     (currentCase.perguntasSugeridas || []).forEach(suggestion => {
       const chip = document.createElement('button');
       chip.className = 'suggestion-chip';
@@ -202,10 +318,6 @@ const ClinicEngine = (() => {
     }
   }
 
-  // =========================================================
-  // CRONÔMETRO E MONITORAMENTO BIOLÓGICO
-  // =========================================================
-
   function handleTimeTick() {
     if (!isCaseActive) return;
 
@@ -216,7 +328,6 @@ const ClinicEngine = (() => {
       dom.timeElapsed.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
 
-    // Decaimento programado a cada 60 segundos
     if (elapsedSeconds > 0 && elapsedSeconds % 60 === 0 && currentCase && currentCase.taxaDecaimento) {
       applyDecay(
         currentCase.taxaDecaimento.vitalidadePorMinuto || 1,
@@ -253,7 +364,7 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // MOTOR COGNITIVO HEURÍSTICO LOCAL (PERSONA LEIGA REALISTA)
+  // MOTOR HEURÍSTICO LOCAL (CONTINGÊNCIA)
   // =========================================================
 
   function gerarRespostaContextualLocal(pergunta) {
@@ -261,170 +372,89 @@ const ClinicEngine = (() => {
     const casoId = currentCase ? currentCase.id : '';
     const isEmergencia = currentCase ? currentCase.tipo === 'emergencia' : true;
 
-    // Modulação fisiológica da voz conforme a gravidade biológica
     let prefixo = '';
     if (vitality < 30) {
       prefixo = isEmergencia
         ? "(falando com imenso esforço, engasgando na saliva) ...ai... d-doutor... "
-        : "(voz muito fraca e arrastada) ...doutor(a)... tá difícil falar... ";
+        : "(voz fraca e arrastada) ...doutor(a)... tá difícil falar... ";
     } else if (vitality < 60) {
       prefixo = isEmergencia
         ? "(respirando curto e tossindo) ...espera... "
-        : "(suspirando de cansaço) ...ai, meu Deus... ";
+        : "(suspirando de dor) ...ai, meu Deus... ";
     }
 
-    // Helper de controle de repetições para evitar falas idênticas
     function registrarIntent(chave) {
       intentHistory[chave] = (intentHistory[chave] || 0) + 1;
       return intentHistory[chave];
     }
 
-    // 1. Identificação / Nome / Idade / Origem
-    if (p.includes('seu nome') || p.includes('quem é você') || p.includes('como se chama') || p.includes('quem é o senhor') || p.includes('como é seu nome')) {
+    // 1. Identificação / Nome
+    if (p.includes('seu nome') || p.includes('quem é você') || p.includes('como se chama') || p.includes('quem é o senhor')) {
       const vez = registrarIntent('nome');
       if (casoId === 'caso_tox_01') {
         return vez === 1
-          ? `${prefixo}Meu nome é Agenor... Agenor Silveira... trabalho como diarista na lavoura do seu Bento...`
+          ? `${prefixo}Meu nome é Agenor... Agenor Silveira... trabalho como diarista na lavoura de milho...`
           : `${prefixo}É Agenor Silveira, doutor... minha cabeça tá confusa, mas é esse meu nome.`;
       }
-      return `${prefixo}Me chamo Marilene Souza, sou professora aposentada...`;
+      return `${prefixo}Me chamo ${currentCase.paciente.nome}, doutor(a)...`;
     }
 
-    if (p.includes('idade') || p.includes('quantos anos')) {
-      return casoId === 'caso_tox_01'
-        ? `${prefixo}Tenho 52 anos... fiz aniversário em julho passado...`
-        : `${prefixo}Tenho 61 anos, doutor(a)...`;
-    }
-
-    if (p.includes('quem trouxe') || p.includes('veio com quem') || p.includes('família') || p.includes('esposa') || p.includes('filho')) {
-      return casoId === 'caso_tox_01'
-        ? `${prefixo}Foram os companheiros da roça... me viram caído na beira do milharal e me jogaram na caçamba do carro... minha esposa nem sabe ainda!`
-        : `${prefixo}Vim sozinha de táxi, meus filhos moram em outra cidade...`;
-    }
-
-    // 2. Exame Físico Interativo Solicitado no Chat
+    // 2. Exame Físico pelo Chat
     if (p.includes('auscultar') || p.includes('estetoscópio') || p.includes('ouvir seu peito') || p.includes('ouvir o pulmão') || p.includes('respirar fundo')) {
       if (casoId === 'caso_tox_01') {
-        return `${prefixo}Pode colocar o aparelho... mas não consigo puxar o ar fundo sem tossir... <em>[Ausculta pulmonar: Roncos difusos, sibilos disseminados bilaterais e fervilhar de estertores crepitantes em ambas as bases pulmonares (broncorreia severa).]</em>`;
+        return `${prefixo}Pode colocar o aparelho... mas não consigo puxar o ar fundo sem engasgar... <em>[Ausculta pulmonar: Roncos difusos, sibilos disseminados bilaterais e fervilhar de estertores crepitantes em ambas as bases pulmonares (broncorreia severa).]</em>`;
       }
-      return `${prefixo}Pode ouvir sim, doutor(a)... <em>[Ausculta pulmonar: Murmúrio vesicular presente e distribuído bilateralmente, sem ruídos adventícios no momento.]</em>`;
+      return `${prefixo}Pode ouvir sim, doutor(a)... <em>[Ausculta pulmonar: Murmúrio vesicular presente e simétrico, sem ruídos adventícios no momento.]</em>`;
     }
 
     if (p.includes('olhar o olho') || p.includes('olhar sua pupila') || p.includes('pupila') || p.includes('lanterna') || p.includes('olhos')) {
       if (casoId === 'caso_tox_01') {
-        return `${prefixo}A luz dói, doutor... tá tudo embaçado e escuro demais ao meu redor... <em>[Exame ocular: Miose bilateral puntiforme extrema ('em cabeça de alfinete') e hiporreativa à estimulação luminosa.]</em>`;
+        return `${prefixo}A luz dói, doutor... tá tudo escuro e fechado ao meu redor... <em>[Exame ocular: Miose bilateral puntiforme extrema ('em cabeça de alfinete') e hiporreativa à luz.]</em>`;
       }
-      return `${prefixo}Pode olhar... sinto minhas pálpebras pesadas de cansaço... <em>[Exame ocular: Pupilas isocóricas e fotorreagentes, escleras anictéricas.]</em>`;
+      return `${prefixo}Pode olhar... sinto minhas vistas pesadas de cansaço... <em>[Exame ocular: Pupilas isocóricas e fotorreagentes, escleras anictéricas.]</em>`;
     }
 
-    if (p.includes('palpar') || p.includes('apertar sua barriga') || p.includes('abdômen') || p.includes('abdome') || p.includes('estômago')) {
-      if (casoId === 'caso_tox_01') {
-        return `${prefixo}Ai! Tá doendo muito por dentro, parece que vai soltar tudo numa diarreia! <em>[Exame físico: Abdome flácido, difusamente doloroso à palpação leve, peristaltismo hiperativo com borborigmos frequentes.]</em>`;
-      }
-      return `${prefixo}Não sinto dor na barriga não, doutor... a aflição maior é nas pernas e nas costas. <em>[Exame físico: Abdome flácido, indolor à palpação, sem massas ou visceromegalias.]</em>`;
-    }
-
-    if (p.includes('força') || p.includes('aperta minha mão') || p.includes('mexer o braço') || p.includes('mexer a perna')) {
-      if (casoId === 'caso_tox_01') {
-        return `${prefixo}Tento apertar, mas a mão parece de borracha... os dedos tremem e não seguram! <em>[Exame neurológico: Fraqueza muscular generalizada (Grau III/V), fasciculações involuntárias visíveis na musculatura escapular e braços.]</em>`;
-      }
-      return `${prefixo}Tento fazer força, mas os braços e as coxas ardem como se tivessem rasgando...`;
-    }
-
-    // 3. Dor e Sintomas Dolorosos
+    // 3. Dor e Sintomas
     if (p.includes('dor') || p.includes('dói') || p.includes('doendo') || p.includes('onde dói') || p.includes('sente dor')) {
-      const vez = registrarIntent('dor');
       if (casoId === 'caso_tox_01') {
-        return vez === 1
-          ? `${prefixo}O que mais dói é esse aperto no peito, parece que sentaram no meu tórax! E a cabeça tá estourando de dor com a vista turva.`
-          : `${prefixo}Dói o peito para respirar, doutor... e sinto uma cólica horrível revirando a barriga!`;
+        return `${prefixo}O que mais dói é esse aperto no peito, parece que sentaram no meu tórax! E a cabeça tá estourando de pontada com a vista escura.`;
       }
-      return `${prefixo}Dói o corpo inteiro, doutor(a)... principalmente as coxas, as costas e os ombros. Uma queimação pesada e insuportável.`;
+      return `${prefixo}Dói o corpo inteiro, doutor(a)... uma queimação pesada e insuportável nos músculos.`;
     }
 
-    // 4. Agente Químico / Veneno / Remédios
-    if (p.includes('veneno') || p.includes('produto') || p.includes('química') || p.includes('lavoura') || p.includes('inseticida') || p.includes('pulveriz') || p.includes('passou')) {
-      const vez = registrarIntent('veneno');
+    // 4. Veneno / Remédios
+    if (p.includes('veneno') || p.includes('produto') || p.includes('química') || p.includes('lavoura') || p.includes('inseticida')) {
       if (casoId === 'caso_tox_01') {
-        return vez === 1
-          ? `${prefixo}Eu tava borrifando veneno de matar lagarta no milho com a bomba costal. Tinha um cheiro muito forte e enjoativo, parecendo alho podre!`
-          : `${prefixo}Era um líquido escuro que o feitor colocou no galão... não olhei a marca, mas ele disse que era tiro e queda pra praga. O cheiro de alho podre impregnou em tudo.`;
+        return `${prefixo}Eu tava borrifando veneno de matar lagarta no milho com a bomba costal. Tinha um cheiro muito forte e enjoativo, parecendo alho podre!`;
       }
-      return `${prefixo}Eu não mexo com veneno de roça não, doutor... fico em casa.`;
+      return `${prefixo}Eu não mexo com veneno de lavoura não, doutor...`;
     }
 
     if (p.includes('remédio') || p.includes('medicamento') || p.includes('tomou') || p.includes('toma')) {
-      const vez = registrarIntent('remedio');
       if (casoId === 'caso_tox_01') {
-        return `${prefixo}Não tomei nenhum remédio hoje não, senhor(a)... só tomei café puro de manhã antes de pegar a enxada e a bomba.`;
+        return `${prefixo}Não tomei nenhum remédio hoje não, senhor(a)... só tomei café puro de manhã antes de pegar a enxada.`;
       }
-      return vez === 1
-        ? `${prefixo}Tomo Sinvastatina de 40mg toda noite por causa do colesterol faz anos... e semana passada o médico do posto me deu Claritromicina de 500mg pra uma infecção no pulmão. Tomei os dois juntos.`
-        : `${prefixo}Tomo o remédio do colesterol e terminei ontem o antibiótico que me passaram pro peito.`;
+      if (casoId === 'caso_clin_02') {
+        return `${prefixo}Tomo Sinvastatina de 40mg toda noite por causa do colesterol faz anos... e semana passada o médico do posto me deu Claritromicina de 500mg pro peito. Tomei os dois juntos.`;
+      }
+      return `${prefixo}Tomei os remédios que me receitaram normalmente...`;
     }
 
-    // 5. EPIs e Exposição Dérmica / Inalatória
-    if (p.includes('proteção') || p.includes('epi') || p.includes('máscara') || p.includes('luva') || p.includes('macacão') || p.includes('roupa') || p.includes('costas') || p.includes('lavou')) {
-      const vez = registrarIntent('epi');
-      if (casoId === 'caso_tox_01') {
-        return vez === 1
-          ? `${prefixo}Tava um sol escaldante na roça... tirei a máscara de pano porque tava sufocando de calor... aí a mangueira da bomba rachou e o líquido derramou nas minhas costas, encharcando minha camisa toda!`
-          : `${prefixo}Tava só de camisa de algodão e botina velha... a camisa colou no meu corpo encharcada do produto. Não lavei com água porque não tinha torneira perto.`;
-      }
-      return `${prefixo}Trabalho de professora, não uso roupas especiais nem máscara em casa...`;
-    }
-
-    // 6. Cronologia e Tempo
-    if (p.includes('tempo') || p.includes('quando') || p.includes('que horas') || p.includes('começou') || p.includes('há quanto')) {
-      const vez = registrarIntent('tempo');
-      if (casoId === 'caso_tox_01') {
-        return vez === 1
-          ? `${prefixo}Começou tem pouco tempo! Eu tava borrifando fazia umas duas horas... de repente comecei a suar frio, a saliva começou a escorrer e as pernas falharam faz nem uma hora!`
-          : `${prefixo}Faz menos de uma hora que caí no chão... a piora foi rápida demais depois que a roupa molhou.`;
-      }
-      return `${prefixo}As dores nas juntas começaram faz uns 3 dias, mas hoje de manhã perdi as forças de vez ao ver a urina preta.`;
-    }
-
-    // 7. Respiração, Salivação e Secreções
-    if (p.includes('saliva') || p.includes('baba') || p.includes('cuspe') || p.includes('ar') || p.includes('respira') || p.includes('fôlego') || p.includes('sufoc') || p.includes('engasg')) {
-      if (casoId === 'caso_tox_01') {
-        return `${prefixo}Tô me afogando na própria saliva, doutor! Não para de brotar uma baba grossa e branca na boca... e meu peito chia parecendo um fole furado, o ar não entra!`;
-      }
-      return `${prefixo}O ar entra normal agora, mas meu coração parece que tá acelerado de fraqueza no corpo.`;
-    }
-
-    // 8. Urina e Cor
-    if (p.includes('urina') || p.includes('xixi') || p.includes('cor da urina') || p.includes('água') || p.includes('bebeu')) {
-      if (casoId === 'caso_tox_01') {
-        return `${prefixo}Acho que me urinei todo na calça quando caí desmaiado na roça... perdi o controle do corpo lá.`;
-      }
-      return `${prefixo}Foi o que mais me assustou hoje cedo! Minha urina saiu bem escura, da cor de borra de café ou refrigerante de cola, e foi só um pouquinho de nada.`;
-    }
-
-    // 9. Músculos, Tremores e Formigamento
-    if (p.includes('trem') || p.includes('músculo') || p.includes('carne') || p.includes('fraqueza') || p.includes('pula') || p.includes('perna')) {
-      if (casoId === 'caso_tox_01') {
-        return `${prefixo}Minha carne fica pulando e tremendo sozinha no braço e na perna, parecendo que tem bicho rastejando debaixo da pele! E as pernas não me aguentam em pé.`;
-      }
-      return `${prefixo}Sinto uma fraqueza terrível... não consegui nem erguer o braço para pentear o cabelo hoje de manhã.`;
-    }
-
-    // 10. Acolhimento e Apoio
-    if (p.includes('calma') || p.includes('tranquilo') || p.includes('vai passar') || p.includes('estamos aqui') || p.includes('vamos cuidar') || p.includes('ajudar')) {
+    // 5. Acolhimento
+    if (p.includes('calma') || p.includes('tranquilo') || p.includes('vai passar') || p.includes('estamos aqui') || p.includes('ajudar')) {
       patience = Math.min(100, patience + 6);
       vitality = Math.min(100, vitality + 1);
       updateMetersUI();
       return isEmergencia
         ? `${prefixo}Deus abençoe vocês... tô confiando no senhor(a)... mas me dá logo um remédio que sinto meu peito fechando...`
-        : `${prefixo}Obrigada pelo carinho e paciência, doutor(a)... me sinto um pouco mais calma ouvindo isso.`;
+        : `${prefixo}Muito obrigada pela atenção e paciência, doutor(a)... me sinto mais segura ouvindo isso.`;
     }
 
-    // 11. Resposta Leiga Aberta Dinâmica
+    // Resposta Padrão
     if (isEmergencia) {
-      return `${prefixo}Doutor(a)... tá tudo escurecendo na minha vista, tô afogando nessa baba e meu peito tá apertado demais... faz essa agonia parar, por favor!`;
+      return `${prefixo}Doutor(a)... tá tudo escurecendo na minha vista, tô afogando nessa saliva e meu peito tá apertado... me ajuda logo, por favor!`;
     }
-
-    return `${prefixo}Doutor(a), tô assustada demais com esse corpo mole e esse xixi escuro... me ajuda a descobrir o que tá acontecendo comigo?`;
+    return `${prefixo}Doutor(a), tô assustada com esse corpo mole e essa fraqueza... me ajuda a descobrir o que tá acontecendo comigo?`;
   }
 
   // =========================================================
@@ -437,12 +467,10 @@ const ClinicEngine = (() => {
     const text = dom.questionInput.value.trim();
     if (!text) return;
 
-    // Renderiza pergunta do estudante
     appendChatBubble('student', 'Você (Estudante)', text);
     dom.questionInput.value = '';
     if (dom.sendQuestionBtn) dom.sendQuestionBtn.disabled = true;
 
-    // Placeholder de digitação
     const typingBubble = appendChatBubble('patient', currentCase.paciente.nome, '<em>Tentando respirar e responder...</em>');
 
     let falaObtida = '';
@@ -450,8 +478,6 @@ const ClinicEngine = (() => {
 
     try {
       const recentHistory = conversationHistory.slice(-4).join('\n');
-
-      // Monta contexto completo com o prontuário para a IA
       const contextoCompleto = {
         casoId: currentCase.id,
         nome: currentCase.paciente.nome,
@@ -477,15 +503,12 @@ const ClinicEngine = (() => {
         if (response && response.sucesso && response.falaPaciente && response.falaPaciente.trim().length > 0) {
           falaObtida = response.falaPaciente.trim();
           apiSucesso = true;
-        } else {
-          console.warn('[ClinicEngine] API externa não retornou fala válida:', response);
         }
       }
     } catch (apiError) {
-      console.warn('[ClinicEngine] Falha na comunicação com o backend:', apiError);
+      console.warn('[ClinicEngine] API indisponível, usando contingência:', apiError);
     }
 
-    // Se a IA externa falhar, aciona o Motor Heurístico Local robusto
     if (!apiSucesso || !falaObtida) {
       falaObtida = gerarRespostaContextualLocal(text);
     }
@@ -495,7 +518,6 @@ const ClinicEngine = (() => {
     conversationHistory.push(`Estudante: ${text}`);
     conversationHistory.push(`Paciente: ${falaObtida}`);
 
-    // Modulação de paciência do paciente
     if (currentCase.tipo === 'ambulatorio') {
       patience = Math.min(100, patience + 1);
     } else {
@@ -518,7 +540,7 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // SOLICITAÇÃO DE EXAMES COMPLEMENTARES
+  // EXAMES E FECHAMENTO
   // =========================================================
 
   function requestExam(examId) {
@@ -529,7 +551,6 @@ const ClinicEngine = (() => {
 
     requestedExams.push(examId);
 
-    // Desativa botão no catálogo
     const row = document.getElementById(`exam-row-${examId}`);
     if (row) {
       const btn = row.querySelector('button');
@@ -539,15 +560,12 @@ const ClinicEngine = (() => {
       }
     }
 
-    // Aplica tempo decorrido e penalidades biológicas
     elapsedSeconds += (exam.custoTempoMin || 5) * 60;
     applyDecay(Math.abs(exam.impactoVitalidade || 0), Math.abs(exam.impactoPaciencia || 0));
 
-    // Remove aviso de vazio
     const emptyNotice = dom.releasedExamsList?.querySelector('.empty-state-notice');
     if (emptyNotice) emptyNotice.remove();
 
-    // Renderiza o laudo liberado
     const examCard = document.createElement('div');
     examCard.className = 'released-exam-card';
     examCard.innerHTML = `
@@ -556,15 +574,10 @@ const ClinicEngine = (() => {
     `;
     dom.releasedExamsList?.appendChild(examCard);
 
-    // Feedback no chat se o exame for crítico
     if (exam.essencial) {
       appendChatBubble('patient', 'Enfermagem do Leito', `O laudo do exame <strong>${exam.nome}</strong> acabou de chegar da bancada e foi anexado à aba de Exames.`);
     }
   }
-
-  // =========================================================
-  // DESFECHO CRÍTICO E FINALIZAÇÃO DO CASO
-  // =========================================================
 
   function triggerCriticalOutcome(outcomeType) {
     isCaseActive = false;
@@ -614,13 +627,16 @@ const ClinicEngine = (() => {
       if (typeof ApiService !== 'undefined' && typeof ApiService.avaliarCondutaPreceptor === 'function') {
         const response = await ApiService.avaliarCondutaPreceptor(identifier, currentCase.id, payload);
         if (response && response.sucesso && response.resultado) {
+          registrarCasoResolvido(currentCase.id);
           showPreceptorModal(response.resultado, payload.desfecho);
           return;
         }
       }
+      registrarCasoResolvido(currentCase.id);
       avaliarCondutaLocalmente(payload);
     } catch (err) {
-      console.warn('[ClinicEngine] Preceptor online indisponível. Aplicando avaliação heurística:', err);
+      console.warn('[ClinicEngine] Preceptor online indisponível. Avaliando localmente:', err);
+      registrarCasoResolvido(currentCase.id);
       avaliarCondutaLocalmente(payload);
     } finally {
       if (dom.submitResolutionBtn) {
@@ -629,7 +645,14 @@ const ClinicEngine = (() => {
     }
   }
 
-  // Avaliação Pedagógica Heurística Local
+  function registrarCasoResolvido(caseId) {
+    const resolvidos = JSON.parse(localStorage.getItem('laift_resolved_cases') || '[]');
+    if (!resolvidos.includes(caseId)) {
+      resolvidos.push(caseId);
+      localStorage.setItem('laift_resolved_cases', JSON.stringify(resolvidos));
+    }
+  }
+
   function avaliarCondutaLocalmente(dados) {
     const gab = (currentCase && currentCase.gabaritoPreceptor) ? currentCase.gabaritoPreceptor : {};
     const diagAluno = (dados.diagnosticoAluno || '').toLowerCase();
@@ -694,7 +717,8 @@ const ClinicEngine = (() => {
 
     dom.preceptorModal?.classList.add('active');
   }
-function switchTab(tabId) {
+
+  function switchTab(tabId) {
     dom.tabButtons.forEach(btn => {
       const isActive = btn.dataset.tab === tabId;
       btn.classList.toggle('active', isActive);
@@ -718,8 +742,16 @@ function switchTab(tabId) {
     });
   }
 
+  // =========================================================
+  // EXPOSIÇÃO PÚBLICA DO MÓDULO (TODAS AS FUNÇÕES EXPORTADAS)
+  // =========================================================
   return {
     init,
+    showBedsDashboard,
+    renderBedsGrid,
+    openBed,
+    returnToBeds,
+    solicitarCasoProcedural,
     startCase,
     requestExam,
     switchTab,
