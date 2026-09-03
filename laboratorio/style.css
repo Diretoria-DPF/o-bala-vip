@@ -1,0 +1,344 @@
+/* =========================================================
+   1. VARIÁVEIS GLOBAIS E RESET DE ESTILOS
+========================================================= */
+:root {
+  --bg-deep: #010510;
+  --panel-bg: #0a0f1e;
+  --neon-cyan: #00e5ff;
+  --neon-green: #00ff88;
+  --neon-magenta: #ff00aa;
+  --alert-red: #ff1744;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #e0e0e0;
+  --text-secondary: #90a4ae;
+  --font-mono: 'Fira Code', monospace;
+  --font-ui: 'Urbanist', sans-serif;
+  --glow-cyan: 0 0 20px rgba(0, 229, 255, 0.3);
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(0,229,255,0.06) 0%, transparent 70%),
+                    radial-gradient(ellipse at 80% 100%, rgba(255,0,170,0.04) 0%, transparent 60%);
+}
+
+/* =========================================================
+   2. CABEÇALHO E NAVEGAÇÃO
+========================================================= */
+header { 
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem; 
+  position: relative;
+  width: 100%;
+  max-width: 1500px;
+  padding: 0 60px;
+  min-height: 60px;
+}
+
+header h1 {
+  font-size: 1.8rem; font-weight: 800; letter-spacing: 3px;
+  background: linear-gradient(135deg, var(--neon-cyan), var(--neon-magenta));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; animation: titleShimmer 4s ease-in-out infinite;
+}
+
+@keyframes titleShimmer { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.4)} }
+
+.badge {
+  display: inline-block; background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle); border-radius: 20px;
+  padding: 4px 14px; font-size: 0.7rem; color: var(--text-secondary);
+  letter-spacing: 2px; margin-top: 4px;
+}
+
+.manual-btn {
+  position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border-subtle);
+  border-radius: 8px; color: var(--neon-cyan); font-size: 1.3rem;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: var(--transition-smooth); backdrop-filter: blur(4px);
+}
+.manual-btn:hover { background: rgba(0,229,255,0.2); box-shadow: 0 0 15px rgba(0,229,255,0.4); }
+
+/* =========================================================
+   3. LAYOUT GERAL (GRID)
+========================================================= */
+.main-grid {
+  display: grid; grid-template-columns: 360px 1fr 270px;
+  gap: 0.9rem; width: 100%; max-width: 1500px; align-items: start;
+}
+
+@media (max-width: 1300px) {
+  .main-grid { grid-template-columns: 340px 1fr; }
+  .side-panel-right { grid-column: 1/-1; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+}
+@media (max-width: 900px) { .main-grid { grid-template-columns: 1fr; } }
+
+.panel {
+  background: var(--panel-bg); border: 1px solid var(--border-subtle);
+  border-radius: 14px; padding: 1rem; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+}
+
+.panel h3 {
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px;
+  color: var(--neon-cyan); margin-bottom: 0.8rem; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.icon-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--neon-cyan); box-shadow: var(--glow-cyan);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot { 0%,100%{box-shadow:0 0 8px var(--neon-cyan)} 50%{box-shadow:0 0 20px var(--neon-cyan),0 0 40px rgba(0,229,255,0.5)} }
+
+/* =========================================================
+   4. CONTROLOS DE INTERFACE (Botões, Inputs, Scroll)
+========================================================= */
+.controls-scroll { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
+.controls-scroll::-webkit-scrollbar { width: 4px; }
+.controls-scroll::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 4px; }
+
+select, input[type="number"] {
+  width: 100%; padding: 0.5rem 0.7rem; border-radius: 8px;
+  border: 1px solid #1e3a5f; background: #020617; color: #e0e0e0;
+  font-family: var(--font-mono); font-size: 0.75rem; outline: none;
+  transition: var(--transition-smooth);
+}
+select:focus, input:focus { border-color: var(--neon-cyan); box-shadow: 0 0 12px rgba(0,229,255,0.2); }
+input[type="range"] { width: 100%; accent-color: var(--neon-cyan); cursor: pointer; }
+
+label { font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; display: block; margin-bottom: 3px; margin-top: 6px; }
+
+.btn-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.btn { flex: 1; min-width: 55px; padding: 0.5rem 0.4rem; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 1px; transition: var(--transition-smooth); position: relative; overflow: hidden; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+.btn:active { transform: scale(0.95); }
+
+/* Cores dos Botões */
+.btn-play { background: var(--neon-green); color: #000; }
+.btn-stop { background: #ff9800; color: #000; }
+.btn-fire { background: #ff5722; color: #fff; }
+.btn-ice { background: #4fc3f7; color: #000; }
+.btn-lock { background: #7c4dff; color: #fff; }
+.btn-time { background: #37474f; color: #fff; }
+.btn-time.active-btn { background: var(--neon-cyan); color: #000; box-shadow: 0 0 10px var(--neon-cyan); }
+.btn-reset { background: transparent; border: 2px solid var(--alert-red); color: var(--alert-red); }
+.btn-reset:hover { background: var(--alert-red); color: #fff; }
+.btn-clear { background: transparent; border: 1px solid #546e7a; color: #b0bec5; font-size: 0.6rem; padding: 0.25rem 0.5rem; }
+.btn-clear:hover { background: #546e7a; color: #fff; }
+.btn.active-btn { box-shadow: inset 0 0 0 3px #fff, 0 0 18px currentColor; transform: scale(0.96); }
+
+/* Catálogo de Reagentes */
+.reagent-catalog { max-height: 220px; overflow-y: auto; border: 1px solid #1e3a5f; border-radius: 8px; background: #020617; }
+.reagent-catalog::-webkit-scrollbar { width: 4px; }
+.reagent-catalog::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+details { border-bottom: 1px solid #1e293b; }
+details:last-child { border-bottom: none; }
+summary { padding: 7px 10px; cursor: pointer; font-size: 0.72rem; font-weight: 700; color: #b0bec5; user-select: none; transition: 0.2s; background: #0f172a; letter-spacing: 0.5px; }
+summary:hover { color: var(--neon-cyan); background: #1a2740; }
+.reagent-list label { display: flex; align-items: center; padding: 5px 10px; margin: 0; cursor: pointer; font-size: 0.68rem; color: #90a4ae; font-weight: 400; border-top: 1px dashed #1e293b; transition: 0.15s; letter-spacing: 0; text-transform: none; }
+.reagent-list label:hover { background: rgba(0,229,255,0.08); color: #fff; }
+.reagent-list input[type="radio"] { margin-right: 8px; accent-color: var(--neon-green); transform: scale(1.1); width: auto; }
+
+/* =========================================================
+   5. O PALCO VISUAL (A SIMULAÇÃO DO LABORATÓRIO)
+========================================================= */
+.visual-stage {
+  background: radial-gradient(ellipse at center, #0a1628 0%, #010510 100%);
+  border-radius: 14px; border: 1px solid var(--border-subtle);
+  position: relative; overflow: hidden; min-height: 550px;
+  display: flex; flex-direction: column;
+  box-shadow: inset 0 0 80px rgba(0,0,0,0.6);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bench { position: absolute; bottom: 0; width: 100%; height: 55px; background: linear-gradient(to bottom, #1a2540, #0a0f1e); border-top: 4px solid #2a3a5a; z-index: 10; box-shadow: 0 -8px 30px rgba(0,0,0,0.5); }
+.tripod { position: absolute; bottom: 53px; left: 50%; transform: translateX(-50%); width: 140px; height: 25px; border-top: 5px solid #5a6a8a; border-left: 3px solid #4a5a7a; border-right: 3px solid #4a5a7a; z-index: 12; border-radius: 6px 6px 0 0; }
+
+.glassware-zone { position: absolute; bottom: 78px; left: 50%; transform: translateX(-50%); z-index: 15; display: flex; justify-content: center; align-items: flex-end; cursor: pointer; transition: 0.3s; }
+.glass-vessel { border: 4px solid rgba(255,255,255,0.35); border-top: none; position: relative; transition: all 0.5s ease; border-radius: 0 0 12px 12px; box-shadow: inset 0 0 30px rgba(0,0,0,0.4), 0 0 20px rgba(0,229,255,0.05); }
+.vessel-beaker { width: 150px; height: 180px; border-radius: 0 0 18px 18px; }
+.vessel-flask { width: 150px; height: 180px; border: none; background: rgba(255,255,255,0.06); clip-path: polygon(38% 0%, 62% 0%, 62% 25%, 100% 100%, 0% 100%, 38% 25%); }
+.stopper-cap { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); width: 30px; height: 16px; background: #5d4037; border-radius: 4px; display: none; z-index: 20; }
+.closed-system .stopper-cap { display: block; }
+
+.content-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; border-radius: inherit; overflow: hidden; }
+.liquid-layer { position: absolute; bottom: 0; width: 100%; height: 0%; transition: height 0.3s, background-color 0.8s; }
+.precipitate-layer { position: absolute; bottom: 0; width: 100%; height: 0%; transition: height 0.5s, background-color 0.5s; background-image: radial-gradient(rgba(0,0,0,0.35) 2px, transparent 2px); background-size: 7px 7px; z-index: 2; }
+.gas-halo { position: absolute; bottom: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.8s, background 0.8s; z-index: 4; }
+.bubble-overlay { position: absolute; bottom: 0; width: 100%; height: 100%; background-image: radial-gradient(circle, rgba(255,255,255,0.5) 1.5px, transparent 2px); background-size: 14px 22px; animation: bubbleRise 0.4s infinite linear; opacity: 0; transition: opacity 0.3s; z-index: 3; pointer-events: none; }
+@keyframes bubbleRise { 0% { background-position: 0 22px; } 100% { background-position: 0 0; } }
+.freeze-overlay { position: absolute; bottom: 0; width: 100%; height: 100%; background: linear-gradient(0deg, rgba(180,220,255,0.7) 0%, rgba(255,255,255,0.4) 30%, transparent 70%); opacity: 0; transition: opacity 0.5s; z-index: 6; pointer-events: none; border-radius: inherit; }
+
+/* Efeitos Especiais (Fogo e Gelo) */
+.flame-effect { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; opacity: 0; transition: opacity 0.4s; z-index: 5; }
+.flame-core { width: 25px; height: 34px; background: radial-gradient(ellipse at bottom, #4fc3f7 5%, #ff9800 60%, transparent 100%); border-radius: 50% 50% 20% 20%; animation: flickerFlame 0.08s infinite alternate; margin-bottom: -4px; }
+@keyframes flickerFlame { 0% { transform: scaleX(0.9) rotate(-2deg); } 100% { transform: scaleX(1.1) rotate(3deg); } }
+.flame-base { width: 16px; height: 10px; background: #5a6a8a; border-radius: 2px; }
+
+.ice-aura-effect { position: absolute; bottom: 65px; left: 50%; transform: translateX(-50%); width: 120px; height: 25px; background: radial-gradient(ellipse, rgba(79,195,247,0.6) 0%, transparent 70%); border-radius: 50%; filter: blur(5px); opacity: 0; transition: opacity 0.4s; z-index: 5; animation: chillPulse 2s infinite alternate; }
+@keyframes chillPulse { 0% { transform: translateX(-50%) scale(1); opacity: 0.7; } 100% { transform: translateX(-50%) scale(1.15); opacity: 0.3; } }
+
+/* HUD (Mostradores e Termómetro) */
+.hud-overlay { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; justify-content: space-between; z-index: 30; pointer-events: none; }
+.hud-card { background: rgba(0,0,0,0.8); border: 1px solid #1e3a5f; padding: 8px 12px; border-radius: 10px; font-size: 0.7rem; backdrop-filter: blur(6px); min-width: 100px; }
+.hud-card .hud-val { font-family: var(--font-mono); font-size: 1rem; font-weight: 700; color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0,229,255,0.5); }
+.hud-card .hud-label { font-size: 0.6rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
+
+.press-warning { color: #ff9800; font-size: 0.65rem; margin-left: 4px; display: none; }
+.press-critical { color: #ff1744; font-weight: bold; animation: blink 0.5s infinite; }
+@keyframes blink { 50% { opacity: 0.3; } }
+
+.thermo-column { position: absolute; left: 15px; bottom: 130px; z-index: 20; display: flex; flex-direction: column; align-items: center; }
+.thermo-stick { width: 9px; height: 90px; background: rgba(255,255,255,0.08); border-radius: 8px 8px 0 0; border: 1px solid #1e3a5f; position: relative; overflow: hidden; }
+.thermo-fill-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 30%; transition: height 0.4s, background-color 0.6s; border-radius: 0 0 8px 8px; }
+.thermo-bulb-circle { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #1e3a5f; margin-top: -2px; transition: background-color 0.6s; }
+
+/* =========================================================
+   6. PAINÉIS LATERAIS E INFORMAÇÕES SECUNDÁRIAS
+========================================================= */
+.side-panel-right { display: flex; flex-direction: column; gap: 0.9rem; }
+.log-stream { max-height: 160px; overflow-y: auto; font-family: var(--font-mono); font-size: 0.65rem; color: #90a4ae; background: #020617; border-radius: 8px; padding: 6px; border: 1px solid #1e3a5f; }
+.log-entry { padding: 2px 5px; border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; gap: 6px; }
+.log-time { color: #546e7a; white-space: nowrap; }
+.log-warn { color: #ff9800; } .log-danger { color: #ff1744; } .log-info { color: #4fc3f7; }
+
+.mini-canvas-wrap { background: #020617; border-radius: 8px; border: 1px solid #1e3a5f; overflow: hidden; }
+canvas { width: 100%; height: 140px; display: block; }
+
+.tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.6rem; font-family: var(--font-mono); margin: 1px; border: 1px solid; }
+.tag-aq { color: #4fc3f7; border-color: #4fc3f7; } .tag-s { color: #ffd54f; border-color: #ffd54f; } .tag-g { color: #69f0ae; border-color: #69f0ae; } .tag-l { color: #b0bec5; border-color: #b0bec5; }
+.signature { position: absolute; bottom: 8px; right: 16px; font-family: var(--font-mono); font-size: 0.6rem; color: rgba(255,255,255,0.2); letter-spacing: 2px; z-index: 40; pointer-events: none; user-select: none; }
+
+/* Modais Base (Alerta e Manual) */
+.alert-fullscreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(183,28,28,0.92); display: none; justify-content: center; align-items: center; z-index: 50; flex-direction: column; text-align: center; padding: 2rem; }
+.alert-fullscreen h2 { font-size: 2rem; text-transform: uppercase; color: #fff; letter-spacing: 3px; }
+.manual-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: none; justify-content: center; align-items: center; z-index: 100; }
+.manual-content { background: var(--panel-bg); border: 1px solid var(--neon-cyan); border-radius: 20px; max-width: 700px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 2rem; box-shadow: 0 0 40px rgba(0,229,255,0.3); }
+.manual-content h3 { color: var(--neon-cyan); margin-bottom: 1rem; }
+.manual-content p, .manual-content li { font-size: 0.85rem; color: #b0bec5; margin-bottom: 0.6rem; }
+.close-manual { background: var(--alert-red); border: none; color: white; padding: 0.5rem 1.5rem; border-radius: 6px; cursor: pointer; margin-top: 1rem; font-weight: bold; }
+
+/* Caixa de Missão */
+.mission-box { background: rgba(0, 255, 136, 0.1); border: 1px solid var(--neon-green); padding: 8px; border-radius: 8px; margin-top: 8px; }
+
+/* =========================================================
+   MODO FOCO (TELA CHEIA E ISOLAMENTO)
+========================================================= */
+.visual-stage.focus-active {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+  background: rgba(1, 5, 16, 0.98) !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transform: none !important;
+  border-radius: 0;
+}
+
+/* Esconde a bancada, HUD e painéis quando em foco */
+.visual-stage.focus-active .hud-overlay,
+.visual-stage.focus-active .thermo-column,
+.visual-stage.focus-active .bench,
+.visual-stage.focus-active .tripod,
+.visual-stage.focus-active .signature {
+  display: none !important;
+}
+
+/* Aumenta apenas a zona da vidraria e remove as restrições de fundo */
+.visual-stage.focus-active .glassware-zone {
+  position: relative !important;
+  bottom: auto !important;
+  left: auto !important;
+  transform: translateX(0) scale(2.5) !important; /* Zoom de 2.5x */
+  cursor: default; /* Remove o cursor de clique quando já está focado */
+}
+
+/* Botão de Fechar Foco */
+.btn-close-focus {
+  display: none;
+  position: absolute;
+  top: 30px;
+  right: 40px;
+  background: var(--alert-red);
+  color: white;
+  border: 2px solid #b71c1c;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  z-index: 10000;
+  font-size: 1rem;
+  transition: 0.2s;
+  box-shadow: 0 4px 15px rgba(255, 23, 68, 0.4);
+}
+.btn-close-focus:hover {
+  background: #b71c1c;
+  transform: scale(1.05);
+}
+.visual-stage.focus-active .btn-close-focus {
+  display: block; /* O botão só aparece quando o foco está ativo */
+}
+/* Agitador Magnético */
+.agitador {
+  position: absolute; bottom: 5px; left: 50%; width: 24px; height: 6px;
+  background: #fff; border-radius: 10px; transform: translateX(-50%); 
+  display: none; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+.agitador.ativo { display: block; animation: spinAgitador 0.2s linear infinite; }
+@keyframes spinAgitador { 
+  0% { transform: translateX(-50%) scaleX(1); } 
+  50% { transform: translateX(-50%) scaleX(0.2); background: #ccc; } 
+  100% { transform: translateX(-50%) scale(1); } 
+}
+
+/* Relatório de Incidente (Talão de Erro Visual) */
+.incident-ticket {
+  background: #ffeaeb; color: #b71c1c; padding: 1.5rem; border-radius: 4px;
+  border-left: 8px solid #d32f2f; font-family: var(--font-mono); text-align: left; max-width: 400px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6); background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, #ffcdd2 20px);
+}
+.incident-ticket h3 { font-size: 1.2rem; margin-bottom: 10px; border-bottom: 2px dashed #d32f2f; padding-bottom: 5px; color: #b71c1c;}
+.incident-ticket p { font-size: 0.8rem; margin-bottom: 5px; color: #c62828; }
+
+/* Animações de Despejo de Reagentes */
+.anim-drop {
+  position: absolute; top: -80px; left: 50%; width: 10px; height: 16px;
+  background: rgba(0, 229, 255, 0.8); border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  transform: translateX(-50%); animation: fallDown 0.3s cubic-bezier(0.4, 0, 1, 1) forwards; z-index: 25;
+}
+.anim-stream {
+  position: absolute; top: -80px; left: 50%; width: 6px; height: 180px;
+  background: rgba(0, 229, 255, 0.6); transform: translateX(-50%);
+  animation: flowStream 0.1s infinite alternate; z-index: 25;
+}
+.anim-splash {
+  position: absolute; bottom: 0; left: 50%; width: 40px; height: 15px;
+  background: rgba(0, 229, 255, 0.5); border-radius: 50%;
+  transform: translateX(-50%); animation: splashWater 0.4s ease-out forwards; z-index: 25;
+}
+
+@keyframes fallDown { to { transform: translate(-50%, 180px); opacity: 0; } }
+@keyframes flowStream { from { opacity: 0.5; width: 6px; } to { opacity: 0.8; width: 8px; } }
+@keyframes splashWater { to { transform: translateX(-50%) scale(2.5); opacity: 0; } }
