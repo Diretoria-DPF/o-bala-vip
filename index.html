@@ -475,30 +475,13 @@
          5. MÓDULO: LABORATÓRIO VIRTUAL DE QUÍMICA & TOXICOLOGIA
     ========================================================= -->
     <section id="labSection" class="view-panel hidden">
-      <div class="lab-workspace">
-        <div class="lab-toolbar">
-          <h3>⚗️ Bancada de Ensaios Toxicológicos e Espectroscopia</h3>
-          <button class="btn btn-secondary" type="button" onclick="transitionToDashboard()">Voltar ao Hub</button>
-        </div>
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+    <h3>🔬 Laboratório Engine</h3>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+  </div>
+  <iframe src="laboratorio/index.html" style="width: 100%; height: 82vh; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm);"></iframe>
+</section>
         
-        <div id="labCanvasArea" class="lab-viewport">
-          <div class="bench-surface">
-            <div class="reagent-shelf" id="reagentShelf"></div>
-            <div class="burner-stage" id="burnerStage">
-              <div class="burner-flame flame-idle" id="burnerFlame"></div>
-              <div class="platinum-wire" id="platinumWire"></div>
-            </div>
-          </div>
-          <div class="lab-observations" id="labObservations">
-            <h4>Registro de Análise</h4>
-            <div id="labLogText">Selecione uma substância na estante para iniciar o ensaio à chama ou precipitação.</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
   <!-- =========================================================
        MODAIS DO SISTEMA
   ========================================================= -->
