@@ -416,6 +416,69 @@ function closePreceptorModal() {
   transitionToDashboard();
 }
 
+let resendTimerInterval = null;
+
+async function resendAccessCode() {
+  const btn = document.getElementById('resendOtpBtn');
+  if (btn && btn.disabled) return;
+
+  hideStatus();
+  const idInput = document.getElementById('studentId');
+  const emailInput = document.getElementById('studentEmail');
+  const identifier = idInput ? idInput.value.trim() : '';
+  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
+
+  if (!identifier || !email) {
+    showStatus('Matrícula/CPF ou e-mail ausentes. Reinicie a identificação.', 'error');
+    restartPublicFlow();
+    return;
+  }
+
+  showStatus('Reenviando novo código de acesso...', 'loading');
+  iniciarContagemReenvio(30);
+
+  try {
+    const res = await ApiService.solicitarCodigoAcesso(identifier, email, '', '', false);
+    hideStatus();
+
+    if (res && res.sucesso) {
+      showStatus('Novo código enviado! Verifique sua caixa de entrada e spam.', 'success');
+      const otpInput = document.getElementById('otpCode');
+      if (otpInput) {
+        otpInput.value = '';
+        otpInput.focus();
+      }
+    } else {
+      showStatus((res && res.mensagem) || 'Falha ao reenviar código.', 'error');
+    }
+  } catch (err) {
+    console.error(err);
+    showStatus('Erro de conexão ao reenviar código.', 'error');
+  }
+}
+
+function iniciarContagemReenvio(segundos) {
+  const btn = document.getElementById('resendOtpBtn');
+  if (!btn) return;
+
+  clearInterval(resendTimerInterval);
+  let tempoRestante = segundos;
+  btn.disabled = true;
+  btn.textContent = `⏳ Aguarde (${tempoRestante}s)`;
+
+  resendTimerInterval = setInterval(() => {
+    tempoRestante--;
+    if (tempoRestante <= 0) {
+      clearInterval(resendTimerInterval);
+      btn.disabled = false;
+      btn.textContent = '📩 Reenviar Código';
+    } else {
+      btn.textContent = `⏳ Aguarde (${tempoRestante}s)`;
+    }
+  }, 1000);
+}
+
+
 // =========================================================
 // EXPOSIÇÃO GLOBAL EXPLÍCITA (Para chamadas inline no HTML)
 // =========================================================
@@ -435,6 +498,7 @@ window.closeCredentialModal = closeCredentialModal;
 window.closePreceptorModal = closePreceptorModal;
 window.showStatus = showStatus;
 window.hideStatus = hideStatus;
+window.resendAccessCode = resendAccessCode;
 
 // =========================================================
 // INICIALIZAÇÃO RESILIENTE (Com verificação de estado do DOM)
