@@ -4,37 +4,43 @@
  */
 
 const ApiService = (() => {
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjauWKSgO2RZDaRE6vCsS-CHvK3NA4DJjK_trSbgET_5ZRaYCUh0kKJEjNoM2LD-1r/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwnyZY128_JbZU-tA8NZuGfT3-oC3ObJ-LvnWhNywZbhewT205v7y5XFzthgpzOmCX1/exec';
   const OPENFDA_BASE_URL = 'https://api.fda.gov/drug/label.json';
 
   /**
    * Executa requisições POST seguras para o Google Apps Script com controle de timeout
    */
-  async function callAppsScript(payload, timeoutMs = 25000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  async function callAppsScript(payload, timeoutMs = 30000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  try {
-    const response = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      body: JSON.stringify(payload) // Sem o objeto headers
-    });
+    try {
+      const response = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        signal: controller.signal,
+        body: JSON.stringify(payload)
+      });
 
-    const raw = await response.text();
-    return JSON.parse(raw);
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      throw new Error('A conexão com o servidor excedeu o tempo limite.');
+      const raw = await response.text();
+
+      try {
+        return JSON.parse(raw);
+      } catch (jsonErr) {
+        console.error('[ApiService] Resposta não-JSON retornada pelo Apps Script:', raw);
+        throw new Error('Resposta em formato inválido retornada pelo servidor.');
+      }
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('A conexão com o servidor excedeu o tempo limite.');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-    throw error;
-  } finally {
-    clearTimeout(timer);
   }
-}
 
   /**
-   * Consulta a API OpenFDA com timeout estrito de 3 segundos e ativação de fallback
+   * Consulta a API OpenFDA com timeout de 3 segundos e ativação de fallback
    */
   async function fetchOpenFdaWarning(drugName) {
     const controller = new AbortController();
@@ -68,14 +74,15 @@ const ApiService = (() => {
 
   return {
     // --- AUTENTICAÇÃO E SESSÃO ---
-    solicitarCodigoAcesso: (identificador, email, tipo, nome, aceitouPolitica) =>
+    solicitarCodigoAcesso: (identificador, email, tipo, nome, consentimento) =>
       callAppsScript({
         acao: 'solicitarCodigoAcesso',
         identificador,
         email,
         tipo,
         nome,
-        aceitouPolitica
+        consentimento,
+        aceitouPolitica: consentimento
       }),
 
     validarCodigoAcesso: (identificador, email, codigo) =>
@@ -98,7 +105,7 @@ const ApiService = (() => {
         sessao
       }),
 
-    // --- TERMINAL FISCAL ---
+    // --- TERMINAL FISCAL / CREDENCIAMENTO ---
     loginFiscal: (senha) =>
       callAppsScript({
         acao: 'loginFiscal',
@@ -151,7 +158,7 @@ const ApiService = (() => {
         identificador
       }),
 
-    // --- CLÍNICA VIRTUAL (GEMINI BACKEND PROXY) ---
+    // --- CLÍNICA MÉDICA VIRTUAL (GROQ / OSCE) ---
     conversarComPaciente: (casoId, perguntaAluno, historicoConversa, contextoPaciente) =>
       callAppsScript({
         acao: 'conversarComPaciente',
@@ -169,7 +176,15 @@ const ApiService = (() => {
         dadosAtendimento
       }, 30000),
 
-    // --- OPENFDA ---
-    fetchOpenFdaWarning
+    gerarCasoProcedural: (topicoAlvo, dificuldade) =>
+      callAppsScript({
+        acao: 'gerarCasoProcedural',
+        topicoAlvo,
+        dificuldade: dificuldade || 'Avançado'
+      }, 45000),
+
+    // --- UTILITÁRIOS E APIS EXTERNAS ---
+    fetchOpenFdaWarning,
+    callAppsScript
   };
 })();
