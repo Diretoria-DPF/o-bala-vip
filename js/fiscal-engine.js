@@ -1,5 +1,5 @@
 /**
- * TERMINAL FISCAL, VALIDAÇÃO DE QR CODE E AÇÕES DE CREDENCIAL
+ * TERMINAL FISCAL, VALIDAÇÃO DE QR CODE E STUDIO DE CRACHÁ
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
  */
 
@@ -35,7 +35,52 @@ const FiscalEngine = (() => {
     }
   }
 
-  // --- REENVIO DE CREDENCIAL ---
+  // =========================================================
+  // INTEGRAÇÃO COM O STUDIO DE CRACHÁS (CR-80)
+  // =========================================================
+
+  /**
+   * Abre o Studio de Crachá preenchendo os parâmetros na URL
+   */
+  function abrirStudioCracha(membro) {
+    if (!membro || !membro.identificador) {
+      getStatusBanner('Identificador do participante não informado.', 'error');
+      return;
+    }
+
+    const id = encodeURIComponent(membro.identificador);
+    const nome = encodeURIComponent(membro.nome || membro.nomeExibicao || 'Participante LAIFT');
+    const cargo = encodeURIComponent((membro.tipo || 'Membro').toUpperCase());
+    const qr = encodeURIComponent(`LAIFT:ID:${membro.identificador}`);
+
+    const url = `cracha/index.html?id=${id}&nome=${nome}&cargo=${cargo}&qr=${qr}`;
+    window.open(url, '_blank');
+  }
+
+  /**
+   * Acionado pelo botão '🏷️ Emitir Crachá' ao lado da Matrícula/CPF manual
+   */
+  function gerarCrachaDireto() {
+    const idInput = document.getElementById('manualIdentifier');
+    const identifier = idInput ? idInput.value.trim() : '';
+
+    if (!identifier) {
+      getStatusBanner('Digite a matrícula ou CPF no campo ao lado para emitir o crachá.', 'error');
+      if (idInput) idInput.focus();
+      return;
+    }
+
+    abrirStudioCracha({
+      identificador: identifier,
+      nome: 'Participante Credenciado',
+      tipo: 'Membro Efetivo'
+    });
+  }
+
+  // =========================================================
+  // REENVIO DE CREDENCIAL AO ALUNO
+  // =========================================================
+
   async function resendCredentialEmail() {
     const session = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '{}');
     if (!session.sessionToken) {
@@ -57,7 +102,10 @@ const FiscalEngine = (() => {
     }
   }
 
-  // --- ACESSO AO TERMINAL FISCAL ---
+  // =========================================================
+  // ACESSO AO TERMINAL FISCAL
+  // =========================================================
+
   async function openFiscalLogin() {
     if (fiscalSession) return;
 
@@ -84,10 +132,10 @@ const FiscalEngine = (() => {
       if (fiscalArea) fiscalArea.classList.remove('hidden');
 
       const subtitle = document.getElementById('headerSubtitle');
-      if (subtitle) subtitle.textContent = 'Terminal de Validação';
+      if (subtitle) subtitle.textContent = 'Terminal de Validação & Portaria';
 
       const eventInput = document.getElementById('eventName');
-      if (eventInput) eventInput.value = res.evento || '';
+      if (eventInput) eventInput.value = res.evento || res.eventoAtivo || '';
     } catch (err) {
       console.error(err);
       getStatusBanner('Falha ao autenticar terminal fiscal.', 'error');
@@ -107,7 +155,7 @@ const FiscalEngine = (() => {
     try {
       const res = await ApiService.salvarEvento(eventName, fiscalSession);
       if (res && res.sucesso) {
-        if (eventInput) eventInput.value = res.novoEvento || eventName;
+        if (eventInput) eventInput.value = res.novoEvento || res.eventoAtivo || eventName;
         getStatusBanner('Evento ativo atualizado com sucesso.', 'success');
       } else {
         getStatusBanner((res && res.mensagem) || 'Não foi possível atualizar o evento.', 'error');
@@ -118,11 +166,20 @@ const FiscalEngine = (() => {
     }
   }
 
+  // =========================================================
+  // SCANNER DE QR CODE
+  // =========================================================
+
   function extractQrCredential(decodedText) {
     const cred = String(decodedText || '').trim();
-    if (!cred.startsWith(QR_PREFIX)) return '';
-    const token = cred.substring(QR_PREFIX.length);
-    return /^[a-f0-9]{64}$/i.test(token) ? cred : '';
+    if (cred.startsWith(QR_PREFIX)) {
+      const token = cred.substring(QR_PREFIX.length);
+      return /^[a-f0-9]{64}$/i.test(token) ? cred : '';
+    }
+    if (cred.startsWith('LAIFT:ID:')) {
+      return cred;
+    }
+    return '';
   }
 
   function startFiscalScanner() {
@@ -214,7 +271,10 @@ const FiscalEngine = (() => {
     }
   }
 
-  // --- PESQUISA NA LISTA DE MEMBROS ---
+  // =========================================================
+  // PESQUISA NOMINAL & LISTAGEM DE MEMBROS
+  // =========================================================
+
   function scheduleMemberSearch() {
     clearTimeout(memberSearchTimer);
     memberSearchTimer = setTimeout(searchMembers, 350);
@@ -237,7 +297,7 @@ const FiscalEngine = (() => {
 
     list.innerHTML = `
       <div class="member-list-empty">
-        Buscando participantes...
+        Buscando participantes na base da LAIFT...
       </div>
     `;
 
@@ -292,30 +352,50 @@ const FiscalEngine = (() => {
     members.forEach((member) => {
       const item = document.createElement('div');
       item.className = 'member-item';
+      item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line, #e2e8f0); gap: 10px;';
 
       const info = document.createElement('div');
       info.className = 'member-info';
+      info.style.cssText = 'flex: 1; text-align: left;';
 
       const name = document.createElement('div');
       name.className = 'member-name';
-      name.textContent = member.nomeExibicao || 'Participante';
+      name.style.cssText = 'font-weight: 600; color: var(--text-ui, #0f172a);';
+      name.textContent = member.nomeExibicao || member.nome || 'Participante';
 
       const meta = document.createElement('div');
       meta.className = 'member-meta';
+      meta.style.cssText = 'font-size: 0.8rem; color: var(--muted, #64748b); margin-top: 2px;';
       meta.textContent = `${member.tipo || 'Participante'} · ${member.identificador || ''}`;
 
       info.appendChild(name);
       info.appendChild(meta);
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = 'Presença';
-      button.addEventListener('click', () => {
+      const actions = document.createElement('div');
+      actions.className = 'member-actions';
+      actions.style.cssText = 'display: flex; gap: 6px; align-items: center;';
+
+      const btnPresence = document.createElement('button');
+      btnPresence.type = 'button';
+      btnPresence.className = 'btn btn-secondary btn-sm';
+      btnPresence.textContent = '✅ Presença';
+      btnPresence.addEventListener('click', () => {
         markPresenceFromList(member.identificador);
       });
 
+      const btnCracha = document.createElement('button');
+      btnCracha.type = 'button';
+      btnCracha.className = 'btn btn-outline btn-sm';
+      btnCracha.textContent = '🏷️ Crachá';
+      btnCracha.addEventListener('click', () => {
+        abrirStudioCracha(member);
+      });
+
+      actions.appendChild(btnPresence);
+      actions.appendChild(btnCracha);
+
       item.appendChild(info);
-      item.appendChild(button);
+      item.appendChild(actions);
       list.appendChild(item);
     });
   }
@@ -348,6 +428,10 @@ const FiscalEngine = (() => {
       getStatusBanner('Erro ao registrar presença.', 'error');
     }
   }
+
+  // =========================================================
+  // ENCERRAMENTO DE SESSÃO FISCAL
+  // =========================================================
 
   async function logoutFiscal() {
     try {
@@ -426,16 +510,21 @@ const FiscalEngine = (() => {
     scheduleMemberSearch,
     markPresenceFromList,
     logoutFiscal,
-    resendCredentialEmail
+    resendCredentialEmail,
+    abrirStudioCracha,
+    gerarCrachaDireto
   };
 })();
 
-// Declarações globais para suporte direto aos atributos inline do HTML
+// Declarações globais para suporte aos botões e eventos inline do HTML
+window.FiscalEngine = FiscalEngine;
 window.resendCredentialEmail = FiscalEngine.resendCredentialEmail;
 window.saveActiveEvent = FiscalEngine.saveActiveEvent;
 window.startFiscalScanner = FiscalEngine.startFiscalScanner;
 window.submitManualCheckin = FiscalEngine.submitManualCheckin;
 window.scheduleMemberSearch = FiscalEngine.scheduleMemberSearch;
 window.logoutFiscal = FiscalEngine.logoutFiscal;
+window.gerarCrachaDireto = FiscalEngine.gerarCrachaDireto;
+window.abrirStudioCracha = FiscalEngine.abrirStudioCracha;
 
 window.addEventListener('DOMContentLoaded', FiscalEngine.initListeners);
