@@ -16,7 +16,8 @@ const appState = {
 // =========================================================
 
 function navigateTo(viewId) {
-  const views = ['authSection', 'dashboardSection', 'quizSection', 'clinicSection', 'labSection'];
+  // Incluído 'toxicoSection' na lista de telas
+  const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection'];
   views.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
@@ -46,7 +47,7 @@ function launchModule(moduleType) {
       const quizFrame = document.getElementById('quizFrame');
       if (quizFrame) {
         if (!quizFrame.src || quizFrame.src === 'about:blank' || quizFrame.src.endsWith('/')) {
-          quizFrame.src = 'quiz/index.html';
+          quizFrame.src = 'quiz/index.html'; // Carrega pasta de Farmacologia
         } else if (quizFrame.contentWindow) {
           quizFrame.contentWindow.location.reload();
         }
@@ -56,11 +57,15 @@ function launchModule(moduleType) {
 
     case 'toxico':
       document.body.className = 'theme-toxico';
-      const toxFrame = document.getElementById('quizFrame');
+      const toxFrame = document.getElementById('toxicoFrame');
       if (toxFrame) {
-        toxFrame.src = 'quiz/index.html';
+        if (!toxFrame.src || toxFrame.src === 'about:blank' || toxFrame.src.endsWith('/')) {
+          toxFrame.src = 'toxicologia/index.html'; // Carrega pasta de Toxicologia
+        } else if (toxFrame.contentWindow) {
+          toxFrame.contentWindow.location.reload();
+        }
       }
-      navigateTo('quizSection');
+      navigateTo('toxicoSection');
       break;
 
     case 'clinica':
@@ -73,7 +78,7 @@ function launchModule(moduleType) {
 
     case 'lab':
       document.body.className = 'theme-default';
-      const labFrame = document.querySelector('#labSection iframe');
+      const labFrame = document.getElementById('labFrame') || document.querySelector('#labSection iframe');
       if (labFrame) {
         if (!labFrame.src || labFrame.src === 'about:blank' || labFrame.src.endsWith('/')) {
           labFrame.src = 'laboratorio/index.html';
