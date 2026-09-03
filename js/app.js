@@ -12,27 +12,47 @@ const appState = {
 };
 
 // =========================================================
-// ROTEAMENTO E TRANSIÇÃO DE TELAS SPA
+// ROTEAMENTO E TRANSIÇÃO DE TELAS SPA (BLINDADO)
 // =========================================================
 
 function navigateTo(viewId) {
-  // Incluído 'toxicoSection' na lista de telas
   const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection'];
-  views.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.add('hidden');
-  });
-
   const target = document.getElementById(viewId);
-  if (target) {
-    target.classList.remove('hidden');
-    appState.activeView = viewId;
+
+  // Proteção contra tela em branco: se o container não existir no HTML, aborta sem ocultar a tela atual
+  if (!target) {
+    console.warn(`[LAIFT] Tentativa de navegar para tela inexistente: #${viewId}. Redirecionando para o Hub.`);
+    if (viewId !== 'dashboardSection') {
+      navigateTo('dashboardSection');
+    }
+    return;
   }
 
+  // Oculta todos os painéis e sincroniza classes .hidden e .active
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.classList.add('hidden');
+      el.classList.remove('active');
+    }
+  });
+
+  // Torna o painel de destino visível em qualquer regra CSS
+  target.classList.remove('hidden');
+  target.classList.add('active');
+  appState.activeView = viewId;
+
+  // Gerenciamento do cabeçalho de controle
   const controls = document.getElementById('sessionHeaderControls');
   if (viewId === 'authSection') {
     if (controls) controls.classList.add('hidden');
     document.body.className = 'theme-default';
+    
+    // Garante que o formulário inicial de login esteja visível se não for o terminal fiscal
+    const fiscalArea = document.getElementById('fiscalArea');
+    if (!fiscalArea || fiscalArea.classList.contains('hidden')) {
+      showPublicStep('identityForm');
+    }
   } else {
     if (controls) controls.classList.remove('hidden');
   }
@@ -47,7 +67,7 @@ function launchModule(moduleType) {
       const quizFrame = document.getElementById('quizFrame');
       if (quizFrame) {
         if (!quizFrame.src || quizFrame.src === 'about:blank' || quizFrame.src.endsWith('/')) {
-          quizFrame.src = 'quiz/index.html'; // Carrega pasta de Farmacologia
+          quizFrame.src = 'quiz/index.html';
         } else if (quizFrame.contentWindow) {
           quizFrame.contentWindow.location.reload();
         }
@@ -58,14 +78,25 @@ function launchModule(moduleType) {
     case 'toxico':
       document.body.className = 'theme-toxico';
       const toxFrame = document.getElementById('toxicoFrame');
-      if (toxFrame) {
+      
+      // Se houver iframe dedicado (#toxicoFrame e #toxicoSection), usa ele
+      if (toxFrame && document.getElementById('toxicoSection')) {
         if (!toxFrame.src || toxFrame.src === 'about:blank' || toxFrame.src.endsWith('/')) {
-          toxFrame.src = 'toxicologia/index.html'; // Carrega pasta de Toxicologia
+          toxFrame.src = 'toxicologia/index.html';
         } else if (toxFrame.contentWindow) {
           toxFrame.contentWindow.location.reload();
         }
+        navigateTo('toxicoSection');
+      } else {
+        // Fallback seguro: se index.html ainda não tiver #toxicoSection, abre no quizFrame existente
+        const fallbackFrame = document.getElementById('quizFrame');
+        if (fallbackFrame) {
+          fallbackFrame.src = 'toxicologia/index.html';
+          navigateTo('quizSection');
+        } else {
+          alert('Módulo de toxicologia não encontrado na estrutura do HTML.');
+        }
       }
-      navigateTo('toxicoSection');
       break;
 
     case 'clinica':
@@ -110,14 +141,16 @@ function checkExistingSession() {
 
   try {
     const session = JSON.parse(raw);
-    if (session.expiresAt && Date.now() < session.expiresAt) {
-      appState.user = session;
-      applyUserToUI(session);
-      transitionToDashboard();
-      return true;
-    } else {
-      localStorage.removeItem(STORAGE_SESSION_KEY);
+    if (session && session.identifier) {
+      // Se não houver data de expiração gravada ou ainda for válida, aceita a sessão
+      if (!session.expiresAt || Date.now() < session.expiresAt) {
+        appState.user = session;
+        applyUserToUI(session);
+        transitionToDashboard();
+        return true;
+      }
     }
+    localStorage.removeItem(STORAGE_SESSION_KEY);
   } catch (e) {
     localStorage.removeItem(STORAGE_SESSION_KEY);
   }
@@ -176,25 +209,27 @@ async function refreshDashboard() {
   if (!appState.user || !appState.user.identifier) return;
 
   try {
-    const data = await ApiService.obterDashboardAluno(appState.user.identifier);
-    if (data && data.sucesso && data.aluno) {
-      const elAcc = document.getElementById('statAccuracy');
-      const elAns = document.getElementById('statAnswered');
-      const elCases = document.getElementById('statCasesSolved');
+    if (typeof ApiService !== 'undefined' && typeof ApiService.obterDashboardAluno === 'function') {
+      const data = await ApiService.obterDashboardAluno(appState.user.identifier);
+      if (data && data.sucesso && data.aluno) {
+        const elAcc = document.getElementById('statAccuracy');
+        const elAns = document.getElementById('statAnswered');
+        const elCases = document.getElementById('statCasesSolved');
 
-      if (elAcc) elAcc.textContent = `${data.aluno.taxaAcertoGeral}%`;
-      if (elAns) elAns.textContent = data.aluno.totalQuestoes;
-      if (elCases) elCases.textContent = data.aluno.simuladosConcluidos;
+        if (elAcc) elAcc.textContent = `${data.aluno.taxaAcertoGeral}%`;
+        if (elAns) elAns.textContent = data.aluno.totalQuestoes;
+        if (elCases) elCases.textContent = data.aluno.simuladosConcluidos;
 
-      if (data.aluno.totalQuestoes > 0) {
-        document.getElementById('badgeTox')?.classList.remove('locked');
-      }
-      if (data.aluno.simuladosConcluidos > 0) {
-        document.getElementById('badgeClinic')?.classList.remove('locked');
+        if (data.aluno.totalQuestoes > 0) {
+          document.getElementById('badgeTox')?.classList.remove('locked');
+        }
+        if (data.aluno.simuladosConcluidos > 0) {
+          document.getElementById('badgeClinic')?.classList.remove('locked');
+        }
       }
     }
   } catch (err) {
-    console.warn('Dashboard em modo local offline.');
+    console.warn('Dashboard carregado em modo offline.');
   }
 }
 
@@ -382,7 +417,7 @@ function closePreceptorModal() {
 }
 
 // =========================================================
-// EXPOSIÇÃO GLOBAL EXPLÍCITA
+// EXPOSIÇÃO GLOBAL EXPLÍCITA (Para chamadas inline no HTML)
 // =========================================================
 
 window.transitionToDashboard = transitionToDashboard;
@@ -402,10 +437,10 @@ window.showStatus = showStatus;
 window.hideStatus = hideStatus;
 
 // =========================================================
-// INICIALIZAÇÃO
+// INICIALIZAÇÃO RESILIENTE (Com verificação de estado do DOM)
 // =========================================================
 
-window.addEventListener('DOMContentLoaded', () => {
+function initApp() {
   if (typeof ClinicEngine !== 'undefined' && typeof ClinicEngine.init === 'function') {
     ClinicEngine.init();
   }
@@ -425,8 +460,16 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Tenta restaurar sessão prévia; se não houver, vai direto para o login
   const hasSession = checkExistingSession();
   if (!hasSession) {
     navigateTo('authSection');
   }
-});
+}
+
+// Garante execução mesmo se o DOM já tiver terminado de carregar
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
