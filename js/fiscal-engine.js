@@ -11,25 +11,49 @@ const FiscalEngine = (() => {
   let memberSearchTimer = null;
 
   const QR_PREFIX = 'LAIFT:v1:';
+  const SESSION_STORAGE_KEY = 'laift_student_session';
+
+  function getStatusBanner(msg, type) {
+    if (typeof window.showStatus === 'function') {
+      window.showStatus(msg, type);
+    } else {
+      const el = document.getElementById('status');
+      if (el) {
+        el.textContent = msg;
+        el.className = `status-banner ${type}`;
+        el.classList.remove('hidden');
+      }
+    }
+  }
+
+  function clearStatusBanner() {
+    if (typeof window.hideStatus === 'function') {
+      window.hideStatus();
+    } else {
+      const el = document.getElementById('status');
+      if (el) el.classList.add('hidden');
+    }
+  }
 
   // --- REENVIO DE CREDENCIAL ---
   async function resendCredentialEmail() {
-    const session = JSON.parse(localStorage.getItem(STORAGE_SESSION_KEY) || '{}');
+    const session = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '{}');
     if (!session.sessionToken) {
-      showStatus('Sessão expirada. Autentique-se novamente.', 'error');
+      getStatusBanner('Sessão expirada. Autentique-se novamente.', 'error');
       return;
     }
 
-    showStatus('Enviando QR Code para seu e-mail...', 'loading');
+    getStatusBanner('Enviando QR Code para seu e-mail...', 'loading');
     try {
       const res = await ApiService.reenviarCredencialEmail(session.sessionToken);
-      if (res.sucesso) {
-        showStatus(res.mensagem || 'QR Code reenviado com sucesso.', 'success');
+      if (res && res.sucesso) {
+        getStatusBanner(res.mensagem || 'QR Code reenviado com sucesso.', 'success');
       } else {
-        showStatus(res.mensagem || 'Não foi possível reenviar a credencial.', 'error');
+        getStatusBanner((res && res.mensagem) || 'Não foi possível reenviar a credencial.', 'error');
       }
     } catch (err) {
-      showStatus('Erro de conexão ao reenviar e-mail.', 'error');
+      console.error(err);
+      getStatusBanner('Erro de conexão ao reenviar e-mail.', 'error');
     }
   }
 
@@ -40,18 +64,17 @@ const FiscalEngine = (() => {
     const password = prompt('Terminal restrito. Digite a senha fiscal:');
     if (!password) return;
 
-    showStatus('Validando acesso fiscal...', 'loading');
+    getStatusBanner('Validando acesso fiscal...', 'loading');
     try {
       const res = await ApiService.loginFiscal(password);
-      if (!res.sucesso || !res.sessao) {
-        showStatus(res.mensagem || 'Credenciais inválidas.', 'error');
+      if (!res || !res.sucesso || !res.sessao) {
+        getStatusBanner((res && res.mensagem) || 'Credenciais inválidas.', 'error');
         return;
       }
 
       fiscalSession = res.sessao;
-      hideStatus();
+      clearStatusBanner();
 
-      // Esconde o fluxo público e exibe o painel fiscal
       ['identityForm', 'registrationForm', 'otpForm', 'credentialScreen'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
@@ -66,7 +89,8 @@ const FiscalEngine = (() => {
       const eventInput = document.getElementById('eventName');
       if (eventInput) eventInput.value = res.evento || '';
     } catch (err) {
-      showStatus('Falha ao autenticar terminal fiscal.', 'error');
+      console.error(err);
+      getStatusBanner('Falha ao autenticar terminal fiscal.', 'error');
     }
   }
 
@@ -75,21 +99,22 @@ const FiscalEngine = (() => {
     const eventName = eventInput ? eventInput.value.trim() : '';
 
     if (!eventName) {
-      showStatus('Digite o nome do evento ativo.', 'error');
+      getStatusBanner('Digite o nome do evento ativo.', 'error');
       return;
     }
 
-    showStatus('Atualizando evento...', 'loading');
+    getStatusBanner('Atualizando evento...', 'loading');
     try {
       const res = await ApiService.salvarEvento(eventName, fiscalSession);
-      if (res.sucesso) {
+      if (res && res.sucesso) {
         if (eventInput) eventInput.value = res.novoEvento || eventName;
-        showStatus('Evento ativo atualizado com sucesso.', 'success');
+        getStatusBanner('Evento ativo atualizado com sucesso.', 'success');
       } else {
-        showStatus(res.mensagem || 'Não foi possível atualizar o evento.', 'error');
+        getStatusBanner((res && res.mensagem) || 'Não foi possível atualizar o evento.', 'error');
       }
     } catch (err) {
-      showStatus('Erro ao atualizar evento.', 'error');
+      console.error(err);
+      getStatusBanner('Erro ao atualizar evento.', 'error');
     }
   }
 
@@ -108,7 +133,7 @@ const FiscalEngine = (() => {
 
     if (readerEl) readerEl.classList.remove('hidden');
     if (scannerBtn) scannerBtn.classList.add('hidden');
-    hideStatus();
+    clearStatusBanner();
 
     scannerInstance = new Html5QrcodeScanner(
       'reader',
@@ -123,23 +148,24 @@ const FiscalEngine = (() => {
 
         const validCred = extractQrCredential(decodedText);
         if (!validCred) {
-          showStatus('QR Code não reconhecido como credencial LAIFT.', 'error');
+          getStatusBanner('QR Code não reconhecido como credencial LAIFT.', 'error');
           scanInProgress = false;
           return;
         }
 
-        showStatus('Credencial lida. Validando presença...', 'loading');
+        getStatusBanner('Credencial lida. Validando presença...', 'loading');
         await closeScanner();
 
         try {
           const res = await ApiService.carimbarPresenca(validCred, fiscalSession);
-          if (res.sucesso) {
-            showStatus(res.mensagem || 'Presença confirmada.', 'success');
+          if (res && res.sucesso) {
+            getStatusBanner(res.mensagem || 'Presença confirmada.', 'success');
           } else {
-            showStatus(res.mensagem || 'Não foi possível registrar a presença.', 'error');
+            getStatusBanner((res && res.mensagem) || 'Não foi possível registrar a presença.', 'error');
           }
         } catch (err) {
-          showStatus('Erro ao comunicar com o servidor.', 'error');
+          console.error(err);
+          getStatusBanner('Erro ao comunicar com o servidor.', 'error');
         } finally {
           scanInProgress = false;
         }
@@ -168,22 +194,23 @@ const FiscalEngine = (() => {
     const identifier = idInput ? idInput.value.trim() : '';
 
     if (!identifier) {
-      showStatus('Digite a matrícula ou CPF do participante.', 'error');
+      getStatusBanner('Digite a matrícula ou CPF do participante.', 'error');
       return;
     }
 
-    showStatus('Registrando presença...', 'loading');
+    getStatusBanner('Registrando presença...', 'loading');
     try {
       const res = await ApiService.carimbarPresencaManual(identifier, fiscalSession);
       if (idInput) idInput.value = '';
 
-      if (res.sucesso) {
-        showStatus(res.mensagem || 'Presença confirmada.', 'success');
+      if (res && res.sucesso) {
+        getStatusBanner(res.mensagem || 'Presença confirmada.', 'success');
       } else {
-        showStatus(res.mensagem || 'Não foi possível registrar a presença.', 'error');
+        getStatusBanner((res && res.mensagem) || 'Não foi possível registrar a presença.', 'error');
       }
     } catch (err) {
-      showStatus('Erro ao registrar presença.', 'error');
+      console.error(err);
+      getStatusBanner('Erro ao registrar presença.', 'error');
     }
   }
 
@@ -215,16 +242,23 @@ const FiscalEngine = (() => {
     `;
 
     try {
-      const res = await ApiService.callAppsScript({
-        acao: 'listarMembros',
-        termo: term,
-        sessao: fiscalSession
-      });
+      let res;
+      if (typeof ApiService.listarMembros === 'function') {
+        res = await ApiService.listarMembros(term, fiscalSession);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'listarMembros',
+          termo: term,
+          sessao: fiscalSession
+        });
+      } else {
+        throw new Error('Método de listagem não disponível no ApiService.');
+      }
 
-      if (!res.sucesso) {
+      if (!res || !res.sucesso) {
         list.innerHTML = `
           <div class="member-list-empty">
-            ${res.mensagem || 'Não foi possível consultar a lista.'}
+            ${(res && res.mensagem) || 'Não foi possível consultar a lista.'}
           </div>
         `;
         return;
@@ -232,6 +266,7 @@ const FiscalEngine = (() => {
 
       renderMemberList(res.membros || []);
     } catch (err) {
+      console.error('Falha na consulta de membros:', err);
       list.innerHTML = `
         <div class="member-list-empty">
           Não foi possível consultar a lista no momento.
@@ -244,7 +279,7 @@ const FiscalEngine = (() => {
     const list = document.getElementById('memberList');
     if (!list) return;
 
-    if (!members.length) {
+    if (!members || !members.length) {
       list.innerHTML = `
         <div class="member-list-empty">
           Nenhum participante encontrado.
@@ -288,27 +323,35 @@ const FiscalEngine = (() => {
   async function markPresenceFromList(identifier) {
     if (!identifier) return;
 
-    showStatus('Registrando presença pela lista...', 'loading');
+    getStatusBanner('Registrando presença pela lista...', 'loading');
     try {
-      const res = await ApiService.callAppsScript({
-        acao: 'marcarPresencaLista',
-        identificador: identifier,
-        sessao: fiscalSession
-      });
-
-      if (res.sucesso) {
-        showStatus(res.mensagem || 'Presença confirmada.', 'success');
+      let res;
+      if (typeof ApiService.marcarPresencaLista === 'function') {
+        res = await ApiService.marcarPresencaLista(identifier, fiscalSession);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'marcarPresencaLista',
+          identificador: identifier,
+          sessao: fiscalSession
+        });
       } else {
-        showStatus(res.mensagem || 'Não foi possível registrar a presença.', 'error');
+        throw new Error('Método de presença não disponível no ApiService.');
+      }
+
+      if (res && res.sucesso) {
+        getStatusBanner(res.mensagem || 'Presença confirmada.', 'success');
+      } else {
+        getStatusBanner((res && res.mensagem) || 'Não foi possível registrar a presença.', 'error');
       }
     } catch (err) {
-      showStatus('Erro ao registrar presença.', 'error');
+      console.error(err);
+      getStatusBanner('Erro ao registrar presença.', 'error');
     }
   }
 
   async function logoutFiscal() {
     try {
-      if (fiscalSession) {
+      if (fiscalSession && typeof ApiService.logoutFiscal === 'function') {
         await ApiService.logoutFiscal(fiscalSession);
       }
     } catch (e) {
@@ -321,6 +364,9 @@ const FiscalEngine = (() => {
 
     const fiscalArea = document.getElementById('fiscalArea');
     if (fiscalArea) fiscalArea.classList.add('hidden');
+
+    const identityForm = document.getElementById('identityForm');
+    if (identityForm) identityForm.classList.remove('hidden');
 
     const subtitle = document.getElementById('headerSubtitle');
     if (subtitle) subtitle.textContent = 'Portal de Credencial Acadêmica';
@@ -343,8 +389,10 @@ const FiscalEngine = (() => {
       `;
     }
 
-    hideStatus();
-    restartPublicFlow();
+    clearStatusBanner();
+    if (typeof window.restartPublicFlow === 'function') {
+      window.restartPublicFlow();
+    }
   }
 
   function initListeners() {
@@ -382,7 +430,7 @@ const FiscalEngine = (() => {
   };
 })();
 
-// Declarações globais para compatibilidade direta com os atributos onclick/oninput do HTML
+// Declarações globais para suporte direto aos atributos inline do HTML
 window.resendCredentialEmail = FiscalEngine.resendCredentialEmail;
 window.saveActiveEvent = FiscalEngine.saveActiveEvent;
 window.startFiscalScanner = FiscalEngine.startFiscalScanner;
