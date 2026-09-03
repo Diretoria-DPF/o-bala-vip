@@ -51,7 +51,7 @@
       <div class="auth-card">
         <div class="auth-header">
           <h2>Portal Acadêmico</h2>
-          <p class="auth-desc">Identifique-se com seus dados acadêmicos para acessar o ecossistema e emitir sua credencial.</p>
+          <p class="auth-desc">Identifique-se com seus dados acadêmicos para acessar o ambiente</p>
         </div>
 
         <!-- Etapa 1: Identificação -->
@@ -85,7 +85,7 @@
 
           <label class="consent-checkbox">
             <input id="privacyConsent" type="checkbox">
-            <span>Concordo com os termos e autorizo o uso acadêmico das minhas informações.</span>
+            <span>Concordo com os termos e autorizo o uso das minhas informações.</span>
           </label>
 
           <button id="sendRegistrationCodeButton" class="btn btn-primary" type="button" onclick="sendRegistrationCode()">Enviar Código de Verificação</button>
@@ -113,27 +113,98 @@
         </div>
 
         <!-- Terminal Fiscal / Validador Administrativo -->
-        <div id="fiscalArea" class="fiscal-terminal hidden">
-          <div class="terminal-badge">Terminal de Validação Ativo</div>
-          <div class="terminal-field">
-            <label for="eventName">Evento em Andamento:</label>
-            <div class="flex-row">
-              <input id="eventName" type="text" placeholder="Nome do evento" maxlength="80">
-              <button id="saveEventButton" class="btn btn-sm" type="button" onclick="saveActiveEvent()">Salvar</button>
+        <!-- Terminal Fiscal / Validador Administrativo -->
+        <section id="fiscalArea" class="hidden">
+          <div style="text-align: center;">
+            <span class="badge-admin">Terminal de Validação Ativo</span>
+          </div>
+
+          <div class="section-box" style="text-align: left;">
+            <h3>Evento Ativo</h3>
+            <div class="fiscal-event-row">
+              <input
+                id="eventName"
+                type="text"
+                placeholder="Carregando evento..."
+                maxlength="80"
+              >
+              <button
+                id="saveEventButton"
+                type="button"
+                onclick="saveActiveEvent()"
+              >
+                Salvar
+              </button>
             </div>
           </div>
-          <div class="terminal-scanner">
-            <div id="reader" class="scanner-viewport hidden"></div>
-            <button id="scannerButton" class="btn btn-dark" type="button" onclick="startFiscalScanner()">📷 Escanear Presença</button>
+
+          <div class="section-box">
+            <h3>Check-in por QR Code</h3>
+            <div id="reader" class="hidden"></div>
+            <button
+              id="scannerButton"
+              class="scanner-button"
+              type="button"
+              onclick="startFiscalScanner()"
+            >
+              📷 Escanear QR Code
+            </button>
+            <p class="small-note">
+              O QR é validado no servidor e a presença é registrada no evento ativo.
+            </p>
           </div>
-          <div class="terminal-manual">
-            <input id="manualIdentifier" type="text" placeholder="Matrícula/CPF manual" maxlength="32">
-            <button id="manualCheckinButton" class="btn btn-secondary" type="button" onclick="submitManualCheckin()">Registrar</button>
+
+          <div class="divider">Ou</div>
+
+          <div class="section-box">
+            <h3>Check-in Manual</h3>
+            <input
+              id="manualIdentifier"
+              type="text"
+              placeholder="Digite matrícula ou CPF"
+              autocomplete="off"
+              maxlength="32"
+            >
+            <button
+              id="manualCheckinButton"
+              class="secondary-button"
+              type="button"
+              onclick="submitManualCheckin()"
+            >
+              Marcar Presença Manualmente
+            </button>
           </div>
-          <button class="btn btn-danger" type="button" onclick="logoutFiscal()">Encerrar Terminal</button>
-        </div>
-      </div>
-    </section>
+
+          <div class="divider">Ou</div>
+
+          <div class="section-box">
+            <h3>Lista de Presença</h3>
+            <input
+              id="memberSearch"
+              class="presence-search"
+              type="text"
+              placeholder="Pesquisar por nome, matrícula ou CPF"
+              autocomplete="off"
+              oninput="scheduleMemberSearch()"
+            >
+            <div id="memberList" class="member-list">
+              <div class="member-list-empty">
+                Digite ao menos dois caracteres para pesquisar participantes.
+              </div>
+            </div>
+            <p class="small-note">
+              Use esta opção para reuniões online ou validação manual por lista.
+            </p>
+          </div>
+
+          <button
+            class="danger-button"
+            type="button"
+            onclick="logoutFiscal()"
+          >
+            Encerrar Terminal
+          </button>
+        </section>
 
     <!-- =========================================================
          2. DASHBOARD CENTRAL DO ALUNO & HUB DE SISTEMAS
