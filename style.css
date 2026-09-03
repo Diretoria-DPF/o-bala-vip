@@ -1625,4 +1625,47 @@ label {
   .meter-item {
     width: 100%;
   }
+
+   /* Notificação Toast de Conquista */
+.achievement-toast {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  background: linear-gradient(135deg, #1a365d, #2b6cb0);
+  color: #ffffff;
+  padding: 16px 22px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  z-index: 9999;
+  border-left: 5px solid #facc15;
+  animation: slideInRight 0.4s ease, fadeOut 0.5s ease 4.5s forwards;
+}
+
+.achievement-icon {
+  font-size: 2.2rem;
+}
+
+.achievement-text h4 {
+  font-size: 0.95rem;
+  color: #facc15;
+  margin-bottom: 2px;
+}
+
+.achievement-text p {
+  font-size: 0.82rem;
+  color: #e2e8f0;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(110%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeOut {
+  to { opacity: 0; transform: translateY(-10px); visibility: hidden; }
+}
+   
 }
