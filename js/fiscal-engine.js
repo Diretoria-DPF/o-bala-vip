@@ -8,10 +8,11 @@ const FiscalEngine = (() => {
   let scannerInstance = null;
   let scanInProgress = false;
   let logoPressTimer = null;
+  let memberSearchTimer = null;
 
   const QR_PREFIX = 'LAIFT:v1:';
 
-  // --- REENVIO DE CREDENCIAL POR E-MAIL ---
+  // --- REENVIO DE CREDENCIAL ---
   async function resendCredentialEmail() {
     const session = JSON.parse(localStorage.getItem(STORAGE_SESSION_KEY) || '{}');
     if (!session.sessionToken) {
@@ -32,52 +33,60 @@ const FiscalEngine = (() => {
     }
   }
 
-  // --- ACESSO AO TERMINAL FISCAL (PORTARIA ADMINISTRATIVA) ---
+  // --- ACESSO AO TERMINAL FISCAL ---
   async function openFiscalLogin() {
     if (fiscalSession) return;
 
-    const password = prompt('Terminal restrito da Diretoria LAIFT. Digite a senha fiscal:');
+    const password = prompt('Terminal restrito. Digite a senha fiscal:');
     if (!password) return;
 
-    showStatus('Validando autorização administrativa...', 'loading');
+    showStatus('Validando acesso fiscal...', 'loading');
     try {
       const res = await ApiService.loginFiscal(password);
       if (!res.sucesso || !res.sessao) {
-        showStatus(res.mensagem || 'Acesso não autorizado.', 'error');
+        showStatus(res.mensagem || 'Credenciais inválidas.', 'error');
         return;
       }
 
       fiscalSession = res.sessao;
       hideStatus();
 
-      // Alterna visibilidade do formulário público para o terminal fiscal
-      document.getElementById('identityForm').classList.add('hidden');
-      document.getElementById('registrationForm').classList.add('hidden');
-      document.getElementById('otpForm').classList.add('hidden');
-      document.getElementById('credentialScreen').classList.add('hidden');
-      document.getElementById('fiscalArea').classList.remove('hidden');
+      // Esconde o fluxo público e exibe o painel fiscal
+      ['identityForm', 'registrationForm', 'otpForm', 'credentialScreen'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
 
-      document.getElementById('eventName').value = res.evento || 'EVENTO_PADRAO';
+      const fiscalArea = document.getElementById('fiscalArea');
+      if (fiscalArea) fiscalArea.classList.remove('hidden');
+
+      const subtitle = document.getElementById('headerSubtitle');
+      if (subtitle) subtitle.textContent = 'Terminal de Validação';
+
+      const eventInput = document.getElementById('eventName');
+      if (eventInput) eventInput.value = res.evento || '';
     } catch (err) {
       showStatus('Falha ao autenticar terminal fiscal.', 'error');
     }
   }
 
   async function saveActiveEvent() {
-    const eventName = document.getElementById('eventName').value.trim();
+    const eventInput = document.getElementById('eventName');
+    const eventName = eventInput ? eventInput.value.trim() : '';
+
     if (!eventName) {
-      showStatus('Informe o identificador do evento.', 'error');
+      showStatus('Digite o nome do evento ativo.', 'error');
       return;
     }
 
-    showStatus('Atualizando evento ativo...', 'loading');
+    showStatus('Atualizando evento...', 'loading');
     try {
       const res = await ApiService.salvarEvento(eventName, fiscalSession);
       if (res.sucesso) {
-        document.getElementById('eventName').value = res.novoEvento || eventName;
+        if (eventInput) eventInput.value = res.novoEvento || eventName;
         showStatus('Evento ativo atualizado com sucesso.', 'success');
       } else {
-        showStatus(res.mensagem || 'Não foi possível salvar o evento.', 'error');
+        showStatus(res.mensagem || 'Não foi possível atualizar o evento.', 'error');
       }
     } catch (err) {
       showStatus('Erro ao atualizar evento.', 'error');
@@ -97,8 +106,8 @@ const FiscalEngine = (() => {
     const readerEl = document.getElementById('reader');
     const scannerBtn = document.getElementById('scannerButton');
 
-    readerEl.classList.remove('hidden');
-    scannerBtn.classList.add('hidden');
+    if (readerEl) readerEl.classList.remove('hidden');
+    if (scannerBtn) scannerBtn.classList.add('hidden');
     hideStatus();
 
     scannerInstance = new Html5QrcodeScanner(
@@ -114,23 +123,23 @@ const FiscalEngine = (() => {
 
         const validCred = extractQrCredential(decodedText);
         if (!validCred) {
-          showStatus('Código lido não é uma credencial LAIFT válida.', 'error');
+          showStatus('QR Code não reconhecido como credencial LAIFT.', 'error');
           scanInProgress = false;
           return;
         }
 
-        showStatus('Validando presença...', 'loading');
+        showStatus('Credencial lida. Validando presença...', 'loading');
         await closeScanner();
 
         try {
           const res = await ApiService.carimbarPresenca(validCred, fiscalSession);
           if (res.sucesso) {
-            showStatus(`Presença confirmada: ${res.nomeExibicao || 'Participante'}`, 'success');
+            showStatus(res.mensagem || 'Presença confirmada.', 'success');
           } else {
-            showStatus(res.mensagem || 'Falha ao validar presença.', 'error');
+            showStatus(res.mensagem || 'Não foi possível registrar a presença.', 'error');
           }
         } catch (err) {
-          showStatus('Erro na validação do QR Code.', 'error');
+          showStatus('Erro ao comunicar com o servidor.', 'error');
         } finally {
           scanInProgress = false;
         }
@@ -144,38 +153,160 @@ const FiscalEngine = (() => {
     try {
       await scannerInstance.clear();
     } catch (e) {
-      console.warn('Encerramento do leitor de câmera:', e);
+      console.warn('Aviso ao encerrar scanner:', e);
     }
     scannerInstance = null;
-    document.getElementById('reader').classList.add('hidden');
-    document.getElementById('scannerButton').classList.remove('hidden');
+
+    const readerEl = document.getElementById('reader');
+    const scannerBtn = document.getElementById('scannerButton');
+    if (readerEl) readerEl.classList.add('hidden');
+    if (scannerBtn) scannerBtn.classList.remove('hidden');
   }
 
   async function submitManualCheckin() {
     const idInput = document.getElementById('manualIdentifier');
-    const identifier = idInput.value.trim();
+    const identifier = idInput ? idInput.value.trim() : '';
 
     if (!identifier) {
-      showStatus('Informe a matrícula ou CPF.', 'error');
+      showStatus('Digite a matrícula ou CPF do participante.', 'error');
       return;
     }
 
-    showStatus('Registrando presença manual...', 'loading');
+    showStatus('Registrando presença...', 'loading');
     try {
       const res = await ApiService.carimbarPresencaManual(identifier, fiscalSession);
-      idInput.value = '';
+      if (idInput) idInput.value = '';
+
       if (res.sucesso) {
-        showStatus(`Presença registrada: ${res.nomeExibicao || 'Participante'}`, 'success');
+        showStatus(res.mensagem || 'Presença confirmada.', 'success');
       } else {
-        showStatus(res.mensagem || 'Falha ao registrar presença manual.', 'error');
+        showStatus(res.mensagem || 'Não foi possível registrar a presença.', 'error');
       }
     } catch (err) {
-      showStatus('Erro ao comunicar com o servidor.', 'error');
+      showStatus('Erro ao registrar presença.', 'error');
+    }
+  }
+
+  // --- PESQUISA NA LISTA DE MEMBROS ---
+  function scheduleMemberSearch() {
+    clearTimeout(memberSearchTimer);
+    memberSearchTimer = setTimeout(searchMembers, 350);
+  }
+
+  async function searchMembers() {
+    const searchInput = document.getElementById('memberSearch');
+    const term = searchInput ? searchInput.value.trim() : '';
+    const list = document.getElementById('memberList');
+    if (!list) return;
+
+    if (term.length < 2) {
+      list.innerHTML = `
+        <div class="member-list-empty">
+          Digite ao menos dois caracteres para pesquisar participantes.
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = `
+      <div class="member-list-empty">
+        Buscando participantes...
+      </div>
+    `;
+
+    try {
+      const res = await ApiService.callAppsScript({
+        acao: 'listarMembros',
+        termo: term,
+        sessao: fiscalSession
+      });
+
+      if (!res.sucesso) {
+        list.innerHTML = `
+          <div class="member-list-empty">
+            ${res.mensagem || 'Não foi possível consultar a lista.'}
+          </div>
+        `;
+        return;
+      }
+
+      renderMemberList(res.membros || []);
+    } catch (err) {
+      list.innerHTML = `
+        <div class="member-list-empty">
+          Não foi possível consultar a lista no momento.
+        </div>
+      `;
+    }
+  }
+
+  function renderMemberList(members) {
+    const list = document.getElementById('memberList');
+    if (!list) return;
+
+    if (!members.length) {
+      list.innerHTML = `
+        <div class="member-list-empty">
+          Nenhum participante encontrado.
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = '';
+    members.forEach((member) => {
+      const item = document.createElement('div');
+      item.className = 'member-item';
+
+      const info = document.createElement('div');
+      info.className = 'member-info';
+
+      const name = document.createElement('div');
+      name.className = 'member-name';
+      name.textContent = member.nomeExibicao || 'Participante';
+
+      const meta = document.createElement('div');
+      meta.className = 'member-meta';
+      meta.textContent = `${member.tipo || 'Participante'} · ${member.identificador || ''}`;
+
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = 'Presença';
+      button.addEventListener('click', () => {
+        markPresenceFromList(member.identificador);
+      });
+
+      item.appendChild(info);
+      item.appendChild(button);
+      list.appendChild(item);
+    });
+  }
+
+  async function markPresenceFromList(identifier) {
+    if (!identifier) return;
+
+    showStatus('Registrando presença pela lista...', 'loading');
+    try {
+      const res = await ApiService.callAppsScript({
+        acao: 'marcarPresencaLista',
+        identificador: identifier,
+        sessao: fiscalSession
+      });
+
+      if (res.sucesso) {
+        showStatus(res.mensagem || 'Presença confirmada.', 'success');
+      } else {
+        showStatus(res.mensagem || 'Não foi possível registrar a presença.', 'error');
+      }
+    } catch (err) {
+      showStatus('Erro ao registrar presença.', 'error');
     }
   }
 
   async function logoutFiscal() {
-    showStatus('Encerrando terminal fiscal...', 'loading');
     try {
       if (fiscalSession) {
         await ApiService.logoutFiscal(fiscalSession);
@@ -188,19 +319,40 @@ const FiscalEngine = (() => {
     fiscalSession = '';
     scanInProgress = false;
 
-    document.getElementById('fiscalArea').classList.add('hidden');
-    document.getElementById('identityForm').classList.remove('hidden');
+    const fiscalArea = document.getElementById('fiscalArea');
+    if (fiscalArea) fiscalArea.classList.add('hidden');
+
+    const subtitle = document.getElementById('headerSubtitle');
+    if (subtitle) subtitle.textContent = 'Portal de Credencial Acadêmica';
+
+    const eventName = document.getElementById('eventName');
+    if (eventName) eventName.value = '';
+
+    const manualId = document.getElementById('manualIdentifier');
+    if (manualId) manualId.value = '';
+
+    const searchInput = document.getElementById('memberSearch');
+    if (searchInput) searchInput.value = '';
+
+    const memberList = document.getElementById('memberList');
+    if (memberList) {
+      memberList.innerHTML = `
+        <div class="member-list-empty">
+          Digite ao menos dois caracteres para pesquisar participantes.
+        </div>
+      `;
+    }
+
     hideStatus();
     restartPublicFlow();
   }
 
   function initListeners() {
     const logo = document.getElementById('laiftLogo');
+    if (!logo) return;
 
-    // Desktop: Duplo clique no logotipo LAIFT
     logo.addEventListener('dblclick', openFiscalLogin);
 
-    // Teclado: Enter ou Espaço quando em foco no logo
     logo.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -208,7 +360,6 @@ const FiscalEngine = (() => {
       }
     });
 
-    // Mobile: Toque contínuo por 700ms no logotipo
     logo.addEventListener('touchstart', () => {
       if (fiscalSession) return;
       logoPressTimer = setTimeout(openFiscalLogin, 700);
@@ -224,16 +375,19 @@ const FiscalEngine = (() => {
     saveActiveEvent,
     startFiscalScanner,
     submitManualCheckin,
+    scheduleMemberSearch,
+    markPresenceFromList,
     logoutFiscal,
     resendCredentialEmail
   };
 })();
 
-// Exposição global das funções chamadas diretamente por onclick no index.html
+// Declarações globais para compatibilidade direta com os atributos onclick/oninput do HTML
 window.resendCredentialEmail = FiscalEngine.resendCredentialEmail;
 window.saveActiveEvent = FiscalEngine.saveActiveEvent;
 window.startFiscalScanner = FiscalEngine.startFiscalScanner;
 window.submitManualCheckin = FiscalEngine.submitManualCheckin;
+window.scheduleMemberSearch = FiscalEngine.scheduleMemberSearch;
 window.logoutFiscal = FiscalEngine.logoutFiscal;
 
 window.addEventListener('DOMContentLoaded', FiscalEngine.initListeners);
