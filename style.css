@@ -1565,6 +1565,206 @@ label {
   opacity: 0.5;
 }
 
+
+/* =========================================================
+   ESTILOS DO TERMINAL FISCAL (PADRÃO LAIFT)
+========================================================= */
+
+.badge-admin {
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  background: #c53030;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.section-box {
+  margin-bottom: 18px;
+  padding: 15px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f7fafc;
+  text-align: center;
+}
+
+.section-box h3 {
+  margin: 0 0 10px;
+  color: #718096;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fiscal-event-row {
+  display: flex;
+  gap: 6px;
+}
+
+.fiscal-event-row input {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  font-size: 13px;
+  width: 100%;
+}
+
+.fiscal-event-row button {
+  width: auto;
+  margin: 0;
+  padding: 0 14px;
+  font-size: 13px;
+  border: 0;
+  background: var(--primary-light, #3182ce);
+  color: #ffffff;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.scanner-button {
+  width: 100%;
+  margin: 9px 0;
+  padding: 17px;
+  border: 0;
+  border-radius: 10px;
+  background: #2d3748;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.scanner-button:hover {
+  background: #1a202c;
+}
+
+.secondary-button {
+  width: 100%;
+  margin: 9px 0;
+  padding: 13px;
+  border: 0;
+  border-radius: 8px;
+  background: #718096;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: #4a5568;
+}
+
+.danger-button {
+  width: 100%;
+  margin: 9px 0;
+  padding: 13px;
+  border: 0;
+  border-radius: 8px;
+  background: #c53030;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.danger-button:hover {
+  background: #9b2c2c;
+}
+
+.divider {
+  margin: 16px 0;
+  color: #a0aec0;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.small-note {
+  margin: 8px 0 0;
+  color: #718096;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.presence-search {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 10px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.member-list {
+  max-height: 290px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: left;
+}
+
+.member-list-empty {
+  padding: 14px;
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.member-item:last-child {
+  border-bottom: 0;
+}
+
+.member-info {
+  min-width: 0;
+}
+
+.member-name {
+  overflow: hidden;
+  color: #2d3748;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-meta {
+  margin-top: 3px;
+  color: #718096;
+  font-size: 11px;
+}
+
+.member-item button {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--primary-light, #3182ce);
+  color: #ffffff;
+  cursor: pointer;
+}
 /* =========================================================
    ANIMAÇÕES E RESPONSIVIDADE
 ========================================================= */
