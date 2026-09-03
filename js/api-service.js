@@ -11,28 +11,27 @@ const ApiService = (() => {
    * Executa requisições POST seguras para o Google Apps Script com controle de timeout
    */
   async function callAppsScript(payload, timeoutMs = 25000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    try {
-      const response = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Apps Script lida melhor com text/plain sem preflight CORS complexo
-        body: JSON.stringify(payload)
-      });
+  try {
+    const response = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      body: JSON.stringify(payload) // Sem o objeto headers
+    });
 
-      const raw = await response.text();
-      return JSON.parse(raw);
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        throw new Error('A conexão com o servidor excedeu o tempo limite. Tente novamente.');
-      }
-      throw error;
-    } finally {
-      clearTimeout(timer);
+    const raw = await response.text();
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('A conexão com o servidor excedeu o tempo limite.');
     }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
+}
 
   /**
    * Consulta a API OpenFDA com timeout estrito de 3 segundos e ativação de fallback
