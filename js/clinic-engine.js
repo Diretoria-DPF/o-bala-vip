@@ -694,10 +694,11 @@ const ClinicEngine = (() => {
 
     dom.preceptorModal?.classList.add('active');
   }
-
-  function switchTab(tabId) {
+function switchTab(tabId) {
     dom.tabButtons.forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabId);
+      const isActive = btn.dataset.tab === tabId;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
     dom.tabPanes.forEach(pane => {
       pane.classList.toggle('active', pane.id === tabId);
