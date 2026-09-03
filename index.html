@@ -93,12 +93,18 @@
         </div>
 
         <!-- Etapa 3: Validação OTP (Código de 6 dígitos) -->
-        <div id="otpForm" class="auth-step hidden">
+       <div id="otpForm" class="auth-step hidden">
           <p class="info-notice">Enviamos um código temporário de 6 dígitos para o seu e-mail. Insira-o abaixo:</p>
-          <input id="otpCode" class="otp-input" type="text" inputmode="numeric" placeholder="000000" maxlength="6">
-          <button id="validateCodeButton" class="btn btn-primary" type="button" onclick="validateAccessCode()">Validar e Entrar</button>
-          <button class="btn btn-secondary" type="button" onclick="restartPublicFlow()">Recomeçar</button>
-          <span class="expiry-notice">O código expira em 10 minutos.</span>
+          <input id="otpCode" class="otp-input" type="text" inputmode="numeric" placeholder="000000" maxlength="6" autocomplete="one-time-code">
+          
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 15px;">
+            <button id="validateCodeButton" class="btn btn-primary" type="button" onclick="validateAccessCode()">Validar e Entrar</button>
+            <div style="display: flex; gap: 8px;">
+              <button id="resendOtpBtn" class="btn btn-outline" style="flex: 1;" type="button" onclick="resendAccessCode()">📩 Reenviar Código</button>
+              <button class="btn btn-secondary" style="flex: 1;" type="button" onclick="restartPublicFlow()">Voltar ao Início</button>
+            </div>
+          </div>
+          <span class="expiry-notice" style="display: block; text-align: center; margin-top: 10px;">O código expira em 10 minutos.</span>
         </div>
 
         <!-- Etapa 4: Credencial Gerada / QR Code -->
