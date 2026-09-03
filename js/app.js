@@ -19,7 +19,7 @@ function navigateTo(viewId) {
   const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection'];
   const target = document.getElementById(viewId);
 
-  // Proteção contra tela em branco: se o container não existir no HTML, aborta sem ocultar a tela atual
+  // Proteção contra tela em branco: se o container não existir no HTML, redireciona ao Hub
   if (!target) {
     console.warn(`[LAIFT] Tentativa de navegar para tela inexistente: #${viewId}. Redirecionando para o Hub.`);
     if (viewId !== 'dashboardSection') {
@@ -37,7 +37,7 @@ function navigateTo(viewId) {
     }
   });
 
-  // Torna o painel de destino visível em qualquer regra CSS
+  // Torna o painel de destino visível
   target.classList.remove('hidden');
   target.classList.add('active');
   appState.activeView = viewId;
@@ -47,12 +47,6 @@ function navigateTo(viewId) {
   if (viewId === 'authSection') {
     if (controls) controls.classList.add('hidden');
     document.body.className = 'theme-default';
-    
-    // Garante que o formulário inicial de login esteja visível se não for o terminal fiscal
-    const fiscalArea = document.getElementById('fiscalArea');
-    if (!fiscalArea || fiscalArea.classList.contains('hidden')) {
-      showPublicStep('identityForm');
-    }
   } else {
     if (controls) controls.classList.remove('hidden');
   }
@@ -78,8 +72,6 @@ function launchModule(moduleType) {
     case 'toxico':
       document.body.className = 'theme-toxico';
       const toxFrame = document.getElementById('toxicoFrame');
-      
-      // Se houver iframe dedicado (#toxicoFrame e #toxicoSection), usa ele
       if (toxFrame && document.getElementById('toxicoSection')) {
         if (!toxFrame.src || toxFrame.src === 'about:blank' || toxFrame.src.endsWith('/')) {
           toxFrame.src = 'toxicologia/index.html';
@@ -88,7 +80,6 @@ function launchModule(moduleType) {
         }
         navigateTo('toxicoSection');
       } else {
-        // Fallback seguro: se index.html ainda não tiver #toxicoSection, abre no quizFrame existente
         const fallbackFrame = document.getElementById('quizFrame');
         if (fallbackFrame) {
           fallbackFrame.src = 'toxicologia/index.html';
@@ -101,10 +92,11 @@ function launchModule(moduleType) {
 
     case 'clinica':
       document.body.className = 'theme-clinic';
-      if (typeof ClinicEngine !== 'undefined' && typeof ClinicEngine.startCase === 'function') {
-        ClinicEngine.startCase('caso_tox_01');
-      }
       navigateTo('clinicSection');
+      // Abre o mapa de leitos do plantão em vez de ir para um paciente fixo
+      if (typeof ClinicEngine !== 'undefined' && typeof ClinicEngine.showBedsDashboard === 'function') {
+        ClinicEngine.showBedsDashboard();
+      }
       break;
 
     case 'lab':
@@ -132,7 +124,7 @@ function transitionToDashboard() {
 }
 
 // =========================================================
-// SESSÃO DO ALUNO E PERSISTÊNCIA (LOCALSTORAGE)
+// SESSÃO DO ALUNO E RESTAURAÇÃO DA CREDENCIAL
 // =========================================================
 
 function checkExistingSession() {
@@ -141,16 +133,16 @@ function checkExistingSession() {
 
   try {
     const session = JSON.parse(raw);
-    if (session && session.identifier) {
-      // Se não houver data de expiração gravada ou ainda for válida, aceita a sessão
-      if (!session.expiresAt || Date.now() < session.expiresAt) {
-        appState.user = session;
-        applyUserToUI(session);
-        transitionToDashboard();
-        return true;
-      }
+    if (session && session.identifier && (!session.expiresAt || Date.now() < session.expiresAt)) {
+      appState.user = session;
+      applyUserToUI(session);
+      
+      // Exibe a tela de credencial com o botão de acesso aos estudos
+      showCredentialScreen();
+      return true;
+    } else {
+      localStorage.removeItem(STORAGE_SESSION_KEY);
     }
-    localStorage.removeItem(STORAGE_SESSION_KEY);
   } catch (e) {
     localStorage.removeItem(STORAGE_SESSION_KEY);
   }
@@ -189,6 +181,27 @@ function applyUserToUI(user) {
       .map(p => p[0].toUpperCase())
       .join('');
     dInitials.textContent = initials || 'LF';
+  }
+}
+
+function showCredentialScreen() {
+  const session = appState.user || JSON.parse(localStorage.getItem(STORAGE_SESSION_KEY) || '{}');
+  
+  navigateTo('authSection');
+  showPublicStep('credentialScreen');
+
+  const qrImg = document.getElementById('credentialQrImage');
+  const nameEl = document.getElementById('credUserName');
+  const roleEl = document.getElementById('credRoleBadge');
+  const idEl = document.getElementById('credUserId');
+
+  if (nameEl) nameEl.textContent = session.name || 'Estudante LAIFT';
+  if (roleEl) roleEl.textContent = session.type || 'Membro';
+  if (idEl) idEl.textContent = `ID / Matrícula: ${session.identifier || '---'}`;
+
+  if (qrImg && session.identifier) {
+    const qrPayload = session.sessionToken ? `LAIFT:v1:${session.sessionToken}` : `LAIFT:ID:${session.identifier}`;
+    qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(qrPayload)}`;
   }
 }
 
@@ -358,12 +371,13 @@ async function validateAccessCode() {
       persistSession({
         identifier,
         email,
-        name: document.getElementById('participantName')?.value.trim() || 'Estudante',
-        type: document.getElementById('participantType')?.value || 'Membro',
+        name: res.nome || document.getElementById('participantName')?.value.trim() || 'Estudante',
+        type: res.tipo || document.getElementById('participantType')?.value || 'Membro',
         sessionToken: res.sessao
       });
 
-      transitionToDashboard();
+      // Abre a tela de credencial com o botão de entrada na plataforma
+      showCredentialScreen();
     } else {
       showStatus((res && res.mensagem) || 'Código incorreto ou expirado.', 'error');
     }
@@ -390,31 +404,8 @@ function restartPublicFlow() {
 }
 
 // =========================================================
-// CONTROLE DE MODAIS
+// REENVIO DE CÓDIGO OTP COM CONTROLE DE TEMPO
 // =========================================================
-
-function showUserCredentialModal() {
-  const session = JSON.parse(localStorage.getItem(STORAGE_SESSION_KEY) || '{}');
-  const modalQr = document.getElementById('modalQrImage');
-  const modalMeta = document.getElementById('modalQrMeta');
-
-  if (session && session.identifier) {
-    if (modalMeta) modalMeta.textContent = `Participante: ${session.name || 'Estudante'} | ID: ${session.identifier}`;
-    const qrPayload = session.sessionToken ? `LAIFT:v1:${session.sessionToken}` : `LAIFT:ID:${session.identifier}`;
-    if (modalQr) modalQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=12&data=${encodeURIComponent(qrPayload)}`;
-  }
-
-  document.getElementById('credentialModal')?.classList.add('active');
-}
-
-function closeCredentialModal() {
-  document.getElementById('credentialModal')?.classList.remove('active');
-}
-
-function closePreceptorModal() {
-  document.getElementById('preceptorModal')?.classList.remove('active');
-  transitionToDashboard();
-}
 
 let resendTimerInterval = null;
 
@@ -478,9 +469,35 @@ function iniciarContagemReenvio(segundos) {
   }, 1000);
 }
 
+// =========================================================
+// CONTROLE DE MODAIS
+// =========================================================
+
+function showUserCredentialModal() {
+  const session = JSON.parse(localStorage.getItem(STORAGE_SESSION_KEY) || '{}');
+  const modalQr = document.getElementById('modalQrImage');
+  const modalMeta = document.getElementById('modalQrMeta');
+
+  if (session && session.identifier) {
+    if (modalMeta) modalMeta.textContent = `Participante: ${session.name || 'Estudante'} | ID: ${session.identifier}`;
+    const qrPayload = session.sessionToken ? `LAIFT:v1:${session.sessionToken}` : `LAIFT:ID:${session.identifier}`;
+    if (modalQr) modalQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=350x350&margin=12&data=${encodeURIComponent(qrPayload)}`;
+  }
+
+  document.getElementById('credentialModal')?.classList.add('active');
+}
+
+function closeCredentialModal() {
+  document.getElementById('credentialModal')?.classList.remove('active');
+}
+
+function closePreceptorModal() {
+  document.getElementById('preceptorModal')?.classList.remove('active');
+  transitionToDashboard();
+}
 
 // =========================================================
-// EXPOSIÇÃO GLOBAL EXPLÍCITA (Para chamadas inline no HTML)
+// EXPOSIÇÃO GLOBAL EXPLÍCITA
 // =========================================================
 
 window.transitionToDashboard = transitionToDashboard;
@@ -499,9 +516,10 @@ window.closePreceptorModal = closePreceptorModal;
 window.showStatus = showStatus;
 window.hideStatus = hideStatus;
 window.resendAccessCode = resendAccessCode;
+window.showCredentialScreen = showCredentialScreen;
 
 // =========================================================
-// INICIALIZAÇÃO RESILIENTE (Com verificação de estado do DOM)
+// INICIALIZAÇÃO RESILIENTE
 // =========================================================
 
 function initApp() {
@@ -524,14 +542,14 @@ function initApp() {
     }
   });
 
-  // Tenta restaurar sessão prévia; se não houver, vai direto para o login
+  // Verifica se há sessão ativa salva; caso contrário, exibe o login
   const hasSession = checkExistingSession();
   if (!hasSession) {
     navigateTo('authSection');
+    showPublicStep('identityForm');
   }
 }
 
-// Garante execução mesmo se o DOM já tiver terminado de carregar
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
