@@ -940,6 +940,26 @@
 
     syncBadge();
     renderQr($("qrCode"));
+
+window.addEventListener("DOMContentLoaded", () => {
+      const params = new URLSearchParams(window.location.search);
+      const id = params.get("id");
+      const nome = params.get("nome");
+      const cargo = params.get("cargo");
+      const qr = params.get("qr");
+
+      if (nome) elements.name.value = decodeURIComponent(nome);
+      if (cargo) elements.role.value = decodeURIComponent(cargo);
+      if (id) {
+        const idLimpo = decodeURIComponent(id);
+        elements.id.value = idLimpo;
+        elements.qr.value = qr ? decodeURIComponent(qr) : `LAIFT:ID:${idLimpo}`;
+      }
+
+      syncBadge();
+      renderQr($("qrCode"));
+    });
+    
   </script>
 </body>
 </html>
