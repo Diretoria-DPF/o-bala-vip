@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>LAIFT Engine</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;800&family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>⚗️ LAIFT Engine</h1>
+    <span class="badge">Laboratório Acadêmico</span>
+    <div class="manual-btn" onclick="window.abrirManual()" title="Manual de Instruções">📖</div>
+  </header>
+  
+  <div class="main-grid">
+    <div class="panel" style="display:flex;flex-direction:column;gap:0.6rem;">
+      <h3><span class="icon-dot"></span> Bancada de Controle</h3>
+      <div class="controls-scroll">
+        
+        <label>🧪 Vidraria Ativa</label>
+        <select id="vidrariaSelect" onchange="window.trocarVidraria()">
+          <option value="becker_250" selected>Béquer 250 mL</option>
+          <option value="becker_1000">Béquer 1 L</option>
+          <option value="erlen_250">Erlenmeyer Fechado 250 mL</option>
+          <option value="tubo_20">Tubo de Ensaio 20 mL</option>
+        </select>
+        
+        <label>⚗️ Catálogo de Reagentes</label>
+        <div class="reagent-catalog" id="catalogContainer"></div>
+        
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <div style="flex:1"><label>Volume (mL/g)</label><input type="number" id="qtdInput" value="10" min="0.1" step="0.1"></div>
+          <div style="flex:1"><label>Modo</label>
+            <select id="modoAdd">
+              <option value="tudo">Despejo Total</option>
+              <option value="jato">Jato (10mL/s)</option>
+              <option value="gota">Gota a Gota</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="btn-row" style="margin-top:6px;">
+          <button class="btn btn-play" id="btnStartAdd" onclick="window.iniciarAdicao()">▶ Adicionar</button>
+          <button class="btn btn-stop" onclick="window.pararAdicao()">⏸ Parar</button>
+          <button class="btn" style="background:#607d8b; color:#fff;" onclick="window.desfazerAcao()" title="Desfazer última adição">↩ Desfazer</button>
+        </div>
+        
+        <label>⚙️ Controle de Tempo & Agitação</label>
+        <div class="btn-row">
+          <button class="btn btn-time active-btn" id="btnT1" onclick="window.setVelocidade(1)">1x</button>
+          <button class="btn btn-time" id="btnT2" onclick="window.setVelocidade(2)">2x</button>
+          <button class="btn btn-time" id="btnT5" onclick="window.setVelocidade(5)">5x</button>
+          <button class="btn" style="background:#e0e0e0; color:#000;" id="btnAgitador" onclick="window.toggleAgitador()">🌀 Agitador</button>
+        </div>
+
+        <label>🔥 Controle Térmico</label>
+        <div style="display:flex;gap:6px;">
+          <div style="flex:1"><label>Alvo °C</label><input type="number" id="tempAlvo" value="25" step="5"></div>
+          <div style="flex:1"><label>Potência</label><input type="range" id="heatSlider" min="1" max="10" value="5" oninput="window.ajustarPotenciaChama(this.value)"></div>
+        </div>
+        
+        <div class="btn-row">
+          <button class="btn btn-fire" id="btnHeat" onclick="window.setModoTermico('aquecendo')">🔥 Aquecer</button>
+          <button class="btn btn-lock" id="btnThermostat" onclick="window.setModoTermico('termostato')">🔒 Travar</button>
+          <button class="btn btn-ice" id="btnCool" onclick="window.setModoTermico('resfriando')">❄️ Resfriar</button>
+        </div>
+        
+        <button class="btn btn-reset" style="width:100%;margin-top:8px;" onclick="window.resetarLaboratorio()">🗑️ Limpar Tudo</button>
+      </div>
+    </div>
+
+    <div class="visual-stage" id="visualStage">
+
+      <button id="btnCloseFocus" class="btn-close-focus" onclick="window.fecharFoco(event)">✖ Fechar Foco (Esc)</button>
+    
+      <div class="hud-overlay">
+        <div class="hud-card"><span class="hud-label">Temperatura</span><span class="hud-val" id="hudTemp">25.0 °C</span></div>
+        <div class="hud-card"><span class="hud-label">Pressão</span><span class="hud-val" id="hudPress">1.00 atm</span><span id="pressWarn" class="press-warning">⚠</span></div>
+        <div class="hud-card"><span class="hud-label">pH</span><span class="hud-val" id="hudPH">7.00</span></div>
+      </div>
+      
+      <div class="thermo-column">
+        <div class="thermo-stick"><div class="thermo-fill-bar" id="thermoFill"></div></div>
+        <div class="thermo-bulb-circle" id="thermoBulb"></div>
+      </div>
+      
+      <div class="tripod"></div>
+      
+      <div class="glassware-zone" id="glasswareZone" onclick="window.toggleFoco()" title="Clique para dar Zoom (Modo Foco)">
+        <div class="droplet-indicator" id="droplet"></div>
+        
+        <div class="glass-vessel vessel-beaker" id="vessel">
+          <div class="stopper-cap"></div>
+          <div class="content-fill">
+            
+            <div class="liquid-layer" id="liquidLayer">
+              <div class="precipitate-layer" id="precipLayer"></div>
+              <div class="bubble-overlay" id="bubbleOverlay"></div>
+            </div>
+            <div class="freeze-overlay" id="freezeOverlay"></div>
+            <div class="gas-halo" id="gasHalo"></div>
+            
+            <div class="agitador" id="agitadorFisico"></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flame-effect" id="flameFX"><div class="flame-core"></div><div class="flame-base"></div></div>
+      <div class="ice-aura-effect" id="iceFX"></div>
+      <div class="bench"></div>
+      
+      <div class="alert-fullscreen" id="alertOverlay">
+        <h2 id="alertTitle">⚠️ Alerta</h2>
+        <div id="alertMsg"></div>
+        <button class="btn btn-stop" style="margin-top:12px;width:180px;" onclick="window.resetarLaboratorio()">Resetar</button>
+      </div>
+      
+      <div class="signature">DPF :)</div>
+    </div>
+
+    <div class="side-panel-right">
+      
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;"><span class="icon-dot" style="background:var(--neon-green)"></span> Missão Ativa</h3>
+          <button class="btn btn-clear" style="color:var(--neon-green); border-color:var(--neon-green);" onclick="window.abrirLivroMissoes()" title="Ver todas as missões">📚 Livro</button>
+        </div>
+        <div class="mission-box" id="missionBox">
+          <strong id="missionTitle">Missão 1: Neutralização</strong>
+          <p style="font-size:0.7rem; color:#b0bec5; margin-top:4px;" id="missionDesc">Atinge um pH entre 7.0 e 7.5 com um volume superior a 20 mL.</p>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span class="badge" id="missionStatus" style="border-color:#ff9800; color:#ff9800;">Pendente</span>
+            <button class="btn btn-play" id="btnNextMission" style="display:none; padding:4px 8px; font-size:0.6rem;" onclick="window.proximaMissao()">Próxima ⏭</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="panel">
+        <h3><span class="icon-dot"></span> Espécies no Recipiente</h3>
+        <div id="speciesTags" style="display:flex;flex-wrap:wrap;gap:3px;min-height:25px;"></div>
+        <label style="margin-top:6px;">Volume: <span id="volDisplay" style="color:var(--neon-cyan);font-family:var(--font-mono);">0.0 / 250 mL</span></label>
+      </div>
+      
+      <div class="panel">
+        <h3><span class="icon-dot"></span> Curva de pH (Titulação)</h3>
+        <div class="mini-canvas-wrap"><canvas id="phCanvas"></canvas></div>
+        <button class="btn btn-lock" style="width:100%;margin-top:4px;font-size:0.6rem;" onclick="window.limparCurvaPH()">Limpar Curva</button>
+      </div>
+      
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <h3 style="margin:0;"><span class="icon-dot"></span> Registro de Eventos</h3>
+          <button class="btn btn-clear" onclick="window.limparRegistro()">🗑 Limpar</button>
+        </div>
+        <div class="log-stream" id="logStream" style="margin-top:6px;">
+          <span style="color:#546e7a;">[Sistema] Laboratório Uninassau iniciado :).</span>
+        </div>
+      </div>
+      
+    </div>
+  </div> <div class="manual-modal" id="missionsModal">
+    <div class="manual-content">
+      <h3 style="color:var(--neon-green)">📚 Livro de Missões Químicas</h3>
+      <p style="font-size:0.8rem; margin-bottom:1rem;">Complete os objetivos no laboratório para desbloquear a próxima etapa.</p>
+      <div id="missionsList" style="background:#020617; padding:10px; border-radius:8px; border:1px solid #1e3a5f;"></div>
+      <button class="close-manual" style="background:#37474f;" onclick="window.fecharLivroMissoes()">Fechar Livro</button>
+    </div>
+  </div>
+
+  <div class="manual-modal" id="manualModal">
+    <div class="manual-content">
+      <h3>📖 Manual do Laboratório Quântico</h3>
+      <p><strong>Bem-vindo ao LAIFT Engine.</strong> Aqui você pode simular reações químicas com segurança. Siga as orientações abaixo para explorar o máximo do sistema.</p>
+      <h4 style="color:var(--neon-cyan); margin-top:1rem;">🧪 Regras Básicas</h4>
+      <ul>
+        <li><strong>Adição de reagentes:</strong> escolha no catálogo, defina volume e modo (gota, jato ou despejo).</li>
+        <li><strong>Vidraria:</strong> béqueres abertos evaporam e trocam calor; o erlenmeyer fechado acumula gases e pressão.</li>
+        <li><strong>Temperatura:</strong> use os botões térmicos ou o termostato. A potência do fogo acelera o aquecimento.</li>
+      </ul>
+      <h4 style="color:var(--neon-cyan); margin-top:1rem;">🔥 Ebulição e Congelamento</h4>
+      <ul>
+        <li><strong>Pontos de ebulição:</strong> água (100°C), etanol (78.4°C), acetona (56°C), hexano (68.7°C), benzeno (80.1°C), tolueno (110.6°C), metanol (64.7°C), clorofórmio (61.2°C). Ao atingir a temperatura, o líquido começa a evaporar.</li>
+        <li><strong>Congelamento:</strong> abaixo de 0°C a água congela, etanol a -114°C, acetona a -95°C. O líquido se transforma em sólido, reduzindo o volume líquido.</li>
+      </ul>
+      <h4 style="color:var(--neon-cyan); margin-top:1rem;">⚠️ Combinações Perigosas</h4>
+      <ul>
+        <li><strong>Metais alcalinos (Na, K, Li) + Água:</strong> reação explosiva, libera H₂ e calor. Pode estilhaçar a vidraria.</li>
+        <li><strong>Ácidos fortes + Água sanitária (NaClO):</strong> gera gás cloro (Cl₂), tóxico e pressuriza o sistema.</li>
+        <li><strong>Ácido + Carbonatos:</strong> efervescência rápida de CO₂, risco de transbordamento.</li>
+        <li><strong>Peróxido de hidrogênio + metais de transição (Fe³⁺, Pb²⁺):</strong> decomposição acelerada, libera O₂.</li>
+      </ul>
+      <h4 style="color:var(--neon-cyan); margin-top:1rem;">🧪 Precipitação e Cores</h4>
+      <ul>
+        <li><strong>Ag⁺ + Cl⁻ → precipitado branco (AgCl).</strong></li>
+        <li><strong>Pb²⁺ + I⁻ → amarelo intenso (PbI₂).</strong></li>
+        <li><strong>Cu²⁺ + OH⁻ → azul claro (Cu(OH)₂).</strong></li>
+        <li><strong>Fe³⁺ + OH⁻ → marrom avermelhado (Fe(OH)₃).</strong></li>
+        <li>Consulte a tabela completa no registro de eventos ao realizar misturas.</li>
+      </ul>
+      <p style="margin-top:1rem;"><strong>Dica:</strong> Use fenolftaleína para visualizar mudanças de pH (incolor em ácido, rosa em base).</p>
+      <button class="close-manual" onclick="window.fecharManual()">Fechar Manual</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
