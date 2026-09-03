@@ -290,21 +290,14 @@
               </div>
             </div>
 
-            <!-- Módulo Laboratório Virtual -->
-            <div class="module-card card-lab" onclick="launchModule('lab')">
-              <div class="module-icon">🔬</div>
-              <h4>Laboratório Virtual</h4>
-              <p>Espectroscopia de chama, reações de precipitação e equilíbrio de solubilidade.</p>
-              <div class="module-footer">
-                <span class="tag">Termodinâmica</span>
-                <span class="tag">Bancada</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </section>
+            <!-- Módulo Laboratório -->
+<section id="labSection" class="view-panel hidden">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+    <h3 style="color: var(--primary); font-size: 1.15rem;">🔬 Laboratório Virtual</h3>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+  </div>
+  <iframe src="laboratorio/index.html" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
+</section>
 
    <!-- =========================================================
      MÓDULO: SIMULADOR DE FARMACOLOGIA (INTEGRADO VIA SUBPASTA)
