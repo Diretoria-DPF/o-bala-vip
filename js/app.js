@@ -4,7 +4,7 @@
  */
 
 const STORAGE_SESSION_KEY = 'laift_student_session';
-const SESSION_TTL_DAYS = 7;
+const SESSION_TTL_DAYS = 15;
 
 const appState = {
   activeView: 'authSection',
