@@ -4,7 +4,7 @@
  */
 
 const ApiService = (() => {
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKJ_Ck5tk_zvM7Dew6HALLUyUyVhRlk3M6Ld38Ibm72PJpgRWFXXBhlk3jbpM57g3F/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwvoeajXPFtKAyIqFnCtSvlWV7jjz8fQZdZ_0VVPr_RitsAuda79SCSeYHQFKvOTFU/exec';
   const OPENFDA_BASE_URL = 'https://api.fda.gov/drug/label.json';
 
   /**
