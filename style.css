@@ -1765,6 +1765,99 @@ label {
   color: #ffffff;
   cursor: pointer;
 }
+
+/* =========================================================
+   PAINEL DE LEITOS E JORNADA CLÍNICA MULTICASOS
+========================================================= */
+.clinic-hub-view {
+  padding: 24px;
+}
+
+.clinic-hub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.beds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.bed-card {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bed-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.bed-card.emergency {
+  border-left: 6px solid #e53935;
+}
+
+.bed-card.ambulatory {
+  border-left: 6px solid #00897b;
+}
+
+.bed-card.completed {
+  background: #f1f8e9;
+  border-color: #aed581;
+}
+
+.bed-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.bed-tag {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.bed-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.bed-complaint {
+  font-style: italic;
+  font-size: 0.95rem;
+  color: #37474f;
+  margin: 10px 0 16px;
+  min-height: 48px;
+}
+
+.bed-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--gray);
+  border-top: 1px solid #eceff1;
+  padding-top: 10px;
+  margin-bottom: 16px;
+}
+
+.btn-block {
+  width: 100%;
+}
 /* =========================================================
    ANIMAÇÕES E RESPONSIVIDADE
 ========================================================= */
