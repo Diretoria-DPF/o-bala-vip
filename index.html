@@ -25,7 +25,7 @@
         <div id="headerSubtitle" class="subtitle">Autenticação Digital & Simulações Clínicas</div>
       </div>
       
-      <!-- Controles de Sessão Ativa (Exibidos após o login) -->
+      <!-- Controles de Sessão Ativa -->
       <div id="sessionHeaderControls" class="header-controls hidden">
         <div class="user-chip">
           <span id="headerUserName">Estudante</span>
@@ -38,14 +38,14 @@
     </div>
   </header>
 
-  <!-- Notificações Globais de Status (Toast / Banner) -->
+  <!-- Notificações Globais de Status -->
   <div id="status" class="status-banner hidden" role="alert" aria-live="polite"></div>
 
   <!-- CONTAINER PRINCIPAL SPA -->
   <main class="app-viewport">
 
     <!-- =========================================================
-         1. PORTAL DE AUTENTICAÇÃO E CREDENCIAL (PASSWORDLESS / OTP)
+         1. PORTAL DE AUTENTICAÇÃO E TERMINAL FISCAL
     ========================================================= -->
     <section id="authSection" class="view-panel active">
       <div class="auth-card">
@@ -92,7 +92,7 @@
           <button class="btn btn-secondary" type="button" onclick="returnToIdentity()">Voltar</button>
         </div>
 
-        <!-- Etapa 3: Validação OTP (Código de 6 dígitos) -->
+        <!-- Etapa 3: Validação OTP -->
         <div id="otpForm" class="auth-step hidden">
           <p class="info-notice">Enviamos um código temporário de 6 dígitos para o seu e-mail. Insira-o abaixo:</p>
           <input id="otpCode" class="otp-input" type="text" inputmode="numeric" placeholder="000000" maxlength="6">
@@ -113,7 +113,6 @@
         </div>
 
         <!-- Terminal Fiscal / Validador Administrativo -->
-        <!-- Terminal Fiscal / Validador Administrativo -->
         <section id="fiscalArea" class="hidden">
           <div style="text-align: center;">
             <span class="badge-admin">Terminal de Validação Ativo</span>
@@ -122,31 +121,15 @@
           <div class="section-box" style="text-align: left;">
             <h3>Evento Ativo</h3>
             <div class="fiscal-event-row">
-              <input
-                id="eventName"
-                type="text"
-                placeholder="Carregando evento..."
-                maxlength="80"
-              >
-              <button
-                id="saveEventButton"
-                type="button"
-                onclick="saveActiveEvent()"
-              >
-                Salvar
-              </button>
+              <input id="eventName" type="text" placeholder="Carregando evento..." maxlength="80">
+              <button id="saveEventButton" type="button" onclick="saveActiveEvent()">Salvar</button>
             </div>
           </div>
 
           <div class="section-box">
             <h3>Check-in por QR Code</h3>
             <div id="reader" class="hidden"></div>
-            <button
-              id="scannerButton"
-              class="scanner-button"
-              type="button"
-              onclick="startFiscalScanner()"
-            >
+            <button id="scannerButton" class="scanner-button" type="button" onclick="startFiscalScanner()">
               📷 Escanear QR Code
             </button>
             <p class="small-note">
@@ -158,19 +141,8 @@
 
           <div class="section-box">
             <h3>Check-in Manual</h3>
-            <input
-              id="manualIdentifier"
-              type="text"
-              placeholder="Digite matrícula ou CPF"
-              autocomplete="off"
-              maxlength="32"
-            >
-            <button
-              id="manualCheckinButton"
-              class="secondary-button"
-              type="button"
-              onclick="submitManualCheckin()"
-            >
+            <input id="manualIdentifier" type="text" placeholder="Digite matrícula ou CPF" autocomplete="off" maxlength="32">
+            <button id="manualCheckinButton" class="secondary-button" type="button" onclick="submitManualCheckin()">
               Marcar Presença Manualmente
             </button>
           </div>
@@ -179,14 +151,7 @@
 
           <div class="section-box">
             <h3>Lista de Presença</h3>
-            <input
-              id="memberSearch"
-              class="presence-search"
-              type="text"
-              placeholder="Pesquisar por nome, matrícula ou CPF"
-              autocomplete="off"
-              oninput="scheduleMemberSearch()"
-            >
+            <input id="memberSearch" class="presence-search" type="text" placeholder="Pesquisar por nome, matrícula ou CPF" autocomplete="off" oninput="scheduleMemberSearch()">
             <div id="memberList" class="member-list">
               <div class="member-list-empty">
                 Digite ao menos dois caracteres para pesquisar participantes.
@@ -197,22 +162,18 @@
             </p>
           </div>
 
-          <button
-            class="danger-button"
-            type="button"
-            onclick="logoutFiscal()"
-          >
-            Encerrar Terminal
-          </button>
+          <button class="danger-button" type="button" onclick="logoutFiscal()">Encerrar Terminal</button>
         </section>
+      </div>
+    </section>
 
     <!-- =========================================================
-         2. DASHBOARD CENTRAL DO ALUNO & HUB DE SISTEMAS
+         2. DASHBOARD CENTRAL DO ALUNO & HUB DE MÓDULOS
     ========================================================= -->
     <section id="dashboardSection" class="view-panel hidden">
       <div class="dashboard-grid">
         
-        <!-- Cartão de Perfil e Conquistas -->
+        <!-- Cartão de Perfil -->
         <aside class="profile-card">
           <div class="avatar-circle" id="userInitials">DP</div>
           <h3 id="dashUserName">Carregando...</h3>
@@ -264,7 +225,7 @@
               <p>Mecanismos de ação, farmacocinética clínica, receptores e farmacodinâmica comparada.</p>
               <div class="module-footer">
                 <span class="tag">Simulador</span>
-                <span class="tag">Estudo & Prova</span>
+                <span class="tag">240 Questões</span>
               </div>
             </div>
 
@@ -275,11 +236,11 @@
               <p>Intoxicações exógenas, antídotos específicos e alertas em tempo real via OpenFDA.</p>
               <div class="module-footer">
                 <span class="tag">OpenFDA Live</span>
-                <span class="tag">GHS & Antídotos</span>
+                <span class="tag">Antídotos</span>
               </div>
             </div>
 
-            <!-- Módulo Clínica Virtual (OSCE) -->
+            <!-- Módulo Clínica Virtual -->
             <div class="module-card card-clinic" onclick="launchModule('clinica')">
               <div class="module-icon">🩺</div>
               <h4>Clínica Médica Virtual (OSCE)</h4>
@@ -291,37 +252,39 @@
             </div>
 
             <!-- Módulo Laboratório -->
-<section id="labSection" class="view-panel hidden">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-    <h3 style="color: var(--primary); font-size: 1.15rem;">🔬 Laboratório Virtual</h3>
-    <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
-  </div>
-  <iframe src="laboratorio/index.html" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
-</section>
+            <div class="module-card card-lab" onclick="launchModule('lab')">
+              <div class="module-icon">🔬</div>
+              <h4>Laboratório Virtual</h4>
+              <p>Ensaios laboratoriais interativos, espectroscopia de chama e identificação de compostos.</p>
+              <div class="module-footer">
+                <span class="tag">Bancada</span>
+                <span class="tag">Simulação</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-   <!-- =========================================================
-     MÓDULO: SIMULADOR DE FARMACOLOGIA (INTEGRADO VIA SUBPASTA)
-========================================================= -->
-<section id="quizSection" class="view-panel hidden">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
-    <h3 style="color: var(--primary); font-size: 1.15rem;">💊 Simulador de Farmacologia</h3>
-    <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
-  </div>
-  
-  <!-- Iframe que carrega os arquivos da pasta /quiz -->
-  <iframe 
-    id="quizFrame" 
-    src="quiz/index.html" 
-    style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); background: #ffffff;"
-  ></iframe>
-</section>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         3. MÓDULO: SIMULADOR DE FARMACOLOGIA (IFRAME)
+    ========================================================= -->
+    <section id="quizSection" class="view-panel hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
+        <h3 style="color: var(--primary); font-size: 1.15rem;">💊 Simulador de Farmacologia</h3>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+      </div>
+      <iframe id="quizFrame" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
+    </section>
+
     <!-- =========================================================
          4. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE COM GEMINI)
     ========================================================= -->
     <section id="clinicSection" class="view-panel hidden">
       <div class="clinic-workspace">
         
-        <!-- Barra de Estado do Paciente (Topo da Consulta) -->
+        <!-- Barra de Estado do Paciente -->
         <div class="patient-monitor">
           <div class="patient-id-badge">
             <div class="patient-avatar">👤</div>
@@ -331,7 +294,6 @@
             </div>
           </div>
 
-          <!-- Medidores Vitais e Psicológicos -->
           <div class="meters-cluster">
             <div class="meter-item" title="Estabilidade Orgânica do Paciente">
               <div class="meter-header">
@@ -343,7 +305,7 @@
               </div>
             </div>
 
-            <div class="meter-item" title="Nível de Paciência do Paciente com a Consulta">
+            <div class="meter-item" title="Nível de Paciência do Paciente">
               <div class="meter-header">
                 <span>💬 Paciência / Satisfação</span>
                 <strong id="patienceValue">100%</strong>
@@ -360,7 +322,7 @@
           </div>
         </div>
 
-        <!-- Abas da Consulta Clínica -->
+        <!-- Abas da Consulta -->
         <nav class="clinic-tabs" role="tablist">
           <button class="clinic-tab-btn active" data-tab="prontuarioTab">📋 Prontuário & Sinais</button>
           <button class="clinic-tab-btn" data-tab="dialogoTab">🗣️ Anamnese (Chat)</button>
@@ -369,16 +331,14 @@
         </nav>
 
         <div class="clinic-tab-viewport">
-          
           <!-- Aba 1: Prontuário -->
           <div id="prontuarioTab" class="clinic-tab-pane active">
             <div class="prontuario-grid">
               <div class="sheet-box">
                 <h4>Queixa Principal & Admissão</h4>
-                <p id="clinicChiefComplaint" class="complaint-quote">"Carregando informações da queixa..."</p>
-                
+                <p id="clinicChiefComplaint" class="complaint-quote">"Carregando informações..."</p>
                 <h4>Histórico Resumido</h4>
-                <div id="clinicPatientHistory" class="data-block">Aguardando início do caso...</div>
+                <div id="clinicPatientHistory" class="data-block">Aguardando início...</div>
               </div>
 
               <div class="sheet-box">
@@ -395,7 +355,7 @@
             </div>
           </div>
 
-          <!-- Aba 2: Anamnese (Chat com o Paciente via Gemini) -->
+          <!-- Aba 2: Anamnese -->
           <div id="dialogoTab" class="clinic-tab-pane">
             <div class="chat-container">
               <div id="chatHistory" class="chat-viewport">
@@ -405,26 +365,24 @@
                 </div>
               </div>
 
-              <!-- Sugestões de Perguntas para Evitar Bloqueios -->
               <div class="suggested-questions-row">
                 <span class="suggestion-label">💡 Sugestões:</span>
                 <div id="suggestionsList" class="suggestions-chips"></div>
               </div>
 
-              <!-- Campo de Envio de Perguntas -->
               <div class="chat-input-row">
-                <input id="patientQuestionInput" type="text" placeholder="Digite sua pergunta ao paciente em linguagem profissional..." maxlength="200">
+                <input id="patientQuestionInput" type="text" placeholder="Digite sua pergunta ao paciente..." maxlength="200">
                 <button id="sendQuestionBtn" class="btn btn-primary" type="button" onclick="submitPatientQuestion()">Perguntar</button>
               </div>
             </div>
           </div>
 
-          <!-- Aba 3: Laboratório e Exames -->
+          <!-- Aba 3: Exames -->
           <div id="examesTab" class="clinic-tab-pane">
             <div class="exams-workspace">
               <div class="exams-catalog">
                 <h4>Painel de Exames Disponíveis</h4>
-                <p class="exam-disclaimer">Atenção: A solicitação de exames consome minutos virtuais e afeta a paciência se desnecessária.</p>
+                <p class="exam-disclaimer">Atenção: A solicitação de exames consome minutos virtuais.</p>
                 <div id="availableExamsList" class="exams-list"></div>
               </div>
 
@@ -437,67 +395,55 @@
             </div>
           </div>
 
-          <!-- Aba 4: Diagnóstico e Conduta -->
+          <!-- Aba 4: Fechamento -->
           <div id="fechamentoTab" class="clinic-tab-pane">
             <div class="resolution-form">
               <div class="form-group">
                 <label for="studentDiagnosisInput">Hipótese Diagnóstica Principal:</label>
-                <textarea id="studentDiagnosisInput" rows="3" placeholder="Descreva a afecção principal, síndrome clínica ou intoxicação diagnosticada..."></textarea>
+                <textarea id="studentDiagnosisInput" rows="3" placeholder="Descreva o diagnóstico..."></textarea>
               </div>
 
               <div class="form-group">
-                <label for="studentConductInput">Conduta Farmacêutica e/ou Clínica Imediata:</label>
-                <textarea id="studentConductInput" rows="4" placeholder="Descreva as medidas farmacológicas (antídotos, fármacos, suspensão de medicamentos) e suporte geral..."></textarea>
+                <label for="studentConductInput">Conduta Farmacêutica / Clínica:</label>
+                <textarea id="studentConductInput" rows="4" placeholder="Descreva as medidas terapêuticas e suporte..."></textarea>
               </div>
 
               <div class="resolution-actions">
-                <button id="submitCaseResolutionBtn" class="btn btn-success btn-lg" type="button" onclick="finalizeClinicalCase()">⚖️ Submeter ao Preceptor Avaliador</button>
+                <button id="submitCaseResolutionBtn" class="btn btn-success btn-lg" type="button" onclick="finalizeClinicalCase()">⚖️ Submeter ao Preceptor</button>
               </div>
             </div>
           </div>
-
         </div>
 
       </div>
     </section>
 
     <!-- =========================================================
-         5. MÓDULO: LABORATÓRIO VIRTUAL DE QUÍMICA & TOXICOLOGIA
+         5. MÓDULO: LABORATÓRIO VIRTUAL (IFRAME)
     ========================================================= -->
     <section id="labSection" class="view-panel hidden">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-    <h3>🔬 Laboratório Engine</h3>
-    <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
-  </div>
-  <iframe src="laboratorio/index.html" style="width: 100%; height: 82vh; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm);"></iframe>
-</section>
-        
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="color: var(--primary); font-size: 1.15rem;">🔬 Laboratório Virtual</h3>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+      </div>
+      <iframe id="labFrame" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
+    </section>
+
+  </main>
+
   <!-- =========================================================
        MODAIS DO SISTEMA
   ========================================================= -->
-
-  <!-- Modal 1: Instruções e Manual -->
   <div id="instructionsModal" class="modal" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <span class="modal-close" id="closeModal">&times;</span>
-      <h2>📖 Guia de Utilização do Ecossistema</h2>
+      <h2>📖 Guia da Plataforma LAIFT</h2>
       <div class="modal-body">
-        <h4>Simuladores (Farmacologia e Toxicologia):</h4>
-        <ul>
-          <li><strong>Modo Estudo:</strong> Visualize o raciocínio clínico e fontes oficiais imediatamente a cada resposta.</li>
-          <li><strong>Modo Prova:</strong> Simulação formal cronometrada (90 segundos por questão) sem gabarito prévio.</li>
-        </ul>
-        <h4>Clínica Médica Virtual (OSCE):</h4>
-        <ul>
-          <li><strong>Estabilidade Clínica:</strong> Monitore a saúde do paciente. Em emergências tóxicas, a perda de tempo ou pedidos incorretos podem levar ao óbito.</li>
-          <li><strong>Paciência:</strong> Em consultas ambulatoriais, a demora excessiva ou perguntas irrelevantes farão o paciente abandonar a consulta.</li>
-          <li><strong>Avaliação:</strong> Ao submeter sua conduta, um preceptor alimentado por IA analisará a precisão técnica das suas respostas.</li>
-        </ul>
+        <p>Utilize os módulos para treinar farmacologia teórica, resolver casos clínicos com inteligência artificial e acessar o laboratório de bancada.</p>
       </div>
     </div>
   </div>
 
-  <!-- Modal 2: Visualização Rápida de Credencial / QR Code -->
   <div id="credentialModal" class="modal" role="dialog" aria-modal="true">
     <div class="modal-dialog text-center">
       <span class="modal-close" onclick="closeCredentialModal()">&times;</span>
@@ -510,7 +456,6 @@
     </div>
   </div>
 
-  <!-- Modal 3: Devolutiva Pedagógica do Preceptor (Clínica Virtual) -->
   <div id="preceptorModal" class="modal" role="dialog" aria-modal="true">
     <div class="modal-dialog modal-lg">
       <h2 id="preceptorModalTitle">Resultado da Avaliação Clínica</h2>
@@ -524,31 +469,26 @@
           <p id="caseOutcomeSummary">Analisando dados...</p>
         </div>
       </div>
-      
       <div class="evaluation-body">
         <h4>Parecer Técnico do Preceptor:</h4>
         <div id="preceptorFeedbackText" class="feedback-quote">...</div>
       </div>
-
       <div class="modal-footer">
         <button class="btn btn-primary" type="button" onclick="closePreceptorModal()">Concluir e Voltar ao Hub</button>
       </div>
     </div>
   </div>
 
-  <!-- Rodapé Institucional -->
   <footer class="app-footer">
     <span>LAIFT — Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia</span>
     <span class="signature">DPF :)</span>
   </footer>
 
-  <!-- =========================================================
-       SCRIPTS DA APLICAÇÃO
-  ========================================================= -->
+  <!-- Scripts -->
   <script src="data/patients.js"></script>
   <script src="js/api-service.js"></script>
-  <script src="js/clinic-engine.js"></script>
   <script src="js/fiscal-engine.js"></script>
+  <script src="js/clinic-engine.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
