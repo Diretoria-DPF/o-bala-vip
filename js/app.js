@@ -12,23 +12,6 @@ const appState = {
 };
 
 // =========================================================
-// EXPOSIÇÃO GLOBAL IMEDIATA (Evita erros de onclick no HTML)
-// =========================================================
-window.transitionToDashboard = transitionToDashboard;
-window.launchModule = launchModule;
-window.navigateTo = navigateTo;
-window.logout = logout;
-window.requestAccessCode = requestAccessCode;
-window.sendRegistrationCode = sendRegistrationCode;
-window.validateAccessCode = validateAccessCode;
-window.returnToIdentity = returnToIdentity;
-window.restartPublicFlow = restartPublicFlow;
-window.resetVisualMetrics = resetVisualMetrics;
-window.showUserCredentialModal = showUserCredentialModal;
-window.closeCredentialModal = closeCredentialModal;
-window.closePreceptorModal = closePreceptorModal;
-
-// =========================================================
 // ROTEAMENTO E TRANSIÇÃO DE TELAS SPA
 // =========================================================
 
@@ -52,6 +35,8 @@ function navigateTo(viewId) {
   } else {
     if (controls) controls.classList.remove('hidden');
   }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function launchModule(moduleType) {
@@ -59,15 +44,28 @@ function launchModule(moduleType) {
     case 'farmaco':
       document.body.className = 'theme-default';
       const quizFrame = document.getElementById('quizFrame');
-      if (quizFrame && quizFrame.contentWindow) {
-        quizFrame.contentWindow.location.reload();
+      if (quizFrame) {
+        if (!quizFrame.src || quizFrame.src === 'about:blank' || quizFrame.src.endsWith('/')) {
+          quizFrame.src = 'quiz/index.html';
+        } else if (quizFrame.contentWindow) {
+          quizFrame.contentWindow.location.reload();
+        }
+      }
+      navigateTo('quizSection');
+      break;
+
+    case 'toxico':
+      document.body.className = 'theme-toxico';
+      const toxFrame = document.getElementById('quizFrame');
+      if (toxFrame) {
+        toxFrame.src = 'quiz/index.html';
       }
       navigateTo('quizSection');
       break;
 
     case 'clinica':
       document.body.className = 'theme-clinic';
-      if (typeof ClinicEngine !== 'undefined') {
+      if (typeof ClinicEngine !== 'undefined' && typeof ClinicEngine.startCase === 'function') {
         ClinicEngine.startCase('caso_tox_01');
       }
       navigateTo('clinicSection');
@@ -76,8 +74,12 @@ function launchModule(moduleType) {
     case 'lab':
       document.body.className = 'theme-default';
       const labFrame = document.querySelector('#labSection iframe');
-      if (labFrame && labFrame.contentWindow) {
-        labFrame.contentWindow.location.reload();
+      if (labFrame) {
+        if (!labFrame.src || labFrame.src === 'about:blank' || labFrame.src.endsWith('/')) {
+          labFrame.src = 'laboratorio/index.html';
+        } else if (labFrame.contentWindow) {
+          labFrame.contentWindow.location.reload();
+        }
       }
       navigateTo('labSection');
       break;
@@ -170,7 +172,7 @@ async function refreshDashboard() {
 
   try {
     const data = await ApiService.obterDashboardAluno(appState.user.identifier);
-    if (data.sucesso && data.aluno) {
+    if (data && data.sucesso && data.aluno) {
       const elAcc = document.getElementById('statAccuracy');
       const elAns = document.getElementById('statAnswered');
       const elCases = document.getElementById('statCasesSolved');
@@ -247,14 +249,15 @@ async function requestAccessCode() {
     const res = await ApiService.solicitarCodigoAcesso(identifier, email, '', '', false);
     hideStatus();
 
-    if (res.novoCadastro) {
+    if (res && res.novoCadastro) {
       showPublicStep('registrationForm');
-    } else if (res.sucesso) {
+    } else if (res && res.sucesso) {
       showPublicStep('otpForm');
     } else {
-      showStatus(res.mensagem || 'Não foi possível solicitar o código.', 'error');
+      showStatus((res && res.mensagem) || 'Não foi possível solicitar o código.', 'error');
     }
   } catch (err) {
+    console.error(err);
     showStatus('Erro ao conectar com a portaria digital.', 'error');
   }
 }
@@ -282,12 +285,13 @@ async function sendRegistrationCode() {
     const res = await ApiService.solicitarCodigoAcesso(identifier, email, type, name, consent);
     hideStatus();
 
-    if (res.sucesso) {
+    if (res && res.sucesso) {
       showPublicStep('otpForm');
     } else {
-      showStatus(res.mensagem || 'Falha ao registrar dados.', 'error');
+      showStatus((res && res.mensagem) || 'Falha ao registrar dados.', 'error');
     }
   } catch (err) {
+    console.error(err);
     showStatus('Erro de conexão com o servidor.', 'error');
   }
 }
@@ -310,7 +314,7 @@ async function validateAccessCode() {
     const res = await ApiService.validarCodigoAcesso(identifier, email, code);
     hideStatus();
 
-    if (res.sucesso) {
+    if (res && res.sucesso) {
       persistSession({
         identifier,
         email,
@@ -321,9 +325,10 @@ async function validateAccessCode() {
 
       transitionToDashboard();
     } else {
-      showStatus(res.mensagem || 'Código incorreto ou expirado.', 'error');
+      showStatus((res && res.mensagem) || 'Código incorreto ou expirado.', 'error');
     }
   } catch (err) {
+    console.error(err);
     showStatus('Falha ao autenticar o código.', 'error');
   }
 }
@@ -372,16 +377,34 @@ function closePreceptorModal() {
 }
 
 // =========================================================
+// EXPOSIÇÃO GLOBAL EXPLÍCITA
+// =========================================================
+
+window.transitionToDashboard = transitionToDashboard;
+window.launchModule = launchModule;
+window.navigateTo = navigateTo;
+window.logout = logout;
+window.requestAccessCode = requestAccessCode;
+window.sendRegistrationCode = sendRegistrationCode;
+window.validateAccessCode = validateAccessCode;
+window.returnToIdentity = returnToIdentity;
+window.restartPublicFlow = restartPublicFlow;
+window.resetVisualMetrics = resetVisualMetrics;
+window.showUserCredentialModal = showUserCredentialModal;
+window.closeCredentialModal = closeCredentialModal;
+window.closePreceptorModal = closePreceptorModal;
+window.showStatus = showStatus;
+window.hideStatus = hideStatus;
+
+// =========================================================
 // INICIALIZAÇÃO
 // =========================================================
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Inicializa apenas o motor da Clínica Médica
-  if (typeof ClinicEngine !== 'undefined') {
+  if (typeof ClinicEngine !== 'undefined' && typeof ClinicEngine.init === 'function') {
     ClinicEngine.init();
   }
 
-  // Listeners dos botões fixos de cabeçalho
   document.getElementById('navHubBtn')?.addEventListener('click', transitionToDashboard);
   document.getElementById('globalLogoutBtn')?.addEventListener('click', logout);
   document.getElementById('infoBtn')?.addEventListener('click', () => {
@@ -397,7 +420,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Checa se já existe sessão salva
   const hasSession = checkExistingSession();
   if (!hasSession) {
     navigateTo('authSection');
