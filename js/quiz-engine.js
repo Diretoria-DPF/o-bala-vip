@@ -348,6 +348,30 @@ const QuizEngine = (() => {
       } else {
         topicScores[topic] = topicScores[topic] || 0;
       }
+
+function showAchievementToast(title, desc, icon = '🏆') {
+  const existing = document.querySelector('.achievement-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.className = 'achievement-toast';
+  toast.innerHTML = `
+    <div class="achievement-icon">${icon}</div>
+    <div class="achievement-text">
+      <h4>${title}</h4>
+      <p>${desc}</p>
+    </div>
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 5000);
+}
+
+if (score / filteredQuestions.length >= 0.8) {
+  showAchievementToast('⭐ Desempenho Notável!', `Você acertou ${score} de ${filteredQuestions.length} questões com maestria.`, '🌟');
+} else {
+  showAchievementToast('🎯 Simulado Concluído!', 'Sua participação e tempo de estudo foram registrados.', '📚');
+}
+      
     });
 
     const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
