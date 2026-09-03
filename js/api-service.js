@@ -4,20 +4,22 @@
  */
 
 const ApiService = (() => {
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwnyZY128_JbZU-tA8NZuGfT3-oC3ObJ-LvnWhNywZbhewT205v7y5XFzthgpzOmCX1/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKJ_Ck5tk_zvM7Dew6HALLUyUyVhRlk3M6Ld38Ibm72PJpgRWFXXBhlk3jbpM57g3F/exec';
   const OPENFDA_BASE_URL = 'https://api.fda.gov/drug/label.json';
 
   /**
    * Executa requisições POST seguras para o Google Apps Script com controle de timeout
    */
-  async function callAppsScript(payload, timeoutMs = 30000) {
+ async function callAppsScript(payload, timeoutMs = 30000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
-        signal: controller.signal,
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8' // Impede bloqueio de CORS preflight
+        },
         body: JSON.stringify(payload)
       });
 
@@ -26,8 +28,8 @@ const ApiService = (() => {
       try {
         return JSON.parse(raw);
       } catch (jsonErr) {
-        console.error('[ApiService] Resposta não-JSON retornada pelo Apps Script:', raw);
-        throw new Error('Resposta em formato inválido retornada pelo servidor.');
+        console.error('[ApiService] Resposta não-JSON recebida:', raw);
+        throw new Error('O servidor retornou uma resposta inválida.');
       }
     } catch (error) {
       if (error.name === 'AbortError') {
