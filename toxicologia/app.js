@@ -1,3 +1,13 @@
+/**
+ * MOTOR DO SIMULADOR DE TOXICOLOGIA CLÍNICA & FORENSE (LAIFT)
+ * - Armazenamento isolado sob chave dedicada: 'toxicoQuizProgress'
+ * - Consulta live ao OpenFDA para fármacos e antídotos com timeout seguro de 3s
+ * - Suporte a 10 tópicos de toxicologia e 240 questões
+ */
+
+const STORAGE_PROGRESS_KEY = 'toxicoQuizProgress';
+const OPENFDA_SEARCH_URL = 'https://api.fda.gov/drug/label.json';
+
 let selectedTopics = new Set();
 let currentMode = "study"; 
 let filteredQuestions = [];
@@ -5,16 +15,41 @@ let currentQuestionIndex = 0;
 let userAnswers = [];
 let score = 0;
 let timeLeft = 0; 
-let timerInterval;
+let timerInterval = null;
 let quizActive = false;
 let quizCompleted = false;
 
+// Mapeamento de termos para consulta oficial OpenFDA
+const DRUG_LOOKUP_MAP = {
+    'paracetamol': 'acetaminophen',
+    'acetaminofeno': 'acetaminophen',
+    'naloxona': 'naloxone',
+    'flumazenil': 'flumazenil',
+    'atropina': 'atropine',
+    'fomepizol': 'fomepizole',
+    'digoxina': 'digoxin',
+    'deferoxamina': 'deferoxamine',
+    'dantroleno': 'dantrolene',
+    'cocaína': 'cocaine',
+    'morfina': 'morphine',
+    'fentanil': 'fentanyl',
+    'metanol': 'methanol',
+    'amitriptilina': 'amitriptyline',
+    'teofilina': 'theophylline',
+    'lítio': 'lithium',
+    'aspirina': 'aspirin',
+    'salicilatos': 'aspirin',
+    'fenitoína': 'phenytoin',
+    'metformina': 'metformin',
+    'isoniazida': 'isoniazid'
+};
+
+// Elementos do DOM
 const topicsGrid = document.getElementById('topicsGrid');
 const startQuizBtn = document.getElementById('startQuiz');
 const selectAllBtn = document.getElementById('selectAll');
 const deselectAllBtn = document.getElementById('deselectAll');
 const continueBtn = document.getElementById('continueBtn');
-// Puxando o novo botão do HTML
 const resetProgressBtn = document.getElementById('resetProgressBtn');
 const modeButtons = document.querySelectorAll('.mode-btn');
 const startScreen = document.getElementById('startScreen');
@@ -29,6 +64,7 @@ const questionText = document.getElementById('questionText');
 const optionsContainer = document.getElementById('optionsContainer');
 const explanation = document.getElementById('explanation');
 const explanationText = document.getElementById('explanationText');
+const apiDataSourceTag = document.getElementById('apiDataSourceTag');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const finishBtn = document.getElementById('finishBtn');
@@ -51,7 +87,47 @@ function shuffleArray(array) {
     }
 }
 
+// Consulta de dados oficiais de bula OpenFDA com tolerância a falha
+async function fetchOpenFdaWarning(queryTerm) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+
+    try {
+        const url = `${OPENFDA_SEARCH_URL}?search=openfda.generic_name:"${encodeURIComponent(queryTerm)}"&limit=1`;
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        if (!data.results || !data.results.length) return null;
+
+        const record = data.results[0];
+        const boxed = record.boxed_warning?.[0];
+        const warnings = record.warnings?.[0];
+        const overdosage = record.overdosage?.[0];
+
+        return boxed || overdosage || warnings || null;
+    } catch (e) {
+        return null;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function extractDrugKey(question) {
+    if (question.apiDrugQuery) return question.apiDrugQuery;
+    const combined = `${question.question} ${question.options.join(' ')}`.toLowerCase();
+    for (const [key, val] of Object.entries(DRUG_LOOKUP_MAP)) {
+        if (combined.includes(key)) return val;
+    }
+    return null;
+}
+
 function initializeApp() {
+    if (typeof allQuestions === 'undefined' || !Array.isArray(allQuestions)) {
+        console.error('Banco allQuestions de toxicologia não encontrado.');
+        return;
+    }
+
     const topics = [...new Set(allQuestions.map(q => q.topic))];
     totalTopicsElement.textContent = topics.length;
     totalQsElement.textContent = allQuestions.length;
@@ -68,16 +144,15 @@ function initializeApp() {
         topicsGrid.appendChild(button);
     });
     
-    const savedProgress = localStorage.getItem('pharmaQuizProgress');
+    const savedProgress = localStorage.getItem(STORAGE_PROGRESS_KEY);
     if (savedProgress) {
         try {
             const progress = JSON.parse(savedProgress);
             if (progress.userAnswers && progress.userAnswers.length > 0) {
                 continueBtn.style.display = 'block';
-                updateStats();
             }
         } catch (e) {
-            console.error('Erro ao carregar progresso:', e);
+            console.error('Erro ao ler progresso:', e);
         }
     }
     updateStats();
@@ -153,14 +228,9 @@ function setMode(mode) {
 }
 
 function updateStats() {
-    let availableQuestions = 0;
-    if (selectedTopics.size > 0) {
-        availableQuestions = allQuestions.filter(q => selectedTopics.has(q.topic)).length;
-    }
-    
     let answered = 0;
     let correct = 0;
-    const savedProgress = localStorage.getItem('pharmaQuizProgress');
+    const savedProgress = localStorage.getItem(STORAGE_PROGRESS_KEY);
     if (savedProgress) {
         try {
             const progress = JSON.parse(savedProgress);
@@ -181,7 +251,6 @@ function updateStats() {
     const progressPercentage = allQuestions.length > 0 ? Math.round((answered / allQuestions.length) * 100) : 0;
     progressStatElement.textContent = `${progressPercentage}%`;
 
-    // Lógica para mostrar ou esconder o botão de reiniciar progresso
     if (answered > 0) {
         resetProgressBtn.style.display = 'block';
     } else {
@@ -189,22 +258,13 @@ function updateStats() {
     }
 }
 
-// ------------------------------------------------------------------
-// NOVA FUNÇÃO: Limpa absolutamente todo o cache e respostas salvas
-// ------------------------------------------------------------------
 function resetProgress() {
-    if (confirm("Tem certeza que deseja apagar todo o seu progresso? As respostas salvas serão zeradas e você poderá praticar novamente do zero.")) {
-        // Apaga do cache do navegador
-        localStorage.removeItem('pharmaQuizProgress');
-        
-        // Zera as variáveis globais
+    if (confirm("Deseja apagar o progresso salvo de Toxicologia? Os registros locais serão zerados.")) {
+        localStorage.removeItem(STORAGE_PROGRESS_KEY);
         userAnswers = [];
-        
-        // Esconde os botões da barra lateral
         continueBtn.style.display = 'none';
         resetProgressBtn.style.display = 'none';
         
-        // Se o usuário estiver no meio da tela de questões, remove de lá
         if (quizActive || quizContainer.style.display === 'flex') {
             quizActive = false;
             clearInterval(timerInterval);
@@ -212,26 +272,29 @@ function resetProgress() {
             resultsContainer.style.display = 'none';
             startScreen.style.display = 'flex';
         }
-        
-        // Atualiza a barra de estatísticas
         updateStats();
     }
 }
 
 function startQuiz() {
-    if (selectedTopics.size === 0) { alert('Por favor, selecione pelo menos um tópico para começar!'); return; }
+    if (selectedTopics.size === 0) { 
+        alert('Selecione ao menos um tópico para iniciar o simulado de toxicologia!'); 
+        return; 
+    }
     
     filteredQuestions = [...allQuestions.filter(q => selectedTopics.has(q.topic))];
+    if (filteredQuestions.length === 0) { 
+        alert('Nenhuma questão localizada para os tópicos selecionados.'); 
+        return; 
+    }
     
-    if (filteredQuestions.length === 0) { alert('Nenhuma questão encontrada para os tópicos selecionados!'); return; }
-    
-    if(currentMode === 'exam') {
+    if (currentMode === 'exam') {
         shuffleArray(filteredQuestions);
     }
 
     userAnswers = new Array(filteredQuestions.length).fill(null);
     
-    const savedProgress = localStorage.getItem('pharmaQuizProgress');
+    const savedProgress = localStorage.getItem(STORAGE_PROGRESS_KEY);
     if (savedProgress && currentMode === 'study') {
         try {
             const progress = JSON.parse(savedProgress);
@@ -267,14 +330,16 @@ function continueQuiz() {
     filteredQuestions = [...allQuestions];
     userAnswers = new Array(filteredQuestions.length).fill(null);
     
-    const savedProgress = localStorage.getItem('pharmaQuizProgress');
+    const savedProgress = localStorage.getItem(STORAGE_PROGRESS_KEY);
     if (savedProgress) {
         try {
             const progress = JSON.parse(savedProgress);
             userAnswers = [...progress.userAnswers];
             currentQuestionIndex = userAnswers.findIndex(answer => answer === null);
             if (currentQuestionIndex === -1) currentQuestionIndex = 0;
-        } catch (e) { currentQuestionIndex = 0; }
+        } catch (e) { 
+            currentQuestionIndex = 0; 
+        }
     }
     
     startScreen.style.display = 'none';
@@ -285,14 +350,14 @@ function continueQuiz() {
     setMode('study');
     
     clearInterval(timerInterval);
-    timerElement.textContent = 'Continuando...';
+    timerElement.textContent = 'Modo Estudo';
     timerElement.style.animation = 'none';
     
     quizActive = true;
     loadQuestion();
 }
 
-function loadQuestion() {
+async function loadQuestion() {
     if (!quizActive || currentQuestionIndex >= filteredQuestions.length) return;
     
     const question = filteredQuestions[currentQuestionIndex];
@@ -316,11 +381,12 @@ function loadQuestion() {
         optionLetter.className = 'option-letter';
         optionLetter.textContent = String.fromCharCode(65 + index);
         
-        const optionText = document.createElement('div');
-        optionText.textContent = option;
+        const optionTextEl = document.createElement('div');
+        optionTextEl.className = 'option-text';
+        optionTextEl.textContent = option;
         
         optionElement.appendChild(optionLetter);
-        optionElement.appendChild(optionText);
+        optionElement.appendChild(optionTextEl);
         
         optionElement.addEventListener('click', () => selectOption(index));
         optionElement.addEventListener('keydown', (e) => {
@@ -344,19 +410,19 @@ function loadQuestion() {
     
     explanation.classList.remove('show');
     if (userAnswers[currentQuestionIndex] !== null && currentMode === 'study') {
-        showExplanation();
+        await showExplanation();
     }
 }
 
-function selectOption(optionIndex) {
+async function selectOption(optionIndex) {
     userAnswers[currentQuestionIndex] = optionIndex;
     saveProgress();
     updateStats();
-    loadQuestion();
-    if (currentMode === 'study') showExplanation();
+    await loadQuestion();
+    if (currentMode === 'study') await showExplanation();
 }
 
-function showExplanation() {
+async function showExplanation() {
     const question = filteredQuestions[currentQuestionIndex];
     const userAnswer = userAnswers[currentQuestionIndex];
     const options = document.querySelectorAll('.option');
@@ -367,7 +433,29 @@ function showExplanation() {
         else if (index === userAnswer && userAnswer !== question.correct) option.classList.add('incorrect');
     });
     
-    explanationText.textContent = question.explanation;
+    let baseText = question.explanation;
+    const drugKey = extractDrugKey(question);
+
+    if (drugKey) {
+        if (apiDataSourceTag) {
+            apiDataSourceTag.classList.remove('hidden');
+            apiDataSourceTag.textContent = 'Consultando OpenFDA...';
+        }
+
+        const liveWarning = await fetchOpenFdaWarning(drugKey);
+        if (liveWarning && apiDataSourceTag) {
+            apiDataSourceTag.textContent = 'OpenFDA Alerta Oficial';
+            apiDataSourceTag.style.background = 'var(--accent)';
+            baseText = `<strong>[Alerta Toxicológico FDA]:</strong> ${liveWarning.substring(0, 320)}...<br><br>${baseText}`;
+        } else if (apiDataSourceTag) {
+            apiDataSourceTag.textContent = 'LAIFT Base Toxicológica';
+            apiDataSourceTag.style.background = 'var(--secondary)';
+        }
+    } else if (apiDataSourceTag) {
+        apiDataSourceTag.classList.add('hidden');
+    }
+
+    explanationText.innerHTML = baseText;
     explanation.classList.add('show');
 }
 
@@ -409,79 +497,81 @@ function finishQuiz() {
     showResults(score, topicScores, topicCounts);
 }
 
-function showResults(score, topicScores, topicCounts) {
+function showResults(scoreValue, topicScores, topicCounts) {
     quizContainer.style.display = 'none';
     resultsContainer.style.display = 'block';
     resultsContainer.innerHTML = '';
     
-    const percentage = (score / filteredQuestions.length) * 100;
+    const percentage = (scoreValue / filteredQuestions.length) * 100;
     
     const header = document.createElement('h2');
-    header.textContent = '🎯 RESULTADOS DO SIMULADO';
+    header.textContent = '🎯 RESULTADOS DE TOXICOLOGIA';
     resultsContainer.appendChild(header);
     
     const scoreDisplay = document.createElement('div');
     scoreDisplay.className = 'score-display';
-    scoreDisplay.textContent = `${score}/${filteredQuestions.length}`;
+    scoreDisplay.textContent = `${scoreValue}/${filteredQuestions.length}`;
     resultsContainer.appendChild(scoreDisplay);
     
     const scoreText = document.createElement('div');
     scoreText.className = 'score-text';
     
     let performanceText = '';
-    if (percentage >= 90) performanceText = '🎉 Excelente! Domínio total do conteúdo, Pensamento Provador no máximo!';
-    else if (percentage >= 70) performanceText = '👍 Muito bom! Você está bem preparado!';
-    else if (percentage >= 50) performanceText = '📚 Bom, mas o pensamento provador diz que precisamos revisar alguns conceitos.';
-    else performanceText = '🔁 Recomendo voltar aos conceitos básicos e afiar o machado da farmacologia.';
+    if (percentage >= 90) performanceText = '🎉 Desempenho excelente! Domínio completo dos protocolos de intoxicação e antídotos.';
+    else if (percentage >= 70) performanceText = '👍 Muito bom! Raciocínio clínico toxicológico bem consolidado.';
+    else if (percentage >= 50) performanceText = '📚 Bom aproveitamento, mas recomenda-se revisar dosagens, antídotos e espécies peçonhentas.';
+    else performanceText = '🔁 Recomenda-se refazer os tópicos de toxicocinética, defensivos e condutas de urgência.';
     
     scoreText.textContent = `${percentage.toFixed(1)}% de acertos. ${performanceText}`;
     resultsContainer.appendChild(scoreText);
     
     const topicsTitle = document.createElement('h3');
-    topicsTitle.textContent = '📊 Desempenho por Tópico:';
+    topicsTitle.textContent = '📊 Desempenho por Tópico Especializado:';
+    topicsTitle.style.marginBottom = '12px';
     resultsContainer.appendChild(topicsTitle);
     
     const topicsContainer = document.createElement('div');
     topicsContainer.className = 'topic-performance';
     
     for (const topic in topicCounts) {
-        const topicScore = topicScores[topic] || 0;
-        const topicPercentage = (topicScore / topicCounts[topic]) * 100;
+        const tScore = topicScores[topic] || 0;
+        const tTotal = topicCounts[topic];
+        const tPercentage = (tScore / tTotal) * 100;
         
         const topicDiv = document.createElement('div');
-        topicDiv.style.marginBottom = '15px';
+        topicDiv.style.marginBottom = '14px';
         
         const topicHeader = document.createElement('div');
         topicHeader.style.display = 'flex';
         topicHeader.style.justifyContent = 'space-between';
-        topicHeader.style.marginBottom = '5px';
+        topicHeader.style.marginBottom = '4px';
         
         const topicName = document.createElement('span');
         topicName.textContent = topic;
         topicName.style.fontWeight = 'bold';
         
         const topicScoreElement = document.createElement('span');
-        topicScoreElement.textContent = `${topicScore}/${topicCounts[topic]} (${topicPercentage.toFixed(0)}%)`;
-        topicScoreElement.style.color = topicPercentage >= 70 ? 'var(--success)' : 
-                                      topicPercentage >= 50 ? 'var(--warning)' : 
+        topicScoreElement.textContent = `${tScore}/${tTotal} (${tPercentage.toFixed(0)}%)`;
+        topicScoreElement.style.color = tPercentage >= 70 ? 'var(--success)' : 
+                                      tPercentage >= 50 ? 'var(--warning)' : 
                                       'var(--danger)';
         
         topicHeader.appendChild(topicName);
         topicHeader.appendChild(topicScoreElement);
         
-        const progressBar = document.createElement('div');
-        progressBar.className = 'performance-bar';
+        const bar = document.createElement('div');
+        bar.className = 'performance-bar';
         
-        const progressFill = document.createElement('div');
-        progressFill.className = 'performance-fill';
-        progressFill.style.width = `${topicPercentage}%`;
-        progressFill.style.background = topicPercentage >= 70 ? 'var(--success)' : 
-                                       topicPercentage >= 50 ? 'var(--warning)' : 
-                                       'var(--danger)';
+        const fill = document.createElement('div');
+        fill.className = 'performance-fill';
+        fill.style.width = `${tPercentage}%`;
+        fill.style.background = tPercentage >= 70 ? 'var(--success)' : 
+                                tPercentage >= 50 ? 'var(--warning)' : 
+                                'var(--danger)';
         
-        progressBar.appendChild(progressFill);
+        bar.appendChild(fill);
         topicDiv.appendChild(topicHeader);
-        topicDiv.appendChild(progressBar);
+        topicDiv.appendChild(bar);
         topicsContainer.appendChild(topicDiv);
     }
     
@@ -490,19 +580,17 @@ function showResults(score, topicScores, topicCounts) {
     const actionButtons = document.createElement('div');
     actionButtons.className = 'action-buttons';
 
-    // Botão para Revisar apenas as erradas
     const reviewBtn = document.createElement('button');
     reviewBtn.className = 'restart-btn';
-    reviewBtn.textContent = '🔍 Revisar Erradas';
-    reviewBtn.addEventListener('click', () => reviewWrongQuestions());
+    reviewBtn.textContent = '🔍 Revisar Questões Erradas';
+    reviewBtn.addEventListener('click', reviewWrongQuestions);
 
-    // Novo botão: Refazer este simulado (Mantém os mesmos tópicos e zera as respostas)
     const retryBtn = document.createElement('button');
     retryBtn.className = 'restart-btn';
-    retryBtn.style.background = 'var(--warning)';
+    retryBtn.style.background = 'var(--secondary)';
     retryBtn.textContent = '🔄 Refazer Este Simulado';
     retryBtn.addEventListener('click', () => {
-        localStorage.removeItem('pharmaQuizProgress');
+        localStorage.removeItem(STORAGE_PROGRESS_KEY);
         userAnswers = new Array(filteredQuestions.length).fill(null);
         currentQuestionIndex = 0;
         
@@ -510,7 +598,7 @@ function showResults(score, topicScores, topicCounts) {
         quizContainer.style.display = 'flex';
         quizActive = true;
         
-        if(currentMode === 'exam') {
+        if (currentMode === 'exam') {
             timeLeft = filteredQuestions.length * 90;
             startTimer();
         } else {
@@ -522,12 +610,11 @@ function showResults(score, topicScores, topicCounts) {
         updateStats();
     });
     
-    // Botão para voltar à tela inicial escolhendo novos temas
     const restartBtn = document.createElement('button');
     restartBtn.className = 'home-btn';
     restartBtn.textContent = '🏠 Selecionar Novos Tópicos';
     restartBtn.addEventListener('click', () => {
-        localStorage.removeItem('pharmaQuizProgress');
+        localStorage.removeItem(STORAGE_PROGRESS_KEY);
         userAnswers = [];
         continueBtn.style.display = 'none';
         resetProgressBtn.style.display = 'none';
@@ -547,12 +634,10 @@ function showResults(score, topicScores, topicCounts) {
 }
 
 function reviewWrongQuestions() {
-    const wrongQuestions = filteredQuestions.filter((question, index) => {
-        return userAnswers[index] !== question.correct;
-    });
+    const wrongQuestions = filteredQuestions.filter((q, index) => userAnswers[index] !== q.correct);
     
     if (wrongQuestions.length === 0) {
-        alert('Parabéns! Você não errou nenhuma questão!');
+        alert('Parabéns! Você acertou todas as questões!');
         return;
     }
     
@@ -595,7 +680,7 @@ function updateTimerDisplay() {
 }
 
 function saveProgress() {
-    if(currentMode === 'exam') return;
+    if (currentMode === 'exam') return;
 
     const allUserAnswers = new Array(allQuestions.length).fill(null);
     filteredQuestions.forEach((q, filteredIndex) => {
@@ -609,24 +694,24 @@ function saveProgress() {
         userAnswers: allUserAnswers,
         timestamp: new Date().toISOString()
     };
-    localStorage.setItem('pharmaQuizProgress', JSON.stringify(progress));
+    localStorage.setItem(STORAGE_PROGRESS_KEY, JSON.stringify(progress));
 }
 
-infoBtn.addEventListener('click', () => { instructionsModal.style.display = 'flex'; });
-closeModal.addEventListener('click', () => { instructionsModal.style.display = 'none'; });
+// Ouvintes
+infoBtn?.addEventListener('click', () => { instructionsModal.style.display = 'flex'; });
+closeModal?.addEventListener('click', () => { instructionsModal.style.display = 'none'; });
 window.addEventListener('click', (e) => {
-    if (e.target === instructionsModal) { instructionsModal.style.display = 'none'; }
+    if (e.target === instructionsModal) instructionsModal.style.display = 'none';
 });
 
-startQuizBtn.addEventListener('click', startQuiz);
-continueBtn.addEventListener('click', continueQuiz);
-// Ouvinte do novo botão de Reiniciar Progresso
-resetProgressBtn.addEventListener('click', resetProgress);
-selectAllBtn.addEventListener('click', selectAllTopics);
-deselectAllBtn.addEventListener('click', deselectAllTopics);
-prevBtn.addEventListener('click', prevQuestion);
-nextBtn.addEventListener('click', nextQuestion);
-finishBtn.addEventListener('click', finishQuiz);
+startQuizBtn?.addEventListener('click', startQuiz);
+continueBtn?.addEventListener('click', continueQuiz);
+resetProgressBtn?.addEventListener('click', resetProgress);
+selectAllBtn?.addEventListener('click', selectAllTopics);
+deselectAllBtn?.addEventListener('click', deselectAllTopics);
+prevBtn?.addEventListener('click', prevQuestion);
+nextBtn?.addEventListener('click', nextQuestion);
+finishBtn?.addEventListener('click', finishQuiz);
 
 modeButtons.forEach(btn => {
     btn.addEventListener('click', () => setMode(btn.dataset.mode));
@@ -637,7 +722,9 @@ document.addEventListener('keydown', (e) => {
     if (document.activeElement.classList.contains('option') && (e.key === 'Enter' || e.key === ' ')) return;
     
     switch(e.key) {
-        case 'ArrowLeft': if (!prevBtn.disabled) prevQuestion(); break;
+        case 'ArrowLeft': 
+            if (!prevBtn.disabled) prevQuestion(); 
+            break;
         case 'ArrowRight':
             if (!nextBtn.disabled && nextBtn.style.display !== 'none') nextQuestion(); 
             break;
@@ -648,4 +735,4 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-window.addEventListener('load', initializeApp);
+window.addEventListener('DOMContentLoaded', initializeApp);
