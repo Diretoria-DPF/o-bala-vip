@@ -306,96 +306,22 @@
       </div>
     </section>
 
-    <!-- =========================================================
-         3. MÓDULO: SIMULADORES DE QUIZ (FARMACO & TOXICO)
-    ========================================================= -->
-    <section id="quizSection" class="view-panel hidden">
-      <div class="quiz-layout">
-        
-        <!-- Barra Lateral de Tópicos e Modos -->
-        <aside class="quiz-sidebar">
-          <div class="sidebar-block">
-            <h4 id="quizModuleTitle">📚 Tópicos de Estudo</h4>
-            <div class="topics-grid" id="topicsGrid"></div>
-          </div>
-
-          <div class="sidebar-block">
-            <h4>🎮 Modo de Avaliação</h4>
-            <div class="mode-selector">
-              <button class="mode-btn active" data-mode="study">📖 Modo Estudo</button>
-              <button class="mode-btn warning" data-mode="exam">📝 Modo Prova</button>
-            </div>
-          </div>
-
-          <div class="sidebar-block">
-            <h4>⚙️ Ações</h4>
-            <div class="control-stack">
-              <button id="startQuiz" class="btn btn-primary" type="button">🚀 Iniciar Simulado</button>
-              <button id="selectAll" class="btn btn-secondary" type="button">✅ Selecionar Todos</button>
-              <button id="deselectAll" class="btn btn-secondary" type="button">❌ Desmarcar Todos</button>
-              <button id="continueBtn" class="btn btn-outline hidden" type="button">↪️ Retomar Progresso</button>
-              <button id="resetProgressBtn" class="btn btn-danger hidden" type="button">🔄 Zerar Questões</button>
-            </div>
-          </div>
-        </aside>
-
-        <!-- Área de Resolução das Questões -->
-        <div class="quiz-stage">
-          
-          <!-- Tela Pré-Início -->
-          <div id="startScreen" class="quiz-welcome">
-            <h2 id="welcomeQuizHeading">Selecione os tópicos para iniciar</h2>
-            <p class="quiz-desc">Escolha os tópicos ao lado e clique em Iniciar. No modo estudo você confere o gabarito imediato com raciocínio clínico.</p>
-            <div class="stats-counter-row">
-              <div class="counter-box"><span id="totalTopics">0</span><small>Tópicos</small></div>
-              <div class="counter-box"><span id="selectedTopics">0</span><small>Selecionados</small></div>
-              <div class="counter-box"><span id="totalQs">0</span><small>Questões</small></div>
-            </div>
-          </div>
-
-          <!-- Card da Questão Ativa -->
-          <div id="quizContainer" class="quiz-card hidden">
-            <div class="question-header">
-              <span id="currentTopic" class="topic-pill">Farmacodinâmica</span>
-              <div id="timer" class="exam-timer">00:00</div>
-            </div>
-
-            <div class="quiz-progress-track">
-              <div class="progress-info">
-                <span>Questão <strong id="currentQuestion">1</strong> de <strong id="totalQuestions">0</strong></span>
-              </div>
-              <div class="progress-bar-bg">
-                <div id="progress" class="progress-bar-fill"></div>
-              </div>
-            </div>
-
-            <div id="questionText" class="question-statement" aria-live="polite"></div>
-            <div id="optionsContainer" class="options-group"></div>
-
-            <!-- Caixa de Feedback Pedagógico -->
-            <div id="explanation" class="explanation-box" aria-live="polite">
-              <div class="explanation-title">
-                <span>📖 Raciocínio Clínico:</span>
-                <span id="apiDataSourceTag" class="source-tag hidden">OpenFDA Live</span>
-              </div>
-              <p id="explanationText"></p>
-            </div>
-
-            <div class="quiz-navigation">
-              <button id="prevBtn" class="btn btn-secondary" type="button" disabled>← Anterior</button>
-              <button id="nextBtn" class="btn btn-primary" type="button">Próxima →</button>
-              <button id="finishBtn" class="btn btn-success hidden" type="button">✅ Finalizar Simulado</button>
-            </div>
-          </div>
-
-          <!-- Tela de Resultados do Quiz -->
-          <div id="resultsContainer" class="quiz-results hidden"></div>
-
-        </div>
-
-      </div>
-    </section>
-
+   <!-- =========================================================
+     MÓDULO: SIMULADOR DE FARMACOLOGIA (INTEGRADO VIA SUBPASTA)
+========================================================= -->
+<section id="quizSection" class="view-panel hidden">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
+    <h3 style="color: var(--primary); font-size: 1.15rem;">💊 Simulador de Farmacologia</h3>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+  </div>
+  
+  <!-- Iframe que carrega os arquivos da pasta /quiz -->
+  <iframe 
+    id="quizFrame" 
+    src="quiz/index.html" 
+    style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-sm); background: #ffffff;"
+  ></iframe>
+</section>
     <!-- =========================================================
          4. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE COM GEMINI)
     ========================================================= -->
