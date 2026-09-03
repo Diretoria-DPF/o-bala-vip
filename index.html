@@ -19,7 +19,7 @@
   <header id="globalHeader">
     <div class="header-content">
       <div class="brand-group">
-        <h1 id="laiftLogo" role="button" tabindex="0" title="LAIFT Acadêmico">
+        <h1 id="laiftLogo" role="button" tabindex="0" title="Acesso Administrativo (Duplo clique)">
           🧠 LAIFT <span id="headerTagline">| Ecossistema de Aprendizagem</span>
         </h1>
         <div id="headerSubtitle" class="subtitle">Autenticação Digital & Simulações Clínicas</div>
@@ -38,7 +38,7 @@
     </div>
   </header>
 
-  <!-- Notificações Globais de Status -->
+  <!-- Notificações Globais de Status (Toast / Banner) -->
   <div id="status" class="status-banner hidden" role="alert" aria-live="polite"></div>
 
   <!-- CONTAINER PRINCIPAL SPA -->
@@ -92,7 +92,7 @@
           <button class="btn btn-secondary" type="button" onclick="returnToIdentity()">Voltar</button>
         </div>
 
-        <!-- Etapa 3: Validação OTP -->
+        <!-- Etapa 3: Validação OTP (Código de 6 dígitos) -->
         <div id="otpForm" class="auth-step hidden">
           <p class="info-notice">Enviamos um código temporário de 6 dígitos para o seu e-mail. Insira-o abaixo:</p>
           <input id="otpCode" class="otp-input" type="text" inputmode="numeric" placeholder="000000" maxlength="6">
@@ -173,7 +173,7 @@
     <section id="dashboardSection" class="view-panel hidden">
       <div class="dashboard-grid">
         
-        <!-- Cartão de Perfil -->
+        <!-- Cartão de Perfil e Conquistas -->
         <aside class="profile-card">
           <div class="avatar-circle" id="userInitials">DP</div>
           <h3 id="dashUserName">Carregando...</h3>
@@ -233,21 +233,21 @@
             <div class="module-card card-tox" onclick="launchModule('toxico')">
               <div class="module-icon">🧪</div>
               <h4>Toxicologia Clínica & Forense</h4>
-              <p>Intoxicações exógenas, antídotos específicos e alertas em tempo real via OpenFDA.</p>
+              <p>Intoxicações agudas, defensivos agrícolas, picadas de animais peçonhentos e antídotos.</p>
               <div class="module-footer">
                 <span class="tag">OpenFDA Live</span>
-                <span class="tag">Antídotos</span>
+                <span class="tag">240 Questões</span>
               </div>
             </div>
 
-            <!-- Módulo Clínica Virtual -->
+            <!-- Módulo Clínica Virtual (OSCE) -->
             <div class="module-card card-clinic" onclick="launchModule('clinica')">
               <div class="module-icon">🩺</div>
               <h4>Clínica Médica Virtual (OSCE)</h4>
-              <p>Anamnese interativa assistida por IA, avaliação de estabilidade biológica e conduta em tempo real.</p>
+              <p>Plantão clínico multipaciente com anamnese leiga, exame físico, decaimento biológico e preceptor IA.</p>
               <div class="module-footer">
-                <span class="tag">Gemini Engine</span>
-                <span class="tag">Tempo Crítico</span>
+                <span class="tag">Llama 3.3 Engine</span>
+                <span class="tag">Plantão Multileito</span>
               </div>
             </div>
 
@@ -290,18 +290,38 @@
     </section>
 
     <!-- =========================================================
-         4. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE COM GEMINI)
+         4. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE)
     ========================================================= -->
     <section id="clinicSection" class="view-panel hidden">
-      <div class="clinic-workspace">
+      
+      <!-- Sub-tela A: Fila de Atendimento / Mapa de Leitos -->
+      <div id="clinicDashboardView" class="clinic-hub-view">
+        <div class="clinic-hub-header">
+          <div>
+            <h2>🏥 Plantão Clínico & Simulação OSCE</h2>
+            <p class="subtitle" style="color: var(--gray); margin-top: 4px;">Selecione um leito para assumir o caso clínico ou sintetize novos casos pedagógicos em tempo real.</p>
+          </div>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-primary" type="button" onclick="ClinicEngine.solicitarCasoProcedural()">⚡ Gerar Caso com IA</button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+          </div>
+        </div>
+
+        <!-- Grade Dinâmica dos Pacientes Internados -->
+        <div id="patientBedsGrid" class="beds-grid"></div>
+      </div>
+
+      <!-- Sub-tela B: Leito Ativo de Consulta (Espaço de Trabalho) -->
+      <div id="clinicWorkspaceView" class="clinic-workspace hidden">
         
-        <!-- Barra de Estado do Paciente -->
+        <!-- Barra Superior de Monitoramento do Paciente -->
         <div class="patient-monitor">
           <div class="patient-id-badge">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="ClinicEngine.returnToBeds()" title="Voltar ao mapa de leitos">← Leitos</button>
             <div class="patient-avatar">👤</div>
             <div>
-              <h3 id="clinicPatientName">Agenor Silveira</h3>
-              <span id="clinicPatientMeta">52 anos | Trabalhador Rural</span>
+              <h3 id="clinicPatientName">Carregando paciente...</h3>
+              <span id="clinicPatientMeta">Idade | Ocupação | Peso</span>
             </div>
           </div>
 
@@ -316,9 +336,9 @@
               </div>
             </div>
 
-            <div class="meter-item" title="Nível de Paciência do Paciente">
+            <div class="meter-item" title="Nível de Paciência e Satisfação do Paciente">
               <div class="meter-header">
-                <span>💬 Paciência / Satisfação</span>
+                <span>💬 Paciência / Humor</span>
                 <strong id="patienceValue">100%</strong>
               </div>
               <div class="meter-bar">
@@ -327,13 +347,13 @@
             </div>
 
             <div class="clinic-clock">
-              <span>⏱️ Tempo de Consulta:</span>
+              <span>⏱️ Tempo:</span>
               <strong id="clinicTimeElapsed">00:00</strong>
             </div>
           </div>
         </div>
 
-        <!-- Abas da Consulta -->
+        <!-- Abas da Consulta Clínica -->
         <nav class="clinic-tabs" role="tablist">
           <button class="clinic-tab-btn active" data-tab="prontuarioTab">📋 Prontuário & Sinais</button>
           <button class="clinic-tab-btn" data-tab="dialogoTab">🗣️ Anamnese (Chat)</button>
@@ -347,9 +367,9 @@
             <div class="prontuario-grid">
               <div class="sheet-box">
                 <h4>Queixa Principal & Admissão</h4>
-                <p id="clinicChiefComplaint" class="complaint-quote">"Carregando informações..."</p>
+                <p id="clinicChiefComplaint" class="complaint-quote">"Carregando informações da queixa..."</p>
                 <h4>Histórico Resumido</h4>
-                <div id="clinicPatientHistory" class="data-block">Aguardando início...</div>
+                <div id="clinicPatientHistory" class="data-block">Aguardando início do caso...</div>
               </div>
 
               <div class="sheet-box">
@@ -366,13 +386,13 @@
             </div>
           </div>
 
-          <!-- Aba 2: Anamnese -->
+          <!-- Aba 2: Anamnese (Chat com o Paciente) -->
           <div id="dialogoTab" class="clinic-tab-pane">
             <div class="chat-container">
               <div id="chatHistory" class="chat-viewport">
                 <div class="chat-bubble patient">
                   <strong>Paciente:</strong>
-                  <p id="chatInitialGreeting">Olá, doutor(a)... estou me sentindo muito mal...</p>
+                  <p id="chatInitialGreeting">Olá, doutor(a)... estou me sentindo mal...</p>
                 </div>
               </div>
 
@@ -382,18 +402,18 @@
               </div>
 
               <div class="chat-input-row">
-                <input id="patientQuestionInput" type="text" placeholder="Digite sua pergunta ao paciente..." maxlength="200">
+                <input id="patientQuestionInput" type="text" placeholder="Digite sua pergunta ou conduta física (ex: 'vou auscultar seu pulmão')..." maxlength="250">
                 <button id="sendQuestionBtn" class="btn btn-primary" type="button" onclick="submitPatientQuestion()">Perguntar</button>
               </div>
             </div>
           </div>
 
-          <!-- Aba 3: Exames -->
+          <!-- Aba 3: Laboratório e Exames -->
           <div id="examesTab" class="clinic-tab-pane">
             <div class="exams-workspace">
               <div class="exams-catalog">
                 <h4>Painel de Exames Disponíveis</h4>
-                <p class="exam-disclaimer">Atenção: A solicitação de exames consome minutos virtuais.</p>
+                <p class="exam-disclaimer">Atenção: A solicitação de exames consome minutos virtuais e afeta o paciente se desnecessária.</p>
                 <div id="availableExamsList" class="exams-list"></div>
               </div>
 
@@ -406,17 +426,17 @@
             </div>
           </div>
 
-          <!-- Aba 4: Fechamento -->
+          <!-- Aba 4: Diagnóstico e Conduta -->
           <div id="fechamentoTab" class="clinic-tab-pane">
             <div class="resolution-form">
               <div class="form-group">
                 <label for="studentDiagnosisInput">Hipótese Diagnóstica Principal:</label>
-                <textarea id="studentDiagnosisInput" rows="3" placeholder="Descreva o diagnóstico..."></textarea>
+                <textarea id="studentDiagnosisInput" rows="3" placeholder="Descreva a afecção principal, síndrome clínica ou intoxicação diagnosticada..."></textarea>
               </div>
 
               <div class="form-group">
-                <label for="studentConductInput">Conduta Farmacêutica / Clínica:</label>
-                <textarea id="studentConductInput" rows="4" placeholder="Descreva as medidas terapêuticas e suporte..."></textarea>
+                <label for="studentConductInput">Conduta Farmacêutica e/ou Clínica Imediata:</label>
+                <textarea id="studentConductInput" rows="4" placeholder="Descreva as medidas farmacológicas (antídotos, fármacos, suspensão) e suporte geral..."></textarea>
               </div>
 
               <div class="resolution-actions">
@@ -450,7 +470,17 @@
       <span class="modal-close" id="closeModal">&times;</span>
       <h2>📖 Guia da Plataforma LAIFT</h2>
       <div class="modal-body">
-        <p>Utilize os módulos para treinar farmacologia teórica, resolver casos clínicos com inteligência artificial e acessar o laboratório de bancada.</p>
+        <h4>Simuladores (Farmacologia & Toxicologia):</h4>
+        <ul>
+          <li><strong>Modo Estudo:</strong> Visualize a fundamentação teórica imediatamente após cada resposta.</li>
+          <li><strong>Modo Prova:</strong> Simulação cronometrada (90 segundos por questão) com alternativas aleatórias.</li>
+        </ul>
+        <h4 style="margin-top: 14px;">Clínica Médica Virtual (OSCE):</h4>
+        <ul>
+          <li><strong>Anamnese Interativa:</strong> Converse com o paciente em linguagem natural ou realize exames físicos pelo chat (ex: <em>"vou auscultar seu pulmão"</em>).</li>
+          <li><strong>Monitoramento de Plantão:</strong> Assuma múltiplos leitos e atenda chamados emergenciais ou ambulatoriais.</li>
+          <li><strong>Geração com IA:</strong> Sintetize novos casos clínicos inéditos sob demanda para treinar temas específicos.</li>
+        </ul>
       </div>
     </div>
   </div>
@@ -490,6 +520,7 @@
     </div>
   </div>
 
+  <!-- Rodapé Institucional -->
   <footer class="app-footer">
     <span>LAIFT — Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia</span>
     <span class="signature">DPF :)</span>
