@@ -93,7 +93,7 @@
         </div>
 
         <!-- Etapa 3: Validação OTP (Código de 6 dígitos) -->
-       <div id="otpForm" class="auth-step hidden">
+        <div id="otpForm" class="auth-step hidden">
           <p class="info-notice">Enviamos um código temporário de 6 dígitos para o seu e-mail. Insira-o abaixo:</p>
           <input id="otpCode" class="otp-input" type="text" inputmode="numeric" placeholder="000000" maxlength="6" autocomplete="one-time-code">
           
@@ -107,8 +107,7 @@
           <span class="expiry-notice" style="display: block; text-align: center; margin-top: 10px;">O código expira em 10 minutos.</span>
         </div>
 
-        <!-- Etapa 4: Credencial Gerada / QR Code -->
-       <!-- Etapa 4: Credencial Digital / Crachá Acadêmico -->
+        <!-- Etapa 4: Credencial Digital / Crachá Acadêmico -->
         <div id="credentialScreen" class="auth-step hidden">
           <div style="text-align: center; margin-bottom: 16px;">
             <span class="badge-role" id="credRoleBadge" style="font-size: 0.85rem; padding: 4px 12px;">Membro LAIFT</span>
@@ -131,57 +130,71 @@
           </div>
         </div>
 
-        <!-- Terminal Fiscal / Validador Administrativo -->
+        <!-- Terminal Fiscal / Validador Administrativo & Portaria -->
         <section id="fiscalArea" class="hidden">
-          <div style="text-align: center;">
-            <span class="badge-admin">Terminal de Validação Ativo</span>
+          <div style="text-align: center; margin-bottom: 16px;">
+            <span class="badge-admin">Terminal de Validação & Portaria Ativo</span>
           </div>
 
+          <!-- Gestão do Evento Vigente -->
           <div class="section-box" style="text-align: left;">
-            <h3>Evento Ativo</h3>
-            <div class="fiscal-event-row">
-              <input id="eventName" type="text" placeholder="Carregando evento..." maxlength="80">
-              <button id="saveEventButton" type="button" onclick="saveActiveEvent()">Salvar</button>
+            <h3>Evento Vigente</h3>
+            <div class="fiscal-event-row" style="display: flex; gap: 8px;">
+              <input id="eventName" type="text" placeholder="Carregando evento..." maxlength="80" style="flex: 1;">
+              <button id="saveEventButton" class="btn btn-primary btn-sm" type="button" onclick="saveActiveEvent()">Salvar Evento</button>
             </div>
           </div>
 
+          <!-- Scanner de QR Code -->
           <div class="section-box">
             <h3>Check-in por QR Code</h3>
-            <div id="reader" class="hidden"></div>
-            <button id="scannerButton" class="scanner-button" type="button" onclick="startFiscalScanner()">
-              📷 Escanear QR Code
+            <div id="reader" class="hidden" style="width: 100%; max-width: 360px; margin: 0 auto 12px;"></div>
+            <button id="scannerButton" class="btn btn-primary" style="width: 100%;" type="button" onclick="startFiscalScanner()">
+              📷 Acionar Leitor de QR Code
             </button>
-            <p class="small-note">
-              O QR é validado no servidor e a presença é registrada no evento ativo.
+            <p class="small-note" style="margin-top: 8px; font-size: 0.8rem; color: var(--gray);">
+              O QR Code é validado no servidor e a presença é creditada no evento ativo.
             </p>
           </div>
 
           <div class="divider">Ou</div>
 
+          <!-- Validação Manual & Emissão Rápida de Crachás -->
           <div class="section-box">
-            <h3>Check-in Manual</h3>
-            <input id="manualIdentifier" type="text" placeholder="Digite matrícula ou CPF" autocomplete="off" maxlength="32">
-            <button id="manualCheckinButton" class="secondary-button" type="button" onclick="submitManualCheckin()">
-              Marcar Presença Manualmente
-            </button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="margin: 0;">Check-in Manual & Crachás</h3>
+              <button class="btn btn-outline btn-sm" type="button" onclick="window.open('cracha/index.html', '_blank')">
+                🎨 Abrir Studio
+              </button>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input id="manualIdentifier" style="flex: 1; min-width: 170px;" type="text" placeholder="Digite matrícula ou CPF" autocomplete="off" maxlength="32">
+              <button id="manualCheckinButton" class="btn btn-secondary btn-sm" type="button" onclick="submitManualCheckin()">
+                Validar Presença
+              </button>
+              <button class="btn btn-outline btn-sm" type="button" onclick="FiscalEngine.gerarCrachaDireto()">
+                🏷️ Emitir Crachá
+              </button>
+            </div>
           </div>
 
           <div class="divider">Ou</div>
 
+          <!-- Lista Nominal Pesquisável -->
           <div class="section-box">
-            <h3>Lista de Presença</h3>
-            <input id="memberSearch" class="presence-search" type="text" placeholder="Pesquisar por nome, matrícula ou CPF" autocomplete="off" oninput="scheduleMemberSearch()">
-            <div id="memberList" class="member-list">
+            <h3>Lista Nominal de Participantes</h3>
+            <input id="memberSearch" class="presence-search" type="text" placeholder="Pesquisar por nome, matrícula ou CPF..." autocomplete="off" oninput="scheduleMemberSearch()">
+            <div id="memberList" class="member-list" style="max-height: 280px; overflow-y: auto; margin-top: 10px;">
               <div class="member-list-empty">
                 Digite ao menos dois caracteres para pesquisar participantes.
               </div>
             </div>
-            <p class="small-note">
-              Use esta opção para reuniões online ou validação manual por lista.
+            <p class="small-note" style="margin-top: 8px; font-size: 0.8rem; color: var(--gray);">
+              Clique em <strong>Presença</strong> para confirmar o check-in ou em <strong>Crachá</strong> para abrir o documento formatado.
             </p>
           </div>
 
-          <button class="danger-button" type="button" onclick="logoutFiscal()">Encerrar Terminal</button>
+          <button class="danger-button" style="width: 100%; margin-top: 18px;" type="button" onclick="logoutFiscal()">Encerrar Terminal Fiscal</button>
         </section>
       </div>
     </section>
@@ -298,7 +311,7 @@
     </section>
 
     <!-- =========================================================
-         3.1 MÓDULO: SIMULADOR DE TOXICOLOGIA (IFRAME DEDICADO)
+         4. MÓDULO: SIMULADOR DE TOXICOLOGIA (IFRAME DEDICADO)
     ========================================================= -->
     <section id="toxicoSection" class="view-panel hidden">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
@@ -308,10 +321,10 @@
       <iframe id="toxicoFrame" title="Simulador de Toxicologia Clínica e Forense" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
     </section>
 
-       <!-- =========================================================
+    <!-- =========================================================
          5. MÓDULO: LABORATÓRIO VIRTUAL (IFRAME)
     ========================================================= -->
-   <section id="labSection" class="view-panel hidden">
+    <section id="labSection" class="view-panel hidden">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="color: var(--primary); font-size: 1.15rem;">🔬 Laboratório Virtual</h3>
         <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
@@ -320,7 +333,7 @@
     </section>
     
     <!-- =========================================================
-         4. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE)
+         6. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE)
     ========================================================= -->
     <section id="clinicSection" class="view-panel hidden">
       
@@ -332,7 +345,8 @@
             <p class="subtitle" style="color: var(--gray); margin-top: 4px;">Selecione um leito para assumir o caso clínico ou sintetize novos casos pedagógicos em tempo real.</p>
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button class="btn btn-primary" type="button" onclick="ClinicEngine.solicitarCasoProcedural()">⚡ Gerar Caso com IA</button>
+            <!-- ID btnGenerateAiCase integrado para o cooldown regressivo do clinic-engine -->
+            <button id="btnGenerateAiCase" class="btn btn-primary" type="button" onclick="ClinicEngine.solicitarCasoProcedural()">⚡ Gerar Caso com IA</button>
             <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
           </div>
         </div>
@@ -383,8 +397,7 @@
           </div>
         </div>
 
-        <!-- Abas da Consulta Clínica -->
-       <!-- Abas da Consulta com ARIA Completo -->
+        <!-- Abas da Consulta com ARIA Completo -->
         <nav class="clinic-tabs" role="tablist" aria-label="Navegação da Consulta Médica">
           <button class="clinic-tab-btn active" role="tab" aria-selected="true" aria-controls="prontuarioTab" id="tab-prontuario" data-tab="prontuarioTab">📋 Prontuário & Sinais</button>
           <button class="clinic-tab-btn" role="tab" aria-selected="false" aria-controls="dialogoTab" id="tab-dialogo" data-tab="dialogoTab">🗣️ Anamnese (Chat)</button>
@@ -476,6 +489,7 @@
             </div>
           </div>
         </div>
+      </div>
     </section>
 
   </main>
@@ -544,7 +558,7 @@
     <span class="signature">DPF :)</span>
   </footer>
 
-  <!-- Scripts -->
+  <!-- Scripts do Ecossistema -->
   <script src="data/patients.js"></script>
   <script src="js/api-service.js"></script>
   <script src="js/fiscal-engine.js"></script>
