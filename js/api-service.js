@@ -114,6 +114,13 @@ const ApiService = (() => {
         senha
       }),
 
+    exportarPresencasCsv: (sessaoFiscal, evento) =>
+    callAppsScript({
+      acao: 'exportarPresencasCsv',
+      sessao: sessaoFiscal,
+      evento: evento
+    }),
+
     salvarEvento: (novoNome, sessao) =>
       callAppsScript({
         acao: 'salvarEvento',
