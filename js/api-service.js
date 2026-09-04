@@ -178,12 +178,13 @@ const ApiService = (() => {
         dadosAtendimento
       }, 30000),
 
-    gerarCasoProcedural: (topicoAlvo, dificuldade) =>
-      callAppsScript({
-        acao: 'gerarCasoProcedural',
-        topicoAlvo,
-        dificuldade: dificuldade || 'Avançado'
-      }, 45000),
+    gerarCasoProcedural: (topicoAlvo, dificuldade, identificador) =>
+  callAppsScript({
+    acao: 'gerarCasoProcedural',
+    identificador: identificador,
+    topicoAlvo: topicoAlvo,
+    dificuldade: dificuldade || 'Avançado'
+  }, 45000),
 
     // --- UTILITÁRIOS E APIS EXTERNAS ---
     fetchOpenFdaWarning,
