@@ -159,6 +159,16 @@
 
           <div class="divider">Ou</div>
 
+          <!-- Botão de Exportação CSV na seção de Presenças do Fiscal -->
+<div style="display: flex; gap: 8px; margin-top: 10px;">
+  <button type="button" class="btn btn-outline btn-sm" onclick="FiscalEngine.baixarListaPresencaCsv()">
+    📥 Exportar CSV de Presenças
+  </button>
+  <button type="button" class="btn btn-secondary btn-sm" onclick="FiscalEngine.imprimirCrachasSelecionados()">
+    🖨️ Imprimir Crachás em Lote (A4 / CR-80)
+  </button>
+</div>
+
           <!-- Validação Manual & Emissão Rápida de Crachás -->
           <div class="section-box">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
