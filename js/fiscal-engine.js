@@ -1,5 +1,5 @@
 /**
- * TERMINAL FISCAL, VALIDAÇÃO DE QR CODE E STUDIO DE CRACHÁ
+ * TERMINAL FISCAL, VALIDAÇÃO DE QR CODE, TELEMETRIA IA E STUDIO DE CRACHÁ
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
  */
 
@@ -36,85 +36,65 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // INTEGRAÇÃO COM O STUDIO DE CRACHÁS (CR-80)
+  // AUTENTICAÇÃO E MODAL DE ACESSO DO FISCAL
   // =========================================================
 
-  /**
-   * Abre o Studio de Crachá preenchendo os parâmetros na URL
-   */
-  function abrirStudioCracha(membro) {
-    if (!membro || !membro.identificador) {
-      getStatusBanner('Identificador do participante não informado.', 'error');
-      return;
-    }
-
-    const id = encodeURIComponent(membro.identificador);
-    const nome = encodeURIComponent(membro.nome || membro.nomeExibicao || 'Participante LAIFT');
-    const cargo = encodeURIComponent((membro.tipo || 'Membro').toUpperCase());
-    const qr = encodeURIComponent(`LAIFT:ID:${membro.identificador}`);
-
-    const url = `cracha/index.html?id=${id}&nome=${nome}&cargo=${cargo}&qr=${qr}`;
-    window.open(url, '_blank');
-  }
-
-  /**
-   * Acionado pelo botão '🏷️ Emitir Crachá' ao lado da Matrícula/CPF manual
-   */
-  function gerarCrachaDireto() {
-    const idInput = document.getElementById('manualIdentifier');
-    const identifier = idInput ? idInput.value.trim() : '';
-
-    if (!identifier) {
-      getStatusBanner('Digite a matrícula ou CPF no campo ao lado para emitir o crachá.', 'error');
-      if (idInput) idInput.focus();
-      return;
-    }
-
-    abrirStudioCracha({
-      identificador: identifier,
-      nome: 'Participante Credenciado',
-      tipo: 'Membro Efetivo'
-    });
-  }
-
-  // =========================================================
-  // REENVIO DE CREDENCIAL AO ALUNO
-  // =========================================================
-
-  async function resendCredentialEmail() {
-    const session = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '{}');
-    if (!session.sessionToken) {
-      getStatusBanner('Sessão expirada. Autentique-se novamente.', 'error');
-      return;
-    }
-
-    getStatusBanner('Enviando QR Code para seu e-mail...', 'loading');
-    try {
-      const res = await ApiService.reenviarCredencialEmail(session.sessionToken);
-      if (res && res.sucesso) {
-        getStatusBanner(res.mensagem || 'QR Code reenviado com sucesso.', 'success');
-      } else {
-        getStatusBanner((res && res.mensagem) || 'Não foi possível reenviar a credencial.', 'error');
+  function abrirModalLogin() {
+    if (fiscalSession) {
+      const fiscalArea = document.getElementById('fiscalArea');
+      if (fiscalArea) {
+        fiscalArea.classList.remove('hidden');
+        fiscalArea.scrollIntoView({ behavior: 'smooth' });
       }
-    } catch (err) {
-      console.error(err);
-      getStatusBanner('Erro de conexão ao reenviar e-mail.', 'error');
+      return;
+    }
+
+    const modal = document.getElementById('modalFiscalLogin');
+    const input = document.getElementById('inputSenhaFiscalModal');
+    if (modal) {
+      modal.style.display = 'flex';
+      if (input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 150);
+      }
+    } else {
+      const password = prompt('Terminal restrito LAIFT.\nDigite a senha fiscal:');
+      if (password) {
+        processarLoginFiscal(password);
+      }
     }
   }
 
-  // =========================================================
-  // ACESSO AO TERMINAL FISCAL
-  // =========================================================
+  function fecharModalLogin() {
+    const modal = document.getElementById('modalFiscalLogin');
+    if (modal) modal.style.display = 'none';
+  }
 
-  async function openFiscalLogin() {
-    if (fiscalSession) return;
+  async function confirmarLoginModal() {
+    const input = document.getElementById('inputSenhaFiscalModal');
+    const senha = input ? input.value.trim() : '';
+    if (!senha) return;
+    fecharModalLogin();
+    await processarLoginFiscal(senha);
+  }
 
-    const password = prompt('Terminal restrito. Digite a senha fiscal:');
-    if (!password) return;
-
+  async function processarLoginFiscal(password) {
     getStatusBanner('Validando acesso fiscal...', 'loading');
     try {
-      const res = await ApiService.loginFiscal(password);
+      let res;
+      if (typeof ApiService.loginFiscal === 'function') {
+        res = await ApiService.loginFiscal(password);
+      } else if (typeof ApiService.autenticarFiscal === 'function') {
+        res = await ApiService.autenticarFiscal(password);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'loginFiscal',
+          senha: password
+        });
+      } else {
+        throw new Error('Método de autenticação fiscal indisponível no ApiService.');
+      }
+
       if (!res || !res.sucesso || !res.sessao) {
         getStatusBanner((res && res.mensagem) || 'Credenciais inválidas.', 'error');
         return;
@@ -129,13 +109,18 @@ const FiscalEngine = (() => {
       });
 
       const fiscalArea = document.getElementById('fiscalArea');
-      if (fiscalArea) fiscalArea.classList.remove('hidden');
+      if (fiscalArea) {
+        fiscalArea.classList.remove('hidden');
+        fiscalArea.scrollIntoView({ behavior: 'smooth' });
+      }
 
       const subtitle = document.getElementById('headerSubtitle');
       if (subtitle) subtitle.textContent = 'Terminal de Validação & Portaria';
 
       const eventInput = document.getElementById('eventName');
       if (eventInput) eventInput.value = res.evento || res.eventoAtivo || '';
+
+      getStatusBanner('Acesso fiscal liberado.', 'success');
     } catch (err) {
       console.error(err);
       getStatusBanner('Falha ao autenticar terminal fiscal.', 'error');
@@ -164,6 +149,328 @@ const FiscalEngine = (() => {
       console.error(err);
       getStatusBanner('Erro ao atualizar evento.', 'error');
     }
+  }
+
+  // =========================================================
+  // MONITOR DE SAÚDE DO CLUSTER GROQ (TELEMETRIA EM TEMPO REAL)
+  // =========================================================
+
+  async function verificarSaudeRedeIA() {
+    const btn = document.getElementById('btnCheckAiHealth');
+    const grid = document.getElementById('aiNodesGrid');
+    const pctEl = document.getElementById('aiHealthOverallPct');
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Diagnosticando Groq LPUs...';
+    }
+
+    try {
+      let res;
+      if (typeof ApiService.obterStatusSaudeIA === 'function') {
+        res = await ApiService.obterStatusSaudeIA(fiscalSession);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'obterStatusSaudeIA',
+          sessao: fiscalSession
+        }, 30000);
+      }
+
+      if (!res || !res.sucesso) {
+        alert(res.mensagem || 'Falha ao auditar saúde das chaves Groq.');
+        return;
+      }
+
+      if (pctEl) {
+        pctEl.textContent = `${res.saudeGeralRede}%`;
+        pctEl.style.color = res.saudeGeralRede >= 75 ? '#16a34a' : (res.saudeGeralRede >= 40 ? '#d97706' : '#dc2626');
+      }
+
+      if (grid && Array.isArray(res.provedores)) {
+        grid.innerHTML = '';
+        res.provedores.forEach(node => {
+          const card = document.createElement('div');
+          card.style.cssText = `
+            padding: 8px 10px; 
+            border-radius: 8px; 
+            border: 1px solid ${node.operante ? '#bbf7d0' : '#fecaca'}; 
+            background: ${node.operante ? '#f0fdf4' : '#fef2f2'}; 
+            font-size: 0.75rem;
+            text-align: left;
+          `;
+          
+          card.innerHTML = `
+            <div style="font-weight: 700; color: #1e293b;">${node.identificador}</div>
+            <div style="color: #64748b; font-family: monospace; font-size: 0.7rem;">${node.chaveMascarada}</div>
+            <div style="margin-top: 4px; display: flex; justify-content: space-between; font-weight: 600;">
+              <span style="color: ${node.operante ? '#16a34a' : '#dc2626'};">${node.saude}%</span>
+              <span style="color: #64748b;">${node.latenciaMs}ms</span>
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Erro de conexão ao consultar telemetria da IA.');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🔄 Auditar Chaves';
+      }
+    }
+  }
+
+  // =========================================================
+  // EXPORTAÇÃO CSV DE PRESENÇAS CONFIRMADAS
+  // =========================================================
+
+  async function baixarListaPresencaCsv() {
+    try {
+      getStatusBanner('Gerando arquivo CSV formatado...', 'loading');
+      
+      let res;
+      if (typeof ApiService.exportarPresencasCsv === 'function') {
+        res = await ApiService.exportarPresencasCsv(fiscalSession, null);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'exportarPresencasCsv',
+          sessao: fiscalSession
+        });
+      }
+
+      if (!res || !res.sucesso) {
+        getStatusBanner(res.mensagem || 'Falha ao exportar presenças.', 'error');
+        return;
+      }
+
+      const byteCharacters = atob(res.csvBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'text/csv;charset=utf-8;' });
+
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', res.nomeArquivo || 'presencas_laift.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      getStatusBanner('CSV baixado com sucesso!', 'success');
+    } catch (e) {
+      console.error(e);
+      getStatusBanner('Erro de conexão ao exportar presenças.', 'error');
+    }
+  }
+
+  // =========================================================
+  // IMPRESSÃO DE CRACHÁS EM LOTE (A4 / 8 UNIDADES CR-80)
+  // =========================================================
+
+  function imprimirCrachasSelecionados(membrosAlvo) {
+    const lista = membrosAlvo || window.ultimosMembrosBuscados || [];
+    if (!lista || lista.length === 0) {
+      alert('Pesquise participantes na lista abaixo para gerar os crachás.');
+      return;
+    }
+
+    const janelaImpressao = window.open('', '_blank');
+    if (!janelaImpressao) {
+      alert('Libere a abertura de popups para imprimir os crachás.');
+      return;
+    }
+
+    let crachasHtml = '';
+    lista.forEach(function(m) {
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&format=svg&data=' + encodeURIComponent('LAIFT:v1:' + (m.tokenQr || ''));
+      
+      crachasHtml += `
+        <div class="cracha-card">
+          <div class="cracha-header">
+            <div class="cracha-org">UNINASSAU SALVADOR</div>
+            <div class="cracha-title">LIGA ACADÊMICA LAIFT</div>
+          </div>
+          <div class="cracha-body">
+            <div class="cracha-qr-box">
+              <img src="${qrUrl}" alt="QR" class="cracha-qr"/>
+            </div>
+            <div class="cracha-info">
+              <div class="cracha-nome">${m.nome || m.nomeExibicao || 'Participante'}</div>
+              <div class="cracha-badge ${String(m.tipo).toLowerCase() === 'diretoria' ? 'badge-dir' : ''}">${m.tipo || 'Membro'}</div>
+              <div class="cracha-id">ID: ${m.identificador || '---'}</div>
+            </div>
+          </div>
+          <div class="cracha-footer">Farmacologia & Toxicologia Clínica</div>
+        </div>
+      `;
+    });
+
+    janelaImpressao.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Crachás Oficiais LAIFT - Padrão CR-80</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+          * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+          }
+          .pagina-a4 {
+            display: grid;
+            grid-template-columns: repeat(2, 86mm);
+            grid-auto-rows: 54mm;
+            gap: 4mm 6mm;
+            justify-content: center;
+            page-break-after: always;
+          }
+          .cracha-card {
+            width: 86mm;
+            height: 54mm;
+            border: 1px dashed #94a3b8;
+            border-radius: 4mm;
+            padding: 3mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            background: #ffffff;
+          }
+          .cracha-header {
+            border-bottom: 1.5px solid #0f172a;
+            padding-bottom: 1.5mm;
+            text-align: center;
+          }
+          .cracha-org {
+            font-size: 6pt;
+            font-weight: 700;
+            color: #475569;
+            letter-spacing: 0.5px;
+          }
+          .cracha-title {
+            font-size: 8.5pt;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .cracha-body {
+            display: flex;
+            align-items: center;
+            gap: 3mm;
+            margin: auto 0;
+          }
+          .cracha-qr-box {
+            width: 26mm;
+            height: 26mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .cracha-qr {
+            width: 100%;
+            height: 100%;
+          }
+          .cracha-info {
+            flex: 1;
+            overflow: hidden;
+          }
+          .cracha-nome {
+            font-size: 8pt;
+            font-weight: 800;
+            color: #0f172a;
+            line-height: 1.1;
+            max-height: 2.2em;
+            overflow: hidden;
+          }
+          .cracha-badge {
+            display: inline-block;
+            background: #e2e8f0;
+            color: #334155;
+            font-size: 6pt;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 2px;
+            margin: 1.5mm 0 1mm 0;
+            text-transform: uppercase;
+          }
+          .badge-dir {
+            background: #dbeafe;
+            color: #1e40af;
+          }
+          .cracha-id {
+            font-size: 6pt;
+            font-family: monospace;
+            color: #64748b;
+          }
+          .cracha-footer {
+            border-top: 1px solid #e2e8f0;
+            font-size: 5.5pt;
+            color: #64748b;
+            text-align: center;
+            padding-top: 1mm;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="pagina-a4">
+          ${crachasHtml}
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        <\/script>
+      </body>
+      </html>
+    `);
+    janelaImpressao.document.close();
+  }
+
+  // =========================================================
+  // STUDIO DE CRACHÁS INDIVIDUAL
+  // =========================================================
+
+  function abrirStudioCracha(membro) {
+    if (!membro || !membro.identificador) {
+      getStatusBanner('Identificador do participante não informado.', 'error');
+      return;
+    }
+
+    const id = encodeURIComponent(membro.identificador);
+    const nome = encodeURIComponent(membro.nome || membro.nomeExibicao || 'Participante LAIFT');
+    const cargo = encodeURIComponent((membro.tipo || 'Membro').toUpperCase());
+    const qr = encodeURIComponent(`LAIFT:ID:${membro.identificador}`);
+
+    const url = `cracha/index.html?id=${id}&nome=${nome}&cargo=${cargo}&qr=${qr}`;
+    window.open(url, '_blank');
+  }
+
+  function gerarCrachaDireto() {
+    const idInput = document.getElementById('manualIdentifier');
+    const identifier = idInput ? idInput.value.trim() : '';
+
+    if (!identifier) {
+      getStatusBanner('Digite a matrícula ou CPF no campo ao lado para emitir o crachá.', 'error');
+      if (idInput) idInput.focus();
+      return;
+    }
+
+    abrirStudioCracha({
+      identificador: identifier,
+      nome: 'Participante Credenciado',
+      tipo: 'Membro Efetivo'
+    });
   }
 
   // =========================================================
@@ -324,7 +631,8 @@ const FiscalEngine = (() => {
         return;
       }
 
-      renderMemberList(res.membros || []);
+      window.ultimosMembrosBuscados = res.membros || [];
+      renderMemberList(window.ultimosMembrosBuscados);
     } catch (err) {
       console.error('Falha na consulta de membros:', err);
       list.innerHTML = `
@@ -400,210 +708,6 @@ const FiscalEngine = (() => {
     });
   }
 
-  /**
-   * Dispara o download automático do CSV com UTF-8 BOM
-   */
-  async function baixarListaPresencaCsv() {
-    try {
-      const res = await ApiService.exportarPresencasCsv(fiscalSession, null);
-      if (!res || !res.sucesso) {
-        alert(res.mensagem || 'Falha ao gerar CSV.');
-        return;
-      }
-
-      // Converte o Base64 retornado pelo Apps Script em Blob para download direto
-      const byteCharacters = atob(res.csvBase64);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'text/csv;charset=utf-8;' });
-
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', res.nomeArquivo || 'presencas_laift.csv');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) {
-      console.error(e);
-      alert('Erro de conexão ao exportar presenças.');
-    }
-  }
-
-  /**
-   * Gera folha A4 com grade 2x4 contendo 8 crachás (formato padrão CR-80)
-   */
-  function imprimirCrachasSelecionados(membrosAlvo) {
-    // Caso nenhum membro específico seja passado, utiliza a lista carregada na busca do fiscal
-    const lista = membrosAlvo || window.ultimosMembrosBuscados || [];
-    if (!lista || lista.length === 0) {
-      alert('Nenhum membro selecionado ou localizado para impressão de crachás.');
-      return;
-    }
-
-    const janelaImpressao = window.open('', '_blank');
-    if (!janelaImpressao) {
-      alert('Por favor, libere a abertura de popups para imprimir os crachás.');
-      return;
-    }
-
-    let crachasHtml = '';
-    lista.forEach(function(m) {
-      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&format=svg&data=' + encodeURIComponent('LAIFT:v1:' + (m.tokenQr || ''));
-      
-      crachasHtml += `
-        <div class="cracha-card">
-          <div class="cracha-header">
-            <div class="cracha-org">UNINASSAU SALVADOR</div>
-            <div class="cracha-title">LIGA ACADÊMICA LAIFT</div>
-          </div>
-          <div class="cracha-body">
-            <div class="cracha-qr-box">
-              <img src="${qrUrl}" alt="QR" class="cracha-qr"/>
-            </div>
-            <div class="cracha-info">
-              <div class="cracha-nome">${m.nome || 'Participante'}</div>
-              <div class="cracha-badge ${String(m.tipo).toLowerCase() === 'diretoria' ? 'badge-dir' : ''}">${m.tipo || 'Membro'}</div>
-              <div class="cracha-id">ID: ${m.identificador || '---'}</div>
-            </div>
-          </div>
-          <div class="cracha-footer">Farmacologia & Toxicologia Clínica</div>
-        </div>
-      `;
-    });
-
-    janelaImpressao.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Crachás Oficiais LAIFT - Padrão CR-80</title>
-        <style>
-          @page {
-            size: A4 portrait;
-            margin: 8mm;
-          }
-          * {
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-            background: #fff;
-          }
-          /* Grade 2 colunas x 4 linhas = 8 crachás por folha A4 */
-          .pagina-a4 {
-            display: grid;
-            grid-template-columns: repeat(2, 86mm);
-            grid-auto-rows: 54mm;
-            gap: 4mm 6mm;
-            justify-content: center;
-            page-break-after: always;
-          }
-          .cracha-card {
-            width: 86mm;
-            height: 54mm;
-            border: 1px dashed #94a3b8;
-            border-radius: 4mm;
-            padding: 3mm;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            position: relative;
-            background: #ffffff;
-          }
-          .cracha-header {
-            border-bottom: 1.5px solid #0f172a;
-            padding-bottom: 1.5mm;
-            text-align: center;
-          }
-          .cracha-org {
-            font-size: 6pt;
-            font-weight: 700;
-            color: #475569;
-            letter-spacing: 0.5px;
-          }
-          .cracha-title {
-            font-size: 8.5pt;
-            font-weight: 800;
-            color: #0f172a;
-          }
-          .cracha-body {
-            display: flex;
-            align-items: center;
-            gap: 3mm;
-            margin: auto 0;
-          }
-          .cracha-qr-box {
-            width: 26mm;
-            height: 26mm;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .cracha-qr {
-            width: 100%;
-            height: 100%;
-          }
-          .cracha-info {
-            flex: 1;
-            overflow: hidden;
-          }
-          .cracha-nome {
-            font-size: 8pt;
-            font-weight: 800;
-            color: #0f172a;
-            line-height: 1.1;
-            max-height: 2.2em;
-            overflow: hidden;
-          }
-          .cracha-badge {
-            display: inline-block;
-            background: #e2e8f0;
-            color: #334155;
-            font-size: 6pt;
-            font-weight: 700;
-            padding: 1px 4px;
-            border-radius: 2px;
-            margin: 1.5mm 0 1mm 0;
-            text-transform: uppercase;
-          }
-          .badge-dir {
-            background: #dbeafe;
-            color: #1e40af;
-          }
-          .cracha-id {
-            font-size: 6pt;
-            font-family: monospace;
-            color: #64748b;
-          }
-          .cracha-footer {
-            border-top: 1px solid #e2e8f0;
-            font-size: 5.5pt;
-            color: #64748b;
-            text-align: center;
-            padding-top: 1mm;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="pagina-a4">
-          ${crachasHtml}
-        </div>
-        <script>
-          window.onload = function() {
-            window.print();
-          };
-        <\/script>
-      </body>
-      </html>
-    `);
-    janelaImpressao.document.close();
-  }
-
   async function markPresenceFromList(identifier) {
     if (!identifier) return;
 
@@ -633,6 +737,27 @@ const FiscalEngine = (() => {
     }
   }
 
+  async function resendCredentialEmail() {
+    const session = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || '{}');
+    if (!session.sessionToken) {
+      getStatusBanner('Sessão expirada. Autentique-se novamente.', 'error');
+      return;
+    }
+
+    getStatusBanner('Enviando QR Code para seu e-mail...', 'loading');
+    try {
+      const res = await ApiService.reenviarCredencialEmail(session.sessionToken);
+      if (res && res.sucesso) {
+        getStatusBanner(res.mensagem || 'QR Code reenviado com sucesso.', 'success');
+      } else {
+        getStatusBanner((res && res.mensagem) || 'Não foi possível reenviar a credencial.', 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      getStatusBanner('Erro de conexão ao reenviar e-mail.', 'error');
+    }
+  }
+
   // =========================================================
   // ENCERRAMENTO DE SESSÃO FISCAL
   // =========================================================
@@ -657,7 +782,7 @@ const FiscalEngine = (() => {
     if (identityForm) identityForm.classList.remove('hidden');
 
     const subtitle = document.getElementById('headerSubtitle');
-    if (subtitle) subtitle.textContent = 'Portal de Credencial Acadêmica';
+    if (subtitle) subtitle.textContent = 'Autenticação Digital & Simulações Clínicas';
 
     const eventName = document.getElementById('eventName');
     if (eventName) eventName.value = '';
@@ -683,31 +808,52 @@ const FiscalEngine = (() => {
     }
   }
 
+  // =========================================================
+  // INICIALIZAÇÃO DE GATILHOS (DUPLO CLIQUE, TOUCH E ATALHO)
+  // =========================================================
+
   function initListeners() {
-    const logo = document.getElementById('laiftLogo');
-    if (!logo) return;
+    const triggerElements = [
+      document.getElementById('fiscalTriggerArea'),
+      document.getElementById('laiftLogo'),
+      document.getElementById('globalHeader')
+    ].filter(Boolean);
 
-    logo.addEventListener('dblclick', openFiscalLogin);
-
-    logo.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+    triggerElements.forEach(el => {
+      // Duplo clique Desktop
+      el.addEventListener('dblclick', (e) => {
         e.preventDefault();
-        openFiscalLogin();
-      }
+        abrirModalLogin();
+      });
+
+      // Toque duplo em dispositivos móveis
+      let lastTap = 0;
+      el.addEventListener('touchend', (e) => {
+        const currentTime = Date.now();
+        const tapLength = currentTime - lastTap;
+        if (tapLength < 400 && tapLength > 0) {
+          e.preventDefault();
+          abrirModalLogin();
+        }
+        lastTap = currentTime;
+      });
     });
 
-    logo.addEventListener('touchstart', () => {
-      if (fiscalSession) return;
-      logoPressTimer = setTimeout(openFiscalLogin, 700);
-    }, { passive: true });
-
-    logo.addEventListener('touchend', () => clearTimeout(logoPressTimer), { passive: true });
-    logo.addEventListener('touchcancel', () => clearTimeout(logoPressTimer), { passive: true });
+    // Atalho de Teclado: Ctrl + Shift + F ou Cmd + Shift + F
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'F' || e.key === 'f')) {
+        e.preventDefault();
+        abrirModalLogin();
+      }
+    });
   }
 
   return {
     initListeners,
-    openFiscalLogin,
+    abrirModalLogin,
+    fecharModalLogin,
+    confirmarLoginModal,
+    openFiscalLogin: abrirModalLogin,
     saveActiveEvent,
     startFiscalScanner,
     submitManualCheckin,
@@ -716,12 +862,14 @@ const FiscalEngine = (() => {
     logoutFiscal,
     resendCredentialEmail,
     abrirStudioCracha,
-    gerarCrachaDireto
-
+    gerarCrachaDireto,
+    baixarListaPresencaCsv,
+    imprimirCrachasSelecionados,
+    verificarSaudeRedeIA
   };
 })();
 
-// Declarações globais para suporte aos botões e eventos inline do HTML
+// Declarações globais para suportar chamadas inline no HTML
 window.FiscalEngine = FiscalEngine;
 window.resendCredentialEmail = FiscalEngine.resendCredentialEmail;
 window.saveActiveEvent = FiscalEngine.saveActiveEvent;
@@ -731,13 +879,6 @@ window.scheduleMemberSearch = FiscalEngine.scheduleMemberSearch;
 window.logoutFiscal = FiscalEngine.logoutFiscal;
 window.gerarCrachaDireto = FiscalEngine.gerarCrachaDireto;
 window.abrirStudioCracha = FiscalEngine.abrirStudioCracha;
-
+window.verificarSaudeRedeIA = FiscalEngine.verificarSaudeRedeIA;
 
 window.addEventListener('DOMContentLoaded', FiscalEngine.initListeners);
-
-return {
-    // ... métodos anteriores ...
-    baixarListaPresencaCsv: baixarListaPresencaCsv,
-    imprimirCrachasSelecionados: imprimirCrachasSelecionados
-  };
-
