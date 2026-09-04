@@ -400,6 +400,210 @@ const FiscalEngine = (() => {
     });
   }
 
+  /**
+   * Dispara o download automático do CSV com UTF-8 BOM
+   */
+  async function baixarListaPresencaCsv() {
+    try {
+      const res = await ApiService.exportarPresencasCsv(fiscalSession, null);
+      if (!res || !res.sucesso) {
+        alert(res.mensagem || 'Falha ao gerar CSV.');
+        return;
+      }
+
+      // Converte o Base64 retornado pelo Apps Script em Blob para download direto
+      const byteCharacters = atob(res.csvBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'text/csv;charset=utf-8;' });
+
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', res.nomeArquivo || 'presencas_laift.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error(e);
+      alert('Erro de conexão ao exportar presenças.');
+    }
+  }
+
+  /**
+   * Gera folha A4 com grade 2x4 contendo 8 crachás (formato padrão CR-80)
+   */
+  function imprimirCrachasSelecionados(membrosAlvo) {
+    // Caso nenhum membro específico seja passado, utiliza a lista carregada na busca do fiscal
+    const lista = membrosAlvo || window.ultimosMembrosBuscados || [];
+    if (!lista || lista.length === 0) {
+      alert('Nenhum membro selecionado ou localizado para impressão de crachás.');
+      return;
+    }
+
+    const janelaImpressao = window.open('', '_blank');
+    if (!janelaImpressao) {
+      alert('Por favor, libere a abertura de popups para imprimir os crachás.');
+      return;
+    }
+
+    let crachasHtml = '';
+    lista.forEach(function(m) {
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&format=svg&data=' + encodeURIComponent('LAIFT:v1:' + (m.tokenQr || ''));
+      
+      crachasHtml += `
+        <div class="cracha-card">
+          <div class="cracha-header">
+            <div class="cracha-org">UNINASSAU SALVADOR</div>
+            <div class="cracha-title">LIGA ACADÊMICA LAIFT</div>
+          </div>
+          <div class="cracha-body">
+            <div class="cracha-qr-box">
+              <img src="${qrUrl}" alt="QR" class="cracha-qr"/>
+            </div>
+            <div class="cracha-info">
+              <div class="cracha-nome">${m.nome || 'Participante'}</div>
+              <div class="cracha-badge ${String(m.tipo).toLowerCase() === 'diretoria' ? 'badge-dir' : ''}">${m.tipo || 'Membro'}</div>
+              <div class="cracha-id">ID: ${m.identificador || '---'}</div>
+            </div>
+          </div>
+          <div class="cracha-footer">Farmacologia & Toxicologia Clínica</div>
+        </div>
+      `;
+    });
+
+    janelaImpressao.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Crachás Oficiais LAIFT - Padrão CR-80</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+          * {
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: #fff;
+          }
+          /* Grade 2 colunas x 4 linhas = 8 crachás por folha A4 */
+          .pagina-a4 {
+            display: grid;
+            grid-template-columns: repeat(2, 86mm);
+            grid-auto-rows: 54mm;
+            gap: 4mm 6mm;
+            justify-content: center;
+            page-break-after: always;
+          }
+          .cracha-card {
+            width: 86mm;
+            height: 54mm;
+            border: 1px dashed #94a3b8;
+            border-radius: 4mm;
+            padding: 3mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            background: #ffffff;
+          }
+          .cracha-header {
+            border-bottom: 1.5px solid #0f172a;
+            padding-bottom: 1.5mm;
+            text-align: center;
+          }
+          .cracha-org {
+            font-size: 6pt;
+            font-weight: 700;
+            color: #475569;
+            letter-spacing: 0.5px;
+          }
+          .cracha-title {
+            font-size: 8.5pt;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .cracha-body {
+            display: flex;
+            align-items: center;
+            gap: 3mm;
+            margin: auto 0;
+          }
+          .cracha-qr-box {
+            width: 26mm;
+            height: 26mm;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .cracha-qr {
+            width: 100%;
+            height: 100%;
+          }
+          .cracha-info {
+            flex: 1;
+            overflow: hidden;
+          }
+          .cracha-nome {
+            font-size: 8pt;
+            font-weight: 800;
+            color: #0f172a;
+            line-height: 1.1;
+            max-height: 2.2em;
+            overflow: hidden;
+          }
+          .cracha-badge {
+            display: inline-block;
+            background: #e2e8f0;
+            color: #334155;
+            font-size: 6pt;
+            font-weight: 700;
+            padding: 1px 4px;
+            border-radius: 2px;
+            margin: 1.5mm 0 1mm 0;
+            text-transform: uppercase;
+          }
+          .badge-dir {
+            background: #dbeafe;
+            color: #1e40af;
+          }
+          .cracha-id {
+            font-size: 6pt;
+            font-family: monospace;
+            color: #64748b;
+          }
+          .cracha-footer {
+            border-top: 1px solid #e2e8f0;
+            font-size: 5.5pt;
+            color: #64748b;
+            text-align: center;
+            padding-top: 1mm;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="pagina-a4">
+          ${crachasHtml}
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+          };
+        <\/script>
+      </body>
+      </html>
+    `);
+    janelaImpressao.document.close();
+  }
+
   async function markPresenceFromList(identifier) {
     if (!identifier) return;
 
@@ -513,6 +717,7 @@ const FiscalEngine = (() => {
     resendCredentialEmail,
     abrirStudioCracha,
     gerarCrachaDireto
+
   };
 })();
 
@@ -527,4 +732,12 @@ window.logoutFiscal = FiscalEngine.logoutFiscal;
 window.gerarCrachaDireto = FiscalEngine.gerarCrachaDireto;
 window.abrirStudioCracha = FiscalEngine.abrirStudioCracha;
 
+
 window.addEventListener('DOMContentLoaded', FiscalEngine.initListeners);
+
+return {
+    // ... métodos anteriores ...
+    baixarListaPresencaCsv: baixarListaPresencaCsv,
+    imprimirCrachasSelecionados: imprimirCrachasSelecionados
+  };
+
