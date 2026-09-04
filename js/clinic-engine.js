@@ -9,6 +9,7 @@ const ClinicEngine = (() => {
   let patience = 100;
   let elapsedSeconds = 0;
   let clockInterval = null;
+  let aiCooldownTimer = null;
   let isCaseActive = false;
   let conversationHistory = [];
   let requestedExams = [];
@@ -31,6 +32,7 @@ const ClinicEngine = (() => {
     dom.dashboardView = document.getElementById('clinicDashboardView');
     dom.workspaceView = document.getElementById('clinicWorkspaceView');
     dom.bedsGrid = document.getElementById('patientBedsGrid');
+    dom.btnGenerateAiCase = document.getElementById('btnGenerateAiCase');
 
     // Abas de navegação da consulta
     dom.tabButtons = document.querySelectorAll('.clinic-tab-btn');
@@ -80,7 +82,7 @@ const ClinicEngine = (() => {
 
     if (typeof clinicalCases === 'undefined' || !Array.isArray(clinicalCases) || clinicalCases.length === 0) {
       dom.bedsGrid.innerHTML = `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--gray);">
+        <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--gray, #64748b);">
           <h3>Nenhum paciente cadastrado no momento.</h3>
           <p>Clique em <strong>⚡ Gerar Caso com IA</strong> para admitir um paciente no plantão.</p>
         </div>
@@ -102,13 +104,13 @@ const ClinicEngine = (() => {
       card.innerHTML = `
         <div class="bed-header">
           <span class="bed-tag">${c.tipo === 'emergencia' ? '🚨 Emergência' : '🩺 Ambulatório'}</span>
-          <span class="bed-status" style="font-weight: bold; color: ${isConcluido ? 'var(--success)' : 'var(--primary)'};">
+          <span class="bed-status" style="font-weight: bold; color: ${isConcluido ? 'var(--success, #16a34a)' : 'var(--primary, #0f766e)'};">
             ${isConcluido ? '✅ Concluído' : '🟡 Aguardando'}
           </span>
         </div>
-        <h4 style="margin: 8px 0 4px; font-size: 1.15rem; color: var(--primary);">Leito 0${index + 1}: ${nome}</h4>
+        <h4 style="margin: 8px 0 4px; font-size: 1.15rem; color: var(--primary, #0f766e);">Leito 0${index + 1}: ${nome}</h4>
         <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 44px;">"${queixa}"</p>
-        <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--gray); border-top: 1px solid #e2e8f0; padding-top: 8px; margin-bottom: 14px;">
+        <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--gray, #64748b); border-top: 1px solid #e2e8f0; padding-top: 8px; margin-bottom: 14px;">
           <span>Idade: <strong>${idade} anos</strong></span>
           <span>Dificuldade: <strong>${c.dificuldade || 'Média'}</strong></span>
         </div>
@@ -144,12 +146,30 @@ const ClinicEngine = (() => {
     showBedsDashboard();
   }
 
+  // =========================================================
+  // GERAÇÃO DE CASO PROCEDURAL COM RATE LIMITING
+  // =========================================================
+
   async function solicitarCasoProcedural() {
+    initDomReferences();
+    const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
+    if (btn && btn.disabled) return;
+
     const topico = prompt(
       'Digite o tema clínico ou toxicológico que deseja treinar:\n(Ex: Intoxicação por Chumbo, Picada de Escorpião, Paracetamol, Monóxido de Carbono)',
       'Intoxicação por Praguicidas'
     );
     if (!topico || !topico.trim()) return;
+
+    // Recupera dados do estudante autenticado
+    const session = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
+    const identifier = session.identifier || 'anonimo';
+    const tipoUsuario = session.type || 'Visitante';
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Sintetizando caso com IA...';
+    }
 
     if (typeof showStatus === 'function') {
       showStatus('Sintetizando novo caso clínico com IA...', 'loading');
@@ -158,15 +178,32 @@ const ClinicEngine = (() => {
     try {
       let res = null;
       if (typeof ApiService !== 'undefined' && typeof ApiService.gerarCasoProcedural === 'function') {
-        res = await ApiService.gerarCasoProcedural(topico.trim(), 'Avançado');
+        res = await ApiService.gerarCasoProcedural(topico.trim(), 'Avançado', identifier);
       }
 
       if (typeof hideStatus === 'function') hideStatus();
 
+      // Bloqueio por Cooldown retornado pelo Backend
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Aguarde antes de solicitar outro caso com IA.');
+        
+        // Se a mensagem mencionar aguardo, inicia o temporizador
+        const tempoPadrao = (tipoUsuario === 'Visitante') ? 300 : 30;
+        iniciarContagemCooldownIA(tempoPadrao);
+        return;
+      }
+
       if (res && res.sucesso && res.caso) {
-        clinicalCases.push(res.caso);
+        if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
+          clinicalCases.push(res.caso);
+        }
         renderBedsGrid();
         alert(`✅ Caso criado com sucesso: ${res.caso.paciente.nome} (${res.caso.titulo})!`);
+
+        // Ativa o cooldown pós-geração bem-sucedida
+        const cooldownSegundos = (tipoUsuario === 'Visitante') ? 300 : 30;
+        iniciarContagemCooldownIA(cooldownSegundos);
+
         openBed(res.caso.id);
         return;
       }
@@ -176,13 +213,49 @@ const ClinicEngine = (() => {
       if (typeof hideStatus === 'function') hideStatus();
       console.warn('[ClinicEngine] Acionando síntese local de contingência:', err);
 
-      // Gerador Local Dinâmico para nunca travar a aula
       const casoBackup = gerarCasoLocalContingencia(topico.trim());
-      clinicalCases.push(casoBackup);
+      if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
+        clinicalCases.push(casoBackup);
+      }
       renderBedsGrid();
       alert(`⚡ Caso gerado pelo simulador local: ${casoBackup.paciente.nome} (${casoBackup.titulo})!`);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⚡ Gerar Caso com IA';
+      }
+
       openBed(casoBackup.id);
     }
+  }
+
+  function iniciarContagemCooldownIA(segundos) {
+    initDomReferences();
+    const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
+    if (!btn) return;
+
+    clearInterval(aiCooldownTimer);
+    let restante = segundos;
+    btn.disabled = true;
+
+    const atualizarTexto = () => {
+      const min = Math.floor(restante / 60);
+      const seg = restante % 60;
+      btn.textContent = `⏳ Aguarde (${min > 0 ? `${min}m ` : ''}${String(seg).padStart(2, '0')}s)`;
+    };
+
+    atualizarTexto();
+
+    aiCooldownTimer = setInterval(() => {
+      restante--;
+      if (restante <= 0) {
+        clearInterval(aiCooldownTimer);
+        btn.disabled = false;
+        btn.textContent = '⚡ Gerar Caso com IA';
+      } else {
+        atualizarTexto();
+      }
+    }, 1000);
   }
 
   function gerarCasoLocalContingencia(tema) {
@@ -280,7 +353,7 @@ const ClinicEngine = (() => {
     if (dom.patientHistory) {
       dom.patientHistory.innerHTML = `
         <p style="margin-bottom: 8px;"><strong>Admissão:</strong> ${currentCase.historicoAdmissao}</p>
-        <p style="font-size: 0.85rem; color: var(--text-muted);"><strong>Alergias Relatadas:</strong> ${currentCase.paciente.alergias}</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted, #64748b);"><strong>Alergias Relatadas:</strong> ${currentCase.paciente.alergias}</p>
       `;
     }
   }
@@ -327,7 +400,7 @@ const ClinicEngine = (() => {
       row.innerHTML = `
         <div>
           <div style="font-weight: 600; font-size: 0.9rem;">${exam.nome}</div>
-          <small style="color: var(--text-muted);">Tempo estimado: +${exam.custoTempoMin} min virtuais</small>
+          <small style="color: var(--text-muted, #64748b);">Tempo estimado: +${exam.custoTempoMin} min virtuais</small>
         </div>
         <button class="btn btn-secondary btn-sm" type="button" onclick="ClinicEngine.requestExam('${exam.id}')">Solicitar</button>
       `;
@@ -433,7 +506,6 @@ const ClinicEngine = (() => {
       return intentHistory[chave];
     }
 
-    // 1. Identificação / Nome
     if (p.includes('seu nome') || p.includes('quem é você') || p.includes('como se chama') || p.includes('quem é o senhor')) {
       const vez = registrarIntent('nome');
       if (casoId === 'caso_tox_01') {
@@ -444,7 +516,6 @@ const ClinicEngine = (() => {
       return `${prefixo}Me chamo ${currentCase.paciente.nome}, doutor(a)...`;
     }
 
-    // 2. Exame Físico pelo Chat
     if (p.includes('auscultar') || p.includes('estetoscópio') || p.includes('ouvir seu peito') || p.includes('ouvir o pulmão') || p.includes('respirar fundo')) {
       if (casoId === 'caso_tox_01') {
         return `${prefixo}Pode colocar o aparelho... mas não consigo puxar o ar fundo sem engasgar... <em>[Ausculta pulmonar: Roncos difusos, sibilos disseminados bilaterais e fervilhar de estertores crepitantes em ambas as bases pulmonares (broncorreia severa).]</em>`;
@@ -459,7 +530,6 @@ const ClinicEngine = (() => {
       return `${prefixo}Pode olhar... sinto minhas vistas pesadas de cansaço... <em>[Exame ocular: Pupilas isocóricas e fotorreagentes, escleras anictéricas.]</em>`;
     }
 
-    // 3. Dor e Sintomas
     if (p.includes('dor') || p.includes('dói') || p.includes('doendo') || p.includes('onde dói') || p.includes('sente dor')) {
       if (casoId === 'caso_tox_01') {
         return `${prefixo}O que mais dói é esse aperto no peito, parece que sentaram no meu tórax! E a cabeça tá estourando de pontada com a vista escura.`;
@@ -467,7 +537,6 @@ const ClinicEngine = (() => {
       return `${prefixo}Dói o corpo inteiro, doutor(a)... uma queimação pesada e insuportável nos músculos.`;
     }
 
-    // 4. Veneno / Remédios
     if (p.includes('veneno') || p.includes('produto') || p.includes('química') || p.includes('lavoura') || p.includes('inseticida')) {
       if (casoId === 'caso_tox_01') {
         return `${prefixo}Eu tava borrifando veneno de matar lagarta no milho com a bomba costal. Tinha um cheiro muito forte e enjoativo, parecendo alho podre!`;
@@ -485,7 +554,6 @@ const ClinicEngine = (() => {
       return `${prefixo}Tomei os remédios que me receitaram normalmente...`;
     }
 
-    // 5. Acolhimento
     if (p.includes('calma') || p.includes('tranquilo') || p.includes('vai passar') || p.includes('estamos aqui') || p.includes('ajudar')) {
       patience = Math.min(100, patience + 6);
       vitality = Math.min(100, vitality + 1);
@@ -495,7 +563,6 @@ const ClinicEngine = (() => {
         : `${prefixo}Muito obrigada pela atenção e paciência, doutor(a)... me sinto mais segura ouvindo isso.`;
     }
 
-    // Resposta Padrão
     if (isEmergencia) {
       return `${prefixo}Doutor(a)... tá tudo escurecendo na minha vista, tô afogando nessa saliva e meu peito tá apertado... me ajuda logo, por favor!`;
     }
@@ -787,9 +854,6 @@ const ClinicEngine = (() => {
     });
   }
 
-  // =========================================================
-  // EXPOSIÇÃO PÚBLICA DO MÓDULO (TODAS AS FUNÇÕES EXPORTADAS)
-  // =========================================================
   return {
     init,
     showBedsDashboard,
@@ -805,7 +869,7 @@ const ClinicEngine = (() => {
   };
 })();
 
-// Declarações globais para suporte aos atributos inline do HTML
+// Declarações globais para suporte aos botões do HTML
 window.submitPatientQuestion = ClinicEngine.submitPatientQuestion;
 window.finalizeClinicalCase = ClinicEngine.finalizeClinicalCase;
 window.ClinicEngine = ClinicEngine;
