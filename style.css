@@ -1868,6 +1868,62 @@ label {
 .btn-block {
   width: 100%;
 }
+
+/* ==========================================================================
+   MÓDULO CLÍNICO: ACERVO DA LIGA & RADAR EPIDEMIOLÓGICO
+   ========================================================================== */
+
+#acervoToolbar {
+  transition: all 0.2s ease-in-out;
+}
+
+#acervoToolbar input:focus,
+#acervoToxFilter:focus {
+  outline: none;
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.15);
+}
+
+.bed-card.ambulatory {
+  border-top: 4px solid #0284c7;
+}
+
+.semiology-wrapper {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.semiology-nav::-webkit-scrollbar,
+.semiology-chips-area::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+.semiology-nav::-webkit-scrollbar-thumb,
+.semiology-chips-area::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+@media (max-width: 640px) {
+  .clinic-hub-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  #acervoToolbar > div {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  #acervoSearchInput,
+  #acervoToxFilter {
+    width: 100%;
+  }
+}
+
 /* =========================================================
    ANIMAÇÕES E RESPONSIVIDADE
 ========================================================= */
