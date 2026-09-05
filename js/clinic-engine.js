@@ -1,11 +1,13 @@
 /**
- * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE & PLANTÃO LAIFT)
+ * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE, ACERVO & RADAR EPIDEMIOLÓGICO)
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
  * 
- * Inovações:
- * - Pacientes com múltiplos arquétipos (Leigo, Exigente, "Dr. Google", Evasivo).
- * - Guia Semiológico Prático baseado em Metodologia Clínica (4 Eixos de Investigação).
- * - Dinâmica aprimorada de Paciência e Estabilidade Clínica.
+ * Inovações da Versão Integrada:
+ * - Alternância entre Plantão Ativo e Biblioteca Comunitária da Liga (Acervo).
+ * - Filtros por toxíndrome e busca semântica em tempo real.
+ * - Reuso de casos com custo zero de tokens de inferência.
+ * - Painel modal do Radar Epidemiológico integrado à telemetria do Apps Script.
+ * - Roteiro semiológico em 4 eixos e envio enriquecido ao preceptor para Padrão Ouro.
  */
 
 const ClinicEngine = (() => {
@@ -21,6 +23,10 @@ const ClinicEngine = (() => {
   let intentHistory = {};
   let caseOutcome = 'EM_ANDAMENTO';
   let activeSemiologyAxis = 'cronologia';
+  
+  // Estado de Exibição e Acervo
+  let modoExibicaoAtual = 'plantao'; // 'plantao' | 'acervo'
+  let casosAcervoCache = [];
 
   // Cache centralizado de referências do DOM
   const dom = {};
@@ -38,7 +44,22 @@ const ClinicEngine = (() => {
     dom.dashboardView = document.getElementById('clinicDashboardView');
     dom.workspaceView = document.getElementById('clinicWorkspaceView');
     dom.bedsGrid = document.getElementById('patientBedsGrid');
+    dom.communityBedsGrid = document.getElementById('communityBedsGrid');
     dom.btnGenerateAiCase = document.getElementById('btnGenerateAiCase');
+
+    // Controles do Acervo e Modos
+    dom.btnModoPlantao = document.getElementById('btnModoPlantao');
+    dom.btnModoAcervo = document.getElementById('btnModoAcervo');
+    dom.acervoToolbar = document.getElementById('acervoToolbar');
+    dom.acervoSearchInput = document.getElementById('acervoSearchInput');
+    dom.acervoToxFilter = document.getElementById('acervoToxFilter');
+
+    // Radar Epidemiológico
+    dom.modalRadarEpidemio = document.getElementById('modalRadarEpidemio');
+    dom.radarTaxaSobrevivencia = document.getElementById('radarTaxaSobrevivencia');
+    dom.radarTotalAtendimentos = document.getElementById('radarTotalAtendimentos');
+    dom.radarToxindromesList = document.getElementById('radarToxindromesList');
+    dom.radarAgentesList = document.getElementById('radarAgentesList');
 
     // Abas de navegação da consulta
     dom.tabButtons = document.querySelectorAll('.clinic-tab-btn');
@@ -77,8 +98,42 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // 1. GESTÃO DA GRADE DE LEITOS (MAPA DO PLANTÃO)
+  // 1. GESTÃO DE LEITOS (PLANTÃO ATIVO VS. ACERVO COLETIVO)
   // =========================================================
+
+  function setModoExibicao(modo) {
+    initDomReferences();
+    modoExibicaoAtual = modo;
+
+    if (modo === 'plantao') {
+      if (dom.btnModoPlantao) {
+        dom.btnModoPlantao.className = 'btn btn-primary btn-sm';
+      }
+      if (dom.btnModoAcervo) {
+        dom.btnModoAcervo.className = 'btn btn-outline btn-sm';
+      }
+      if (dom.acervoToolbar) dom.acervoToolbar.classList.add('hidden');
+      if (dom.communityBedsGrid) dom.communityBedsGrid.classList.add('hidden');
+      if (dom.bedsGrid) dom.bedsGrid.classList.remove('hidden');
+      renderBedsGrid();
+    } else {
+      if (dom.btnModoPlantao) {
+        dom.btnModoPlantao.className = 'btn btn-outline btn-sm';
+      }
+      if (dom.btnModoAcervo) {
+        dom.btnModoAcervo.className = 'btn btn-primary btn-sm';
+      }
+      if (dom.acervoToolbar) dom.acervoToolbar.classList.remove('hidden');
+      if (dom.bedsGrid) dom.bedsGrid.classList.add('hidden');
+      if (dom.communityBedsGrid) dom.communityBedsGrid.classList.remove('hidden');
+
+      if (casosAcervoCache.length === 0) {
+        carregarAcervoComunitario();
+      } else {
+        renderAcervoGrid(casosAcervoCache);
+      }
+    }
+  }
 
   function renderBedsGrid() {
     initDomReferences();
@@ -90,7 +145,7 @@ const ClinicEngine = (() => {
       dom.bedsGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--gray, #64748b);">
           <h3>Nenhum paciente internado no momento.</h3>
-          <p>Clique em <strong>⚡ Gerar Caso com IA</strong> para admitir um paciente no plantão.</p>
+          <p>Clique em <strong>⚡ Gerar Caso com IA</strong> ou explore o <strong>Acervo da Liga</strong>.</p>
         </div>
       `;
       return;
@@ -135,11 +190,199 @@ const ClinicEngine = (() => {
     });
   }
 
+  // =========================================================
+  // 2. INTEGRAÇÃO COM O ACERVO COLETIVO (CUSTO ZERO DE TOKENS)
+  // =========================================================
+
+  async function carregarAcervoComunitario() {
+    initDomReferences();
+    if (!dom.communityBedsGrid) return;
+
+    dom.communityBedsGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--gray);">
+        <p>⏳ Carregando biblioteca de casos clínicos do Acervo LAIFT...</p>
+      </div>
+    `;
+
+    try {
+      let res;
+      if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({ acao: 'listarCasosAcervo' });
+      }
+
+      if (res && res.sucesso && Array.isArray(res.casos)) {
+        casosAcervoCache = res.casos;
+        renderAcervoGrid(casosAcervoCache);
+      } else {
+        dom.communityBedsGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--gray);">
+            <p>Nenhum caso publicado no acervo comunitário até o momento.</p>
+          </div>
+        `;
+      }
+    } catch (err) {
+      console.warn('Falha ao carregar acervo comunitário:', err);
+      dom.communityBedsGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--danger, #dc2626);">
+          <p>Erro ao conectar com o acervo da planilha. Tente novamente.</p>
+        </div>
+      `;
+    }
+  }
+
+  function renderAcervoGrid(casos) {
+    initDomReferences();
+    if (!dom.communityBedsGrid) return;
+    dom.communityBedsGrid.innerHTML = '';
+
+    if (!casos || casos.length === 0) {
+      dom.communityBedsGrid.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--gray);">
+          <p>Nenhum caso coincide com os filtros aplicados.</p>
+        </div>
+      `;
+      return;
+    }
+
+    casos.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'bed-card ambulatory';
+      card.style.borderTop = '4px solid #0284c7';
+
+      card.innerHTML = `
+        <div class="bed-header">
+          <span class="bed-tag" style="background: #e0f2fe; color: #0369a1;">📚 ${c.toxindrome || 'Geral'}</span>
+          <span class="bed-status" style="font-weight: bold; color: #0284c7;">
+            ⚡ Custo Zero
+          </span>
+        </div>
+        <h4 style="margin: 8px 0 4px; font-size: 1.15rem; color: #0369a1;">${c.titulo || c.topico}</h4>
+        <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 42px;">"${c.queixaPrincipal || 'Caso clínico auditado no acervo.'}"</p>
+        <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--gray); border-top: 1px solid #e2e8f0; padding-top: 8px; margin-bottom: 14px;">
+          <span>Agente: <strong>${c.agente || 'Geral'}</strong></span>
+          <span>Nível: <strong>${c.dificuldade || 'Médio'}</strong></span>
+        </div>
+        <button class="btn btn-outline" style="width: 100%; border-color: #0284c7; color: #0284c7;" type="button" onclick="ClinicEngine.assumirCasoDoAcervo('${c.id}')">
+          📖 Iniciar Caso do Acervo
+        </button>
+      `;
+
+      dom.communityBedsGrid.appendChild(card);
+    });
+  }
+
+  function filtrarAcervo() {
+    const termo = (dom.acervoSearchInput?.value || '').toLowerCase();
+    const toxFiltro = (dom.acervoToxFilter?.value || '').toLowerCase();
+
+    const filtrados = casosAcervoCache.filter(c => {
+      const matchTexto = !termo || 
+        (c.titulo && c.titulo.toLowerCase().includes(termo)) ||
+        (c.topico && c.topico.toLowerCase().includes(termo)) ||
+        (c.agente && c.agente.toLowerCase().includes(termo)) ||
+        (c.queixaPrincipal && c.queixaPrincipal.toLowerCase().includes(termo));
+
+      const matchTox = !toxFiltro || (c.toxindrome && c.toxindrome.toLowerCase().includes(toxFiltro));
+      return matchTexto && matchTox;
+    });
+
+    renderAcervoGrid(filtrados);
+  }
+
+  function assumirCasoDoAcervo(casoId) {
+    const caso = casosAcervoCache.find(c => c.id === casoId);
+    if (!caso) return;
+
+    if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
+      if (!clinicalCases.some(c => c.id === caso.id)) {
+        clinicalCases.unshift(caso);
+      }
+    }
+
+    setModoExibicao('plantao');
+    openBed(caso.id);
+  }
+
+  // =========================================================
+  // 3. RADAR EPIDEMIOLÓGICO E PEDAGÓGICO
+  // =========================================================
+
+  async function abrirRadarEpidemiologico() {
+    initDomReferences();
+    if (!dom.modalRadarEpidemio) return;
+
+    dom.modalRadarEpidemio.style.display = 'flex';
+
+    if (dom.radarTaxaSobrevivencia) dom.radarTaxaSobrevivencia.textContent = '...';
+    if (dom.radarTotalAtendimentos) dom.radarTotalAtendimentos.textContent = '...';
+    if (dom.radarToxindromesList) dom.radarToxindromesList.innerHTML = 'Carregando indicadores...';
+    if (dom.radarAgentesList) dom.radarAgentesList.innerHTML = 'Carregando indicadores...';
+
+    try {
+      let res;
+      if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({ acao: 'obterDashboardEpidemiologico' });
+      }
+
+      if (res && res.sucesso) {
+        if (dom.radarTaxaSobrevivencia) dom.radarTaxaSobrevivencia.textContent = res.taxaSobrevivencia || '0%';
+        if (dom.radarTotalAtendimentos) dom.radarTotalAtendimentos.textContent = res.totalAtendimentos || '0';
+
+        // Renderiza chips de Toxíndromes
+        if (dom.radarToxindromesList) {
+          dom.radarToxindromesList.innerHTML = '';
+          const toxs = res.toxindromes || {};
+          const chavesTox = Object.keys(toxs);
+          if (chavesTox.length === 0) {
+            dom.radarToxindromesList.innerHTML = '<span style="font-size: 0.8rem; color: #64748b;">Nenhuma toxíndrome agregada ainda.</span>';
+          } else {
+            chavesTox.forEach(t => {
+              const chip = document.createElement('span');
+              chip.className = 'tag';
+              chip.style.cssText = 'background: #e2e8f0; color: #1e293b; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;';
+              chip.textContent = `${t}: ${toxs[t]} caso(s)`;
+              dom.radarToxindromesList.appendChild(chip);
+            });
+          }
+        }
+
+        // Renderiza chips de Fármacos/Agentes
+        if (dom.radarAgentesList) {
+          dom.radarAgentesList.innerHTML = '';
+          const ags = res.agentes || {};
+          const chavesAg = Object.keys(ags);
+          if (chavesAg.length === 0) {
+            dom.radarAgentesList.innerHTML = '<span style="font-size: 0.8rem; color: #64748b;">Nenhum princípio ativo registrado ainda.</span>';
+          } else {
+            chavesAg.forEach(a => {
+              const chip = document.createElement('span');
+              chip.className = 'tag';
+              chip.style.cssText = 'background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;';
+              chip.textContent = `${a}: ${ags[a]}x`;
+              dom.radarAgentesList.appendChild(chip);
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Falha ao abrir radar epidemiológico:', err);
+    }
+  }
+
+  function fecharRadarEpidemiologico() {
+    initDomReferences();
+    if (dom.modalRadarEpidemio) dom.modalRadarEpidemio.style.display = 'none';
+  }
+
+  // =========================================================
+  // 4. ATENDIMENTO CLÍNICO DO LEITO SELECIONADO
+  // =========================================================
+
   function showBedsDashboard() {
     initDomReferences();
     if (dom.workspaceView) dom.workspaceView.classList.add('hidden');
     if (dom.dashboardView) dom.dashboardView.classList.remove('hidden');
-    renderBedsGrid();
+    setModoExibicao(modoExibicaoAtual);
   }
 
   function openBed(caseId) {
@@ -157,194 +400,6 @@ const ClinicEngine = (() => {
     }
     showBedsDashboard();
   }
-
-  // =========================================================
-  // 2. GERAÇÃO DE CASOS PROCEDURAIS (GROQ CLOUD / ACERVO)
-  // =========================================================
-
-  async function solicitarCasoProcedural() {
-    initDomReferences();
-    const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
-    if (btn && btn.disabled) return;
-
-    const topico = prompt(
-      'Qual agravo farmacológico ou toxicológico deseja simular?\n\nExemplos:\n• Intoxicação por Paracetamol em dose cavalar\n• Paciente exigente pedindo Ciprofloxacino para gripe\n• Intoxicação Ocupacional por Organofosforados\n• Idoso polimedicado com interação Varfarina + AINE',
-      'Intoxicação por Paracetamol'
-    );
-    if (!topico || !topico.trim()) return;
-
-    const session = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
-    const identifier = session.identifier || 'anonimo';
-    const tipoUsuario = session.type || 'Visitante';
-
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = '⏳ Sintetizando caso clínico com IA...';
-    }
-
-    if (typeof showStatus === 'function') {
-      showStatus('Sintetizando novo caso e roteiro semiológico com Groq LPU...', 'loading');
-    }
-
-    try {
-      let res = null;
-      if (typeof ApiService !== 'undefined' && typeof ApiService.gerarCasoProcedural === 'function') {
-        res = await ApiService.gerarCasoProcedural(topico.trim(), 'Avançado', identifier);
-      }
-
-      if (typeof hideStatus === 'function') hideStatus();
-
-      if (res && res.sucesso === false) {
-        alert(res.mensagem || 'Aguarde antes de solicitar outro caso com IA.');
-        const tempoPadrao = (tipoUsuario === 'Visitante') ? 300 : 30;
-        iniciarContagemCooldownIA(tempoPadrao);
-        return;
-      }
-
-      if (res && res.sucesso && res.caso) {
-        if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
-          clinicalCases.push(res.caso);
-        }
-        renderBedsGrid();
-        alert(`✅ Novo paciente admitido no leito: ${res.caso.paciente.nome} (${res.caso.titulo})!`);
-
-        const cooldownSegundos = (tipoUsuario === 'Visitante') ? 300 : 30;
-        iniciarContagemCooldownIA(cooldownSegundos);
-        openBed(res.caso.id);
-        return;
-      }
-
-      throw new Error((res && res.mensagem) || 'Falha no retorno da API');
-    } catch (err) {
-      if (typeof hideStatus === 'function') hideStatus();
-      console.warn('[ClinicEngine] Acionando síntese local de contingência:', err);
-
-      const casoBackup = gerarCasoLocalContingencia(topico.trim());
-      if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
-        clinicalCases.push(casoBackup);
-      }
-      renderBedsGrid();
-      alert(`⚡ Caso gerado pelo simulador local: ${casoBackup.paciente.nome}!`);
-
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = '⚡ Gerar Caso com IA';
-      }
-      openBed(casoBackup.id);
-    }
-  }
-
-  function iniciarContagemCooldownIA(segundos) {
-    initDomReferences();
-    const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
-    if (!btn) return;
-
-    clearInterval(aiCooldownTimer);
-    let restante = segundos;
-    btn.disabled = true;
-
-    const atualizarTexto = () => {
-      const min = Math.floor(restante / 60);
-      const seg = restante % 60;
-      btn.textContent = `⏳ Aguarde (${min > 0 ? `${min}m ` : ''}${String(seg).padStart(2, '0')}s)`;
-    };
-
-    atualizarTexto();
-
-    aiCooldownTimer = setInterval(() => {
-      restante--;
-      if (restante <= 0) {
-        clearInterval(aiCooldownTimer);
-        btn.disabled = false;
-        btn.textContent = '⚡ Gerar Caso com IA';
-      } else {
-        atualizarTexto();
-      }
-    }, 1000);
-  }
-
-  /**
-   * Fallback de contingência offline estruturado com arquétipos e guia semiológico
-   */
-  function gerarCasoLocalContingencia(tema) {
-    const idUnico = 'caso_proc_' + Date.now();
-    const isExigente = tema.toLowerCase().includes('receita') || tema.toLowerCase().includes('antibiótico') || tema.toLowerCase().includes('encaminhamento');
-
-    return {
-      id: idUnico,
-      titulo: `Caso Simulado: ${tema}`,
-      tipo: "emergencia",
-      dificuldade: "Avançado",
-      vitalidadeInicial: 88,
-      pacienciaInicial: isExigente ? 65 : 85,
-      taxaDecaimento: { vitalidadePorMinuto: 2, pacienciaPorMinuto: 1.5 },
-      paciente: {
-        nome: isExigente ? "Renata Sampaio" : "Valdir Monteiro",
-        idade: isExigente ? 36 : 51,
-        peso: isExigente ? "62 kg" : "78 kg",
-        profissao: isExigente ? "Analista de Sistemas (Informed/Dr. Google)" : "Trabalhador Autônomo",
-        alergias: "Nega alergias conhecidas",
-        imagem: isExigente ? "👩‍💻" : "🧑"
-      },
-      queixaPrincipal: isExigente 
-        ? `Doutor, eu já pesquisei meus sintomas e tenho certeza que preciso de uma receita de antibiótico e um encaminhamento logo, estou com pressa.` 
-        : `Doutor(a)... passei mal depois de lidar com ${tema}... tô com o peito pesado, boca amarga e tontura.`,
-      historicoAdmissao: `Admitido no plantão com queixas correlacionadas a ${tema}. Apresenta sinais de ansiedade e necessidade de esclarecimento clínico imediato.`,
-      sinaisVitais: { pa: "135/85 mmHg", fc: "98 bpm", fr: "20 irpm", temp: "37.1 °C", spo2: "95%", glasgow: "15" },
-      contextoOculto: {
-        nome: isExigente ? "Renata" : "Valdir",
-        idade: isExigente ? 36 : 51,
-        pacienteProfissao: isExigente ? "Analista" : "Autônomo",
-        exposicaoReal: `Quadro patológico e/ou toxicológico associado a ${tema}.`,
-        sintomas: "desconforto gástrico, cefaleia, ansiedade e palpitações",
-        temperamento: isExigente 
-          ? "Exigente, questionadora, quer a receita imediatamente e pesquisou no Google" 
-          : "Preocupado, humilde, ansioso por ajuda médica",
-        nivelConsciencia: "Completamente lúcido e orientado"
-      },
-      guiaSemiologico: {
-        cronologia: [
-          "Há quantas horas esses sintomas começaram exatamente?",
-          "A dor ou mal-estar está piorando ou permanece constante?",
-          "O que você estava fazendo no exato momento em que começou a se sentir mal?"
-        ],
-        farmacoterapia: [
-          "Quais medicamentos você tomou por conta própria antes de vir aqui?",
-          "Você toma algum remédio contínuo para pressão, diabetes ou ansiedade?",
-          "Quantos comprimidos e qual a dosagem exata que você ingeriu hoje?"
-        ],
-        exposicao: [
-          "Houve contato com venenos, defensivos, produtos químicos ou solventes?",
-          "Você ingeriu alimentos suspeitos, bebidas ou substâncias diferentes?",
-          "Alguém na sua casa ou trabalho apresentou sintomas parecidos?"
-        ],
-        sinaisAlarme: [
-          "Você está sentindo aperto no peito, falta de ar ou palpitações fortes?",
-          "Notou visão embaçada, boca excessivamente seca ou excesso de salivação?",
-          "Apresentou vômitos, queimação no estômago ou formigamento no corpo?"
-        ]
-      },
-      perguntasSugeridas: [
-        "Há quanto tempo começaram os primeiros sintomas?",
-        "Qual remédio ou substância você tomou hoje?",
-        "Você sente queimação, falta de ar ou suor frio?"
-      ],
-      examesDisponiveis: [
-        { id: "lab_triagem", nome: "Painel Bioquímico & Função Renal/Hepática", custoTempoMin: 12, impactoVitalidade: 0, impactoPaciencia: -1, essencial: true, resultado: `Resultados bioquímicos compatíveis com estresse metabólico por ${tema}.` },
-        { id: "gaso_arterial", nome: "Gasometria Arterial e Eletrólitos", custoTempoMin: 8, impactoVitalidade: 0, impactoPaciencia: -1, essencial: true, resultado: "pH 7.36, pO2 92 mmHg, lactato normal, sem distúrbio ácido-base grave." },
-        { id: "ecg_12d", nome: "Eletrocardiograma de 12 Derivações", custoTempoMin: 5, impactoVitalidade: 0, impactoPaciencia: 0, essencial: true, resultado: "Ritmo sinusal, FC 98 bpm, intervalos PR e QTc dentro dos limites normais." }
-      ],
-      gabaritoPreceptor: {
-        diagnostico: `Quadro Clínico e/ou Toxicológico Agudo associado a ${tema}`,
-        conduta: "Anamnese dirigida, interrupção de automedicação errônea, suporte hidroeletrolítico, monitorização e orientação farmacêutica baseada em evidências.",
-        palavrasChave: ["anamnese", "suporte", "orientação", tema.toLowerCase()]
-      }
-    };
-  }
-
-  // =========================================================
-  // 3. ATENDIMENTO CLÍNICO DO LEITO SELECIONADO
-  // =========================================================
 
   function startCase(caseId) {
     initDomReferences();
@@ -409,7 +464,7 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // 4. GUIA SEMIOLÓGICO CLÍNICO-METODOLÓGICO (4 EIXOS)
+  // 5. GUIA SEMIOLÓGICO CLÍNICO-METODOLÓGICO (4 EIXOS)
   // =========================================================
 
   function renderSemiologyGuide() {
@@ -419,7 +474,6 @@ const ClinicEngine = (() => {
     const guia = currentCase.guiaSemiologico || null;
     const perguntasLegadas = currentCase.perguntasSugeridas || [];
 
-    // Estrutura metodológica de semiologia médica e anamnese farmacêutica
     const eixos = [
       { id: 'cronologia', icone: '⏱️', titulo: 'HMA & Início', desc: 'Evolução, tempo e ritmo dos sintomas' },
       { id: 'farmacoterapia', icone: '💊', titulo: 'Remédios & Doses', desc: 'Automedicação, contínuos e adesão' },
@@ -427,17 +481,14 @@ const ClinicEngine = (() => {
       { id: 'sinaisAlarme', icone: '⚠️', titulo: 'Sinais de Alarme', desc: 'Queimação, salivação e gravidade' }
     ];
 
-    // Container geral do guia
     const containerGuia = document.createElement('div');
     containerGuia.className = 'semiology-wrapper';
     containerGuia.style.cssText = 'width: 100%; display: flex; flex-direction: column; gap: 8px;';
 
-    // Barra de Navegação dos Eixos
     const navBar = document.createElement('div');
     navBar.className = 'semiology-nav';
     navBar.style.cssText = 'display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;';
 
-    // Área onde os chips de perguntas do eixo ativo são exibidos
     const chipsArea = document.createElement('div');
     chipsArea.className = 'semiology-chips-area';
     chipsArea.style.cssText = 'display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; padding-right: 4px;';
@@ -459,7 +510,6 @@ const ClinicEngine = (() => {
         });
         btnEixo.className = 'btn btn-sm btn-primary';
 
-        // Carrega as perguntas do eixo correspondente
         const perguntasDoEixo = (guia && guia[eixo.id]) ? guia[eixo.id] : [];
         carregarPerguntasNoEixo(perguntasDoEixo.length > 0 ? perguntasDoEixo : perguntasLegadas, chipsArea);
       };
@@ -471,7 +521,6 @@ const ClinicEngine = (() => {
     containerGuia.appendChild(chipsArea);
     dom.suggestionsList.appendChild(containerGuia);
 
-    // Renderiza inicialmente o primeiro eixo selecionado
     const perguntasIniciais = (guia && guia[activeSemiologyAxis]) ? guia[activeSemiologyAxis] : perguntasLegadas;
     carregarPerguntasNoEixo(perguntasIniciais, chipsArea);
   }
@@ -515,7 +564,6 @@ const ClinicEngine = (() => {
         chip.style.borderColor = '#cbd5e1';
       };
 
-      // Ao clicar, transfere para o input com foco imediato
       chip.onclick = () => {
         if (dom.questionInput) {
           dom.questionInput.value = perguntaTexto;
@@ -528,7 +576,7 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // 5. EXAMES LABORATORIAIS E COMPLEMENTARES
+  // 6. EXAMES LABORATORIAIS E COMPLEMENTARES
   // =========================================================
 
   function renderExamsCatalog() {
@@ -628,88 +676,7 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // 6. RESPOSTA CONTEXTUAL LOCAL (HEURÍSTICA EXPANDIDA)
-  // =========================================================
-
-  function gerarRespostaContextualLocal(pergunta) {
-    const p = pergunta.toLowerCase().trim();
-    const isExigente = currentCase && (
-      (currentCase.contextoOculto && String(currentCase.contextoOculto.temperamento).toLowerCase().includes('exigente')) ||
-      currentCase.paciente.profissao.toLowerCase().includes('google')
-    );
-
-    let prefixo = '';
-    if (vitality < 30) {
-      prefixo = "(gemendo com dor intensa, voz fraca) ...ai... doutor(a)... ";
-    } else if (vitality < 60) {
-      prefixo = "(respirando curto e cansado) ...espera um instante... ";
-    }
-
-    function registrarIntent(chave) {
-      intentHistory[chave] = (intentHistory[chave] || 0) + 1;
-      return intentHistory[chave];
-    }
-
-    // 1. Paciente querendo receita ou encaminhamento imediato ("Dr. Google" / Exigente)
-    if (p.includes('receita') || p.includes('remédio') || p.includes('encaminhamento') || p.includes('antibiótico') || p.includes('passar')) {
-      if (isExigente) {
-        return `${prefixo}É exatamente por isso que estou aqui! Já li tudo na internet e sei que preciso de um antibiótico forte ou de um especialista. Você vai me examinar direito ou só vai ficar fazendo pergunta?`;
-      }
-      return `${prefixo}Eu só queria um remédio para parar essa queimação e esse mal-estar no peito, doutor(a)... o que você acha que eu tenho?`;
-    }
-
-    // 2. Reação a explicações e empatia ("calma", "explicar", "entender")
-    if (p.includes('calma') || p.includes('tranquil') || p.includes('explicar') || p.includes('ajudar') || p.includes('entendo')) {
-      patience = Math.min(100, patience + 8);
-      vitality = Math.min(100, vitality + 1);
-      updateMetersUI();
-      if (isExigente) {
-        return `${prefixo}Tudo bem... desculpe a pressa, é que estou realmente assustada com essas dores. O que você precisa saber primeiro?`;
-      }
-      return `${prefixo}Deus te abençoe pela paciência... me sinto mais seguro ouvindo isso. Pode perguntar.`;
-    }
-
-    // 3. Investigação de Início e Cronologia (Eixo 1)
-    if (p.includes('quando') || p.includes('tempo') || p.includes('horas') || p.includes('começou') || p.includes('início')) {
-      registrarIntent('cronologia');
-      return `${prefixo}Começou faz umas 3 a 4 horas. No início era só um enjoo estranho, mas depois virou esse aperto forte e uma queimação que não passa.`;
-    }
-
-    // 4. Investigação de Farmacoterapia e Medicamentos (Eixo 2)
-    if (p.includes('tomou') || p.includes('medicamento') || p.includes('comprimido') || p.includes('dose') || p.includes('quantos')) {
-      registrarIntent('remedios');
-      if (currentCase && currentCase.contextoOculto && currentCase.contextoOculto.exposicaoReal) {
-        return `${prefixo}Olha... eu tomei alguns comprimidos para dor de cabeça hoje cedo. Como não passava, acabei tomando mais uns 4 de uma vez só sem olhar direito a caixa.`;
-      }
-      return `${prefixo}Tomei meus remédios usuais pela manhã, mas não sei se misturei algo errado...`;
-    }
-
-    // 5. Investigação de Exposição a Tóxicos / Venenos (Eixo 3)
-    if (p.includes('veneno') || p.includes('produto') || p.includes('química') || p.includes('lavoura') || p.includes('limpeza') || p.includes('cheiro')) {
-      registrarIntent('exposicao');
-      return `${prefixo}Eu mexi com uns frascos sem luva mais cedo e senti um cheiro bem forte e enjoativo... não sei se respirei aquilo ou se pegou na pele.`;
-    }
-
-    // 6. Sinais de Alarme (Eixo 4: Visão, Saliva, Suor, Respiração)
-    if (p.includes('visão') || p.includes('vista') || p.includes('saliva') || p.includes('suor') || p.includes('pupila') || p.includes('olho')) {
-      registrarIntent('alarme');
-      return `${prefixo}Minha vista tá esfumaçada sim! E sinto minha boca com muita salivação, além de um suor frio escorrendo pela testa...`;
-    }
-
-    // 7. Ausculta ou Exame Físico pelo Chat
-    if (p.includes('auscultar') || p.includes('estetoscópio') || p.includes('pulmão') || p.includes('respirar')) {
-      return `${prefixo}Pode encostar o aparelho... <em>[Ausculta Pulmonar: Presença de ruídos adventícios com sibilos e estertores crepitantes esparsos. Frequência respiratória aumentada.]</em>`;
-    }
-
-    // Resposta Padrão
-    if (isExigente) {
-      return `${prefixo}Olha, doutor(a), estou sentindo esse mal-estar todo e quero entender o plano. Vamos pedir algum exame ou você já vai me medicar?`;
-    }
-    return `${prefixo}Estou me sentindo muito fraco(a)... me dê alguma coisa para aliviar esse aperto, por favor...`;
-  }
-
-  // =========================================================
-  // 7. SUBMISSÃO DE PERGUNTAS (CHAT INTERATIVO DE ANAMNESE)
+  // 7. SUBMISSÃO DE PERGUNTAS (GROQ 20B COM FEW-SHOT)
   // =========================================================
 
   async function submitPatientQuestion() {
@@ -722,7 +689,7 @@ const ClinicEngine = (() => {
     dom.questionInput.value = '';
     if (dom.sendQuestionBtn) dom.sendQuestionBtn.disabled = true;
 
-    const typingBubble = appendChatBubble('patient', currentCase.paciente.nome, '<em>Organizando pensamentos e respondendo...</em>');
+    const typingBubble = appendChatBubble('patient', currentCase.paciente.nome, '<em>Pensando e respondendo...</em>');
 
     let falaObtida = '';
     let apiSucesso = false;
@@ -738,6 +705,8 @@ const ClinicEngine = (() => {
         sintomas: currentCase.contextoOculto ? currentCase.contextoOculto.sintomas : '',
         temperamento: currentCase.contextoOculto ? currentCase.contextoOculto.temperamento : '',
         nivelConsciencia: currentCase.contextoOculto ? currentCase.contextoOculto.nivelConsciencia : 'Lúcido',
+        toxindrome: currentCase.toxindrome || 'Geral',
+        agente: currentCase.agentePrincipal || currentCase.agente || 'Geral',
         sinaisVitais: currentCase.sinaisVitais,
         vitalidadeAtual: Math.round(vitality),
         pacienciaAtual: Math.round(patience),
@@ -770,7 +739,6 @@ const ClinicEngine = (() => {
     conversationHistory.push(`Estudante: ${text}`);
     conversationHistory.push(`Paciente: ${falaObtida}`);
 
-    // Dinâmica de paciência: perguntas longas ou repetitivas diminuem um pouco a paciência em emergências
     if (currentCase.tipo === 'emergencia') {
       patience = Math.max(0, patience - 1);
     }
@@ -790,8 +758,58 @@ const ClinicEngine = (() => {
     return bubble;
   }
 
+  function gerarRespostaContextualLocal(pergunta) {
+    const p = pergunta.toLowerCase().trim();
+    const isExigente = currentCase && (
+      (currentCase.contextoOculto && String(currentCase.contextoOculto.temperamento).toLowerCase().includes('exigente')) ||
+      (currentCase.paciente && currentCase.paciente.profissao && currentCase.paciente.profissao.toLowerCase().includes('google'))
+    );
+
+    let prefixo = '';
+    if (vitality < 30) {
+      prefixo = "(gemendo com dor intensa, voz fraca) ...ai... doutor(a)... ";
+    } else if (vitality < 60) {
+      prefixo = "(respirando curto e cansado) ...espera um instante... ";
+    }
+
+    if (p.includes('receita') || p.includes('remédio') || p.includes('encaminhamento') || p.includes('antibiótico')) {
+      if (isExigente) {
+        return `${prefixo}É por isso que estou aqui! Já li tudo na internet e sei que preciso da receita logo. Você vai me examinar direito?`;
+      }
+      return `${prefixo}Eu só queria um remédio para parar essa queimação e esse mal-estar no peito, doutor(a)...`;
+    }
+
+    if (p.includes('calma') || p.includes('tranquil') || p.includes('explicar') || p.includes('ajudar')) {
+      patience = Math.min(100, patience + 8);
+      updateMetersUI();
+      return `${prefixo}Tudo bem... me sinto mais seguro ouvindo isso. Pode perguntar.`;
+    }
+
+    if (p.includes('quando') || p.includes('tempo') || p.includes('horas') || p.includes('começou')) {
+      return `${prefixo}Começou faz umas 3 a 4 horas. No início era só um enjoo, mas depois virou esse aperto forte e uma queimação.`;
+    }
+
+    if (p.includes('tomou') || p.includes('medicamento') || p.includes('comprimido') || p.includes('dose')) {
+      return `${prefixo}Tomei uns comprimidos para dor de cabeça hoje cedo sem olhar direito a cartela...`;
+    }
+
+    if (p.includes('veneno') || p.includes('produto') || p.includes('química') || p.includes('cheiro')) {
+      return `${prefixo}Eu mexi com uns frascos sem luva mais cedo e senti um cheiro bem forte e enjoativo...`;
+    }
+
+    if (p.includes('visão') || p.includes('vista') || p.includes('saliva') || p.includes('suor') || p.includes('pupila')) {
+      return `${prefixo}Minha vista tá esfumaçada sim! E sinto minha boca com muita salivação e suor frio...`;
+    }
+
+    if (p.includes('auscultar') || p.includes('estetoscópio') || p.includes('pulmão')) {
+      return `${prefixo}Pode encostar o aparelho... <em>[Ausculta: Presença de ruídos adventícios e estertores crepitantes esparsos.]</em>`;
+    }
+
+    return `${prefixo}Estou me sentindo muito mal... me dê alguma coisa para aliviar esse aperto, por favor...`;
+  }
+
   // =========================================================
-  // 8. SOLICITAÇÃO DE EXAMES E DESFECHOS CRÍTICOS
+  // 8. EXAMES E CONDUTAS CRÍTICAS
   // =========================================================
 
   function requestExam(examId) {
@@ -840,16 +858,16 @@ const ClinicEngine = (() => {
     if (dom.submitResolutionBtn) dom.submitResolutionBtn.disabled = true;
 
     if (outcomeType === 'OBITO') {
-      alert('DESFECHO CRÍTICO: O paciente evoluiu para colapso clínico irreversível por falta de suporte terapêutico e antídotos em tempo hábil.');
+      alert('DESFECHO CRÍTICO: O paciente evoluiu para colapso clínico irreversível por falta de suporte terapêutico em tempo hábil.');
     } else if (outcomeType === 'ABANDONO') {
-      alert('DESFECHO CLÍNICO: O paciente esgotou a paciência com o atendimento prolongado ou falta de clareza e optou por evadir da unidade.');
+      alert('DESFECHO CLÍNICO: O paciente esgotou a paciência com o atendimento prolongado e optou por evadir da unidade.');
     }
 
     finalizeClinicalCase();
   }
 
   // =========================================================
-  // 9. FECHAMENTO DE CASO & AVALIAÇÃO DO PRECEPTOR
+  // 9. FECHAMENTO & AVALIAÇÃO COM GATILHO PADRÃO OURO
   // =========================================================
 
   async function finalizeClinicalCase() {
@@ -860,19 +878,23 @@ const ClinicEngine = (() => {
 
     if (dom.submitResolutionBtn) {
       dom.submitResolutionBtn.disabled = true;
-      dom.submitResolutionBtn.textContent = 'Avaliando com o Preceptor...';
+      dom.submitResolutionBtn.textContent = 'Avaliando com o Preceptor (120B)...';
     }
 
     const diagnosis = dom.studentDiagnosis?.value.trim() || 'Não informado pelo estudante.';
     const conduct = dom.studentConduct?.value.trim() || 'Não informada pelo estudante.';
 
+    // Payload enriquecido para avaliação 120B e destilação de Padrão Ouro
     const payload = {
       gabarito: currentCase.gabaritoPreceptor,
       diagnosticoAluno: diagnosis,
       condutaAluno: conduct,
       examesSolicitados: requestedExams,
       desfecho: (caseOutcome === 'EM_ANDAMENTO') ? 'CONCLUIDO' : caseOutcome,
-      tempoSegundos: elapsedSeconds
+      tempoSegundos: elapsedSeconds,
+      historicoConversa: conversationHistory,
+      toxindrome: currentCase.toxindrome || 'Geral',
+      agente: currentCase.agentePrincipal || currentCase.agente || 'Geral'
     };
 
     const session = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
@@ -985,7 +1007,173 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // 10. INICIALIZAÇÃO E OUVINTES DE EVENTOS
+  // 10. GERAÇÃO PROCEDURAL (GROQ 120B COM COOLDOWN)
+  // =========================================================
+
+  async function solicitarCasoProcedural() {
+    initDomReferences();
+    const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
+    if (btn && btn.disabled) return;
+
+    const topico = prompt(
+      'Qual agravo farmacológico ou toxicológico deseja simular?\n\nExemplos:\n• Intoxicação por Paracetamol\n• Paciente exigente pedindo Ciprofloxacino para gripe\n• Intoxicação Ocupacional por Organofosforados\n• Idoso polimedicado com interação Varfarina + AINE',
+      'Intoxicação por Paracetamol'
+    );
+    if (!topico || !topico.trim()) return;
+
+    const session = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
+    const identifier = session.identifier || 'anonimo';
+    const tipoUsuario = session.type || 'Visitante';
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Sintetizando caso com Groq 120B...';
+    }
+
+    if (typeof showStatus === 'function') {
+      showStatus('Sintetizando novo caso e roteiro semiológico com Groq 120B...', 'loading');
+    }
+
+    try {
+      let res = null;
+      if (typeof ApiService !== 'undefined' && typeof ApiService.gerarCasoProcedural === 'function') {
+        res = await ApiService.gerarCasoProcedural(topico.trim(), 'Avançado', identifier);
+      }
+
+      if (typeof hideStatus === 'function') hideStatus();
+
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Aguarde antes de solicitar outro caso com IA.');
+        const tempoPadrao = (tipoUsuario === 'Visitante') ? 300 : 30;
+        iniciarContagemCooldownIA(tempoPadrao);
+        return;
+      }
+
+      if (res && res.sucesso && res.caso) {
+        if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
+          clinicalCases.unshift(res.caso);
+        }
+        setModoExibicao('plantao');
+        renderBedsGrid();
+        alert(`✅ Novo paciente admitido no leito: ${res.caso.paciente.nome} (${res.caso.titulo})!`);
+
+        const cooldownSegundos = (tipoUsuario === 'Visitante') ? 300 : 30;
+        iniciarContagemCooldownIA(cooldownSegundos);
+        openBed(res.caso.id);
+        return;
+      }
+
+      throw new Error((res && res.mensagem) || 'Falha no retorno da API');
+    } catch (err) {
+      if (typeof hideStatus === 'function') hideStatus();
+      console.warn('[ClinicEngine] Acionando síntese local de contingência:', err);
+
+      const casoBackup = gerarCasoLocalContingencia(topico.trim());
+      if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
+        clinicalCases.unshift(casoBackup);
+      }
+      setModoExibicao('plantao');
+      renderBedsGrid();
+      alert(`⚡ Caso gerado pelo simulador local: ${casoBackup.paciente.nome}!`);
+
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⚡ Gerar Caso com IA';
+      }
+      openBed(casoBackup.id);
+    }
+  }
+
+  function iniciarContagemCooldownIA(segundos) {
+    initDomReferences();
+    const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
+    if (!btn) return;
+
+    clearInterval(aiCooldownTimer);
+    let restante = segundos;
+    btn.disabled = true;
+
+    const atualizarTexto = () => {
+      const min = Math.floor(restante / 60);
+      const seg = restante % 60;
+      btn.textContent = `⏳ Aguarde (${min > 0 ? `${min}m ` : ''}${String(seg).padStart(2, '0')}s)`;
+    };
+
+    atualizarTexto();
+
+    aiCooldownTimer = setInterval(() => {
+      restante--;
+      if (restante <= 0) {
+        clearInterval(aiCooldownTimer);
+        btn.disabled = false;
+        btn.textContent = '⚡ Gerar Caso com IA';
+      } else {
+        atualizarTexto();
+      }
+    }, 1000);
+  }
+
+  function gerarCasoLocalContingencia(tema) {
+    const idUnico = 'caso_proc_' + Date.now();
+    const isExigente = tema.toLowerCase().includes('receita') || tema.toLowerCase().includes('antibiótico');
+
+    return {
+      id: idUnico,
+      titulo: `Caso Simulado: ${tema}`,
+      tipo: "emergencia",
+      toxindrome: "Geral",
+      agentePrincipal: tema,
+      dificuldade: "Avançado",
+      vitalidadeInicial: 88,
+      pacienciaInicial: isExigente ? 65 : 85,
+      taxaDecaimento: { vitalidadePorMinuto: 2, pacienciaPorMinuto: 1.5 },
+      paciente: {
+        nome: isExigente ? "Renata Sampaio" : "Valdir Monteiro",
+        idade: isExigente ? 36 : 51,
+        peso: isExigente ? "62 kg" : "78 kg",
+        profissao: isExigente ? "Analista de Sistemas (Informed/Dr. Google)" : "Trabalhador Autônomo",
+        alergias: "Nega alergias conhecidas",
+        imagem: isExigente ? "👩‍💻" : "🧑"
+      },
+      queixaPrincipal: isExigente 
+        ? `Doutor, eu já pesquisei meus sintomas e tenho certeza que preciso de uma receita de antibiótico logo.` 
+        : `Doutor(a)... passei mal depois de lidar com ${tema}... tô com o peito pesado e tontura.`,
+      historicoAdmissao: `Admissão com queixas correlacionadas a ${tema}. Necessidade de esclarecimento clínico imediato.`,
+      sinaisVitais: { pa: "135/85 mmHg", fc: "98 bpm", fr: "20 irpm", temp: "37.1 °C", spo2: "95%", glasgow: "15" },
+      contextoOculto: {
+        nome: isExigente ? "Renata" : "Valdir",
+        idade: isExigente ? 36 : 51,
+        pacienteProfissao: isExigente ? "Analista" : "Autônomo",
+        exposicaoReal: `Quadro associado a ${tema}.`,
+        sintomas: "desconforto gástrico, cefaleia e palpitações",
+        temperamento: isExigente ? "Exigente, questionadora" : "Preocupado, humilde",
+        nivelConsciencia: "Lúcido e orientado"
+      },
+      guiaSemiologico: {
+        cronologia: ["Há quantas horas esses sintomas começaram?", "A dor está piorando ou constante?"],
+        farmacoterapia: ["Quais medicamentos você tomou hoje?", "Quantos comprimidos e qual a dose?"],
+        exposicao: ["Houve contato com defensivos ou químicos?", "Ingeriu alimentos ou bebidas suspeitas?"],
+        sinaisAlarme: ["Está sentindo aperto no peito ou falta de ar?", "Notou visão embaçada ou salivação excessiva?"]
+      },
+      perguntasSugeridas: [
+        "Há quanto tempo começaram os sintomas?",
+        "Qual remédio você tomou antes de vir aqui?",
+        "Você sente falta de ar ou suor frio?"
+      ],
+      examesDisponiveis: [
+        { id: "lab_triagem", nome: "Painel Bioquímico Geral", custoTempoMin: 12, impactoVitalidade: 0, impactoPaciencia: -1, essencial: true, resultado: `Estresse metabólico compatível com ${tema}.` },
+        { id: "ecg_12d", nome: "Eletrocardiograma de 12 Derivações", custoTempoMin: 5, impactoVitalidade: 0, impactoPaciencia: 0, essencial: true, resultado: "Ritmo sinusal, traçado eletrocardiográfico dentro da normalidade." }
+      ],
+      gabaritoPreceptor: {
+        diagnostico: `Quadro Clínico e/ou Toxicológico Agudo associado a ${tema}`,
+        conduta: "Anamnese dirigida, suporte hidroeletrolítico e orientação farmacêutica.",
+        palavrasChave: ["anamnese", "suporte", tema.toLowerCase()]
+      }
+    };
+  }
+
+  // =========================================================
+  // 11. INICIALIZAÇÃO E OUVINTES DE EVENTOS
   // =========================================================
 
   function init() {
@@ -1005,6 +1193,12 @@ const ClinicEngine = (() => {
     init,
     showBedsDashboard,
     renderBedsGrid,
+    setModoExibicao,
+    carregarAcervoComunitario,
+    filtrarAcervo,
+    assumirCasoDoAcervo,
+    abrirRadarEpidemiologico,
+    fecharRadarEpidemiologico,
     openBed,
     returnToBeds,
     solicitarCasoProcedural,
@@ -1018,11 +1212,10 @@ const ClinicEngine = (() => {
 })();
 
 // Declarações globais para suportar chamadas inline no HTML
+window.ClinicEngine = ClinicEngine;
 window.submitPatientQuestion = ClinicEngine.submitPatientQuestion;
 window.finalizeClinicalCase = ClinicEngine.finalizeClinicalCase;
-window.ClinicEngine = ClinicEngine;
 
-// Inicializa automaticamente quando o DOM estiver pronto
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', ClinicEngine.init);
 } else {
