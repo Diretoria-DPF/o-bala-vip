@@ -4,13 +4,13 @@
  */
 
 const ApiService = (() => {
-  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyhZk_3HZaVWLVHgyNyzL5IBT5SXb1w_gz3cdgAiQqQVjNvY5tTnb0EXUmsI8wGsGne/exec';
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzivG3UutQSP1UNldDuSJNdW8ecjov267RrOQ5fEsC1W7hZxmldKTBg6HNe1LLkcg8/exec';
   const OPENFDA_BASE_URL = 'https://api.fda.gov/drug/label.json';
 
   /**
    * Executa requisições POST seguras para o Google Apps Script com controle de timeout
    */
- async function callAppsScript(payload, timeoutMs = 30000) {
+  async function callAppsScript(payload, timeoutMs = 35000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -18,7 +18,7 @@ const ApiService = (() => {
       const response = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         headers: {
-          'Content-Type': 'text/plain;charset=utf-8' // Impede bloqueio de CORS preflight
+          'Content-Type': 'text/plain;charset=utf-8' // Impede bloqueio de CORS preflight no Apps Script
         },
         body: JSON.stringify(payload)
       });
@@ -104,6 +104,7 @@ const ApiService = (() => {
     reenviarCredencialEmail: (sessao) =>
       callAppsScript({
         acao: 'reenviarCredencialEmail',
+        tokenSessao: sessao,
         sessao
       }),
 
@@ -113,13 +114,6 @@ const ApiService = (() => {
         acao: 'loginFiscal',
         senha
       }),
-
-    exportarPresencasCsv: (sessaoFiscal, evento) =>
-    callAppsScript({
-      acao: 'exportarPresencasCsv',
-      sessao: sessaoFiscal,
-      evento: evento
-    }),
 
     salvarEvento: (novoNome, sessao) =>
       callAppsScript({
@@ -142,13 +136,40 @@ const ApiService = (() => {
         sessao
       }),
 
+    marcarPresencaLista: (identificador, sessao) =>
+      callAppsScript({
+        acao: 'marcarPresencaLista',
+        identificador,
+        sessao
+      }),
+
+    listarMembros: (termo, sessao) =>
+      callAppsScript({
+        acao: 'listarMembros',
+        termo,
+        sessao
+      }),
+
+    exportarPresencasCsv: (sessaoFiscal, evento) =>
+      callAppsScript({
+        acao: 'exportarPresencasCsv',
+        sessao: sessaoFiscal,
+        evento: evento
+      }),
+
+    obterStatusSaudeIA: (sessao) =>
+      callAppsScript({
+        acao: 'obterStatusSaudeIA',
+        sessao
+      }, 45000),
+
     logoutFiscal: (sessao) =>
       callAppsScript({
         acao: 'logoutFiscal',
         sessao
       }),
 
-    // --- MÉTRICAS DE QUIZ E DASHBOARD ---
+    // --- MÉTRICAS DE SIMULADOS E DASHBOARD ---
     sincronizarMetricasSimulado: (identificador, modulo, modo, acertos, total, tempoGasto, detalhesTopicos) =>
       callAppsScript({
         acao: 'sincronizarMetricasSimulado',
@@ -167,7 +188,7 @@ const ApiService = (() => {
         identificador
       }),
 
-    // --- CLÍNICA MÉDICA VIRTUAL (GROQ / OSCE) ---
+    // --- CLÍNICA VIRTUAL & GROQ DUAL (20B / 120B) ---
     conversarComPaciente: (casoId, perguntaAluno, historicoConversa, contextoPaciente) =>
       callAppsScript({
         acao: 'conversarComPaciente',
@@ -175,7 +196,7 @@ const ApiService = (() => {
         perguntaAluno,
         historicoConversa,
         contextoPaciente
-      }, 15000),
+      }, 20000),
 
     avaliarCondutaPreceptor: (identificador, casoId, dadosAtendimento) =>
       callAppsScript({
@@ -183,17 +204,34 @@ const ApiService = (() => {
         identificador,
         casoId,
         dadosAtendimento
-      }, 30000),
+      }, 45000),
 
     gerarCasoProcedural: (topicoAlvo, dificuldade, identificador) =>
-  callAppsScript({
-    acao: 'gerarCasoProcedural',
-    identificador: identificador,
-    topicoAlvo: topicoAlvo,
-    dificuldade: dificuldade || 'Avançado'
-  }, 45000),
+      callAppsScript({
+        acao: 'gerarCasoProcedural',
+        identificador,
+        topicoAlvo,
+        dificuldade: dificuldade || 'Avançado'
+      }, 50000),
 
-    // --- UTILITÁRIOS E APIS EXTERNAS ---
+    // --- ACERVO COLETIVO & RADAR EPIDEMIOLÓGICO ---
+    listarCasosAcervo: (termoBusca) =>
+      callAppsScript({
+        acao: 'listarCasosAcervo',
+        termo: termoBusca || ''
+      }, 25000),
+
+    obterDashboardEpidemiologico: () =>
+      callAppsScript({
+        acao: 'obterDashboardEpidemiologico'
+      }, 25000),
+
+    consolidarDashboard: () =>
+      callAppsScript({
+        acao: 'consolidarDashboard'
+      }, 35000),
+
+    // --- UTILITÁRIOS ---
     fetchOpenFdaWarning,
     callAppsScript
   };
