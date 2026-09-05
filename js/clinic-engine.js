@@ -1,13 +1,6 @@
 /**
  * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE, ACERVO & RADAR EPIDEMIOLÓGICO)
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
- * 
- * Inovações da Versão Integrada:
- * - Alternância entre Plantão Ativo e Biblioteca Comunitária da Liga (Acervo).
- * - Filtros por toxíndrome e busca semântica em tempo real.
- * - Reuso de casos com custo zero de tokens de inferência.
- * - Painel modal do Radar Epidemiológico integrado à telemetria do Apps Script.
- * - Roteiro semiológico em 4 eixos e envio enriquecido ao preceptor para Padrão Ouro.
  */
 
 const ClinicEngine = (() => {
@@ -24,7 +17,7 @@ const ClinicEngine = (() => {
   let caseOutcome = 'EM_ANDAMENTO';
   let activeSemiologyAxis = 'cronologia';
   
-  // Estado de Exibição e Acervo
+  // Controle de Estado do Acervo Comunitário
   let modoExibicaoAtual = 'plantao'; // 'plantao' | 'acervo'
   let casosAcervoCache = [];
 
@@ -61,7 +54,7 @@ const ClinicEngine = (() => {
     dom.radarToxindromesList = document.getElementById('radarToxindromesList');
     dom.radarAgentesList = document.getElementById('radarAgentesList');
 
-    // Abas de navegação da consulta
+    // Abas da consulta
     dom.tabButtons = document.querySelectorAll('.clinic-tab-btn');
     dom.tabPanes = document.querySelectorAll('.clinic-tab-pane');
 
@@ -82,7 +75,7 @@ const ClinicEngine = (() => {
     dom.questionInput = document.getElementById('patientQuestionInput');
     dom.sendQuestionBtn = document.getElementById('sendQuestionBtn');
 
-    // Exames complementares
+    // Exames
     dom.availableExamsList = document.getElementById('availableExamsList');
     dom.releasedExamsList = document.getElementById('releasedExamsList');
 
@@ -106,29 +99,21 @@ const ClinicEngine = (() => {
     modoExibicaoAtual = modo;
 
     if (modo === 'plantao') {
-      if (dom.btnModoPlantao) {
-        dom.btnModoPlantao.className = 'btn btn-primary btn-sm';
-      }
-      if (dom.btnModoAcervo) {
-        dom.btnModoAcervo.className = 'btn btn-outline btn-sm';
-      }
+      if (dom.btnModoPlantao) dom.btnModoPlantao.className = 'btn btn-primary btn-sm';
+      if (dom.btnModoAcervo) dom.btnModoAcervo.className = 'btn btn-outline btn-sm';
       if (dom.acervoToolbar) dom.acervoToolbar.classList.add('hidden');
       if (dom.communityBedsGrid) dom.communityBedsGrid.classList.add('hidden');
       if (dom.bedsGrid) dom.bedsGrid.classList.remove('hidden');
       renderBedsGrid();
     } else {
-      if (dom.btnModoPlantao) {
-        dom.btnModoPlantao.className = 'btn btn-outline btn-sm';
-      }
-      if (dom.btnModoAcervo) {
-        dom.btnModoAcervo.className = 'btn btn-primary btn-sm';
-      }
+      if (dom.btnModoPlantao) dom.btnModoPlantao.className = 'btn btn-outline btn-sm';
+      if (dom.btnModoAcervo) dom.btnModoAcervo.className = 'btn btn-primary btn-sm';
       if (dom.acervoToolbar) dom.acervoToolbar.classList.remove('hidden');
       if (dom.bedsGrid) dom.bedsGrid.classList.add('hidden');
       if (dom.communityBedsGrid) dom.communityBedsGrid.classList.remove('hidden');
 
       if (casosAcervoCache.length === 0) {
-        carregarAcervoComunitario();
+        carregarAcervoComunitario(false);
       } else {
         renderAcervoGrid(casosAcervoCache);
       }
@@ -144,7 +129,7 @@ const ClinicEngine = (() => {
     if (typeof clinicalCases === 'undefined' || !Array.isArray(clinicalCases) || clinicalCases.length === 0) {
       dom.bedsGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--gray, #64748b);">
-          <h3>Nenhum paciente internado no momento.</h3>
+          <h3>Nenhum paciente internado no plantão ativo.</h3>
           <p>Clique em <strong>⚡ Gerar Caso com IA</strong> ou explore o <strong>Acervo da Liga</strong>.</p>
         </div>
       `;
@@ -194,37 +179,46 @@ const ClinicEngine = (() => {
   // 2. INTEGRAÇÃO COM O ACERVO COLETIVO (CUSTO ZERO DE TOKENS)
   // =========================================================
 
-  async function carregarAcervoComunitario() {
+  async function carregarAcervoComunitario(forceRefresh = false) {
     initDomReferences();
     if (!dom.communityBedsGrid) return;
 
     dom.communityBedsGrid.innerHTML = `
       <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--gray);">
-        <p>⏳ Carregando biblioteca de casos clínicos do Acervo LAIFT...</p>
+        <p>⏳ Sincronizando biblioteca de casos clínicos da LAIFT...</p>
       </div>
     `;
 
     try {
       let res;
-      if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
+      if (typeof ApiService !== 'undefined' && typeof ApiService.listarCasosAcervo === 'function') {
+        res = await ApiService.listarCasosAcervo();
+      } else if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
         res = await ApiService.callAppsScript({ acao: 'listarCasosAcervo' });
       }
 
-      if (res && res.sucesso && Array.isArray(res.casos)) {
-        casosAcervoCache = res.casos;
+      if (res && res.sucesso && Array.isArray(res.casos) && res.casos.length > 0) {
+        casosAcervoCache = res.casos.map(c => {
+          if (typeof c === 'string') {
+            try { return JSON.parse(c); } catch (e) { return null; }
+          }
+          return c;
+        }).filter(Boolean);
+
         renderAcervoGrid(casosAcervoCache);
       } else {
         dom.communityBedsGrid.innerHTML = `
-          <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--gray);">
-            <p>Nenhum caso publicado no acervo comunitário até o momento.</p>
+          <div style="grid-column: 1 / -1; text-align: center; padding: 40px; color: var(--gray);">
+            <h4>Nenhum caso cadastrado no acervo até o momento.</h4>
+            <p>Os novos casos sintetizados por IA ou cadastrados na planilha aparecerão aqui automaticamente.</p>
           </div>
         `;
       }
     } catch (err) {
-      console.warn('Falha ao carregar acervo comunitário:', err);
+      console.warn('Erro ao carregar acervo:', err);
       dom.communityBedsGrid.innerHTML = `
-        <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--danger, #dc2626);">
-          <p>Erro ao conectar com o acervo da planilha. Tente novamente.</p>
+        <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: #dc2626;">
+          <p>Erro de conexão ao carregar casos do acervo da planilha.</p>
         </div>
       `;
     }
@@ -238,7 +232,7 @@ const ClinicEngine = (() => {
     if (!casos || casos.length === 0) {
       dom.communityBedsGrid.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--gray);">
-          <p>Nenhum caso coincide com os filtros aplicados.</p>
+          <p>Nenhum caso encontrado para o filtro aplicado.</p>
         </div>
       `;
       return;
@@ -249,22 +243,33 @@ const ClinicEngine = (() => {
       card.className = 'bed-card ambulatory';
       card.style.borderTop = '4px solid #0284c7';
 
+      const nomePac = (c.paciente && c.paciente.nome) ? c.paciente.nome : 'Paciente';
+      const idadePac = (c.paciente && c.paciente.idade) ? `${c.paciente.idade} anos` : '--';
+      const tox = c.toxindrome || 'Geral';
+      const agente = c.agentePrincipal || c.agente || 'Não informado';
+
       card.innerHTML = `
         <div class="bed-header">
-          <span class="bed-tag" style="background: #e0f2fe; color: #0369a1;">📚 ${c.toxindrome || 'Geral'}</span>
-          <span class="bed-status" style="font-weight: bold; color: #0284c7;">
-            ⚡ Custo Zero
-          </span>
+          <span class="bed-tag" style="background: #e0f2fe; color: #0369a1;">📚 ${tox}</span>
+          <span class="bed-status" style="font-weight: bold; color: #0284c7;">⚡ Custo Zero</span>
         </div>
-        <h4 style="margin: 8px 0 4px; font-size: 1.15rem; color: #0369a1;">${c.titulo || c.topico}</h4>
-        <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 42px;">"${c.queixaPrincipal || 'Caso clínico auditado no acervo.'}"</p>
-        <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--gray); border-top: 1px solid #e2e8f0; padding-top: 8px; margin-bottom: 14px;">
-          <span>Agente: <strong>${c.agente || 'Geral'}</strong></span>
-          <span>Nível: <strong>${c.dificuldade || 'Médio'}</strong></span>
+        <h4 style="margin: 8px 0 2px; font-size: 1.1rem; color: #0369a1;">${c.titulo || c.topico || 'Caso Clínico'}</h4>
+        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 8px;">Paciente: <strong>${nomePac} (${idadePac})</strong></div>
+        <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 40px;">"${c.queixaPrincipal || 'Caso clínico catalogado.'}"</p>
+        
+        <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--gray); border-top: 1px solid #e2e8f0; padding-top: 6px; margin-bottom: 12px;">
+          <span>Agente: <strong>${agente}</strong></span>
+          <span>Nível: <strong>${c.dificuldade || 'Intermediário'}</strong></span>
         </div>
-        <button class="btn btn-outline" style="width: 100%; border-color: #0284c7; color: #0284c7;" type="button" onclick="ClinicEngine.assumirCasoDoAcervo('${c.id}')">
-          📖 Iniciar Caso do Acervo
-        </button>
+
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-primary btn-sm" style="flex: 2; background: #0284c7;" type="button" onclick="ClinicEngine.assumirCasoDoAcervo('${c.id}')">
+            🩺 Atender Este Caso
+          </button>
+          <button class="btn btn-outline btn-sm" style="flex: 1; padding: 4px 6px;" type="button" title="Sintetizar caso derivado com IA" onclick="ClinicEngine.gerarVariacaoComIa('${agente !== 'Não informado' ? agente : c.topico}')">
+            ⚡ Variação IA
+          </button>
+        </div>
       `;
 
       dom.communityBedsGrid.appendChild(card);
@@ -272,17 +277,22 @@ const ClinicEngine = (() => {
   }
 
   function filtrarAcervo() {
-    const termo = (dom.acervoSearchInput?.value || '').toLowerCase();
-    const toxFiltro = (dom.acervoToxFilter?.value || '').toLowerCase();
+    const termo = (dom.acervoSearchInput?.value || '').toLowerCase().trim();
+    const toxFiltro = (dom.acervoToxFilter?.value || '').toLowerCase().trim();
 
     const filtrados = casosAcervoCache.filter(c => {
-      const matchTexto = !termo || 
-        (c.titulo && c.titulo.toLowerCase().includes(termo)) ||
-        (c.topico && c.topico.toLowerCase().includes(termo)) ||
-        (c.agente && c.agente.toLowerCase().includes(termo)) ||
-        (c.queixaPrincipal && c.queixaPrincipal.toLowerCase().includes(termo));
+      const agenteStr = (c.agentePrincipal || c.agente || '').toLowerCase();
+      const tituloStr = (c.titulo || c.topico || '').toLowerCase();
+      const queixaStr = (c.queixaPrincipal || '').toLowerCase();
+      const toxStr = (c.toxindrome || '').toLowerCase();
 
-      const matchTox = !toxFiltro || (c.toxindrome && c.toxindrome.toLowerCase().includes(toxFiltro));
+      const matchTexto = !termo || 
+        tituloStr.includes(termo) ||
+        agenteStr.includes(termo) ||
+        queixaStr.includes(termo) ||
+        toxStr.includes(termo);
+
+      const matchTox = !toxFiltro || toxStr.includes(toxFiltro);
       return matchTexto && matchTox;
     });
 
@@ -294,17 +304,20 @@ const ClinicEngine = (() => {
     if (!caso) return;
 
     if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
-      if (!clinicalCases.some(c => c.id === caso.id)) {
-        clinicalCases.unshift(caso);
-      }
+      clinicalCases = clinicalCases.filter(c => c.id !== caso.id);
+      clinicalCases.unshift(caso);
     }
 
     setModoExibicao('plantao');
     openBed(caso.id);
   }
 
+  function gerarVariacaoComIa(temaBase) {
+    solicitarCasoProcedural(temaBase);
+  }
+
   // =========================================================
-  // 3. RADAR EPIDEMIOLÓGICO E PEDAGÓGICO
+  // 3. RADAR EPIDEMIOLÓGICO & FARMACOLÓGICO
   // =========================================================
 
   async function abrirRadarEpidemiologico() {
@@ -320,52 +333,62 @@ const ClinicEngine = (() => {
 
     try {
       let res;
-      if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
+      if (typeof ApiService !== 'undefined' && typeof ApiService.obterDashboardEpidemiologico === 'function') {
+        res = await ApiService.obterDashboardEpidemiologico();
+      } else if (typeof ApiService !== 'undefined' && typeof ApiService.callAppsScript === 'function') {
         res = await ApiService.callAppsScript({ acao: 'obterDashboardEpidemiologico' });
       }
 
       if (res && res.sucesso) {
-        if (dom.radarTaxaSobrevivencia) dom.radarTaxaSobrevivencia.textContent = res.taxaSobrevivencia || '0%';
-        if (dom.radarTotalAtendimentos) dom.radarTotalAtendimentos.textContent = res.totalAtendimentos || '0';
+        if (dom.radarTaxaSobrevivencia) {
+          dom.radarTaxaSobrevivencia.textContent = res.taxaSobrevivencia || '100%';
+        }
+        if (dom.radarTotalAtendimentos) {
+          dom.radarTotalAtendimentos.textContent = res.totalAtendimentos || '0';
+        }
 
-        // Renderiza chips de Toxíndromes
+        // Renderiza Chips de Toxíndromes
         if (dom.radarToxindromesList) {
           dom.radarToxindromesList.innerHTML = '';
           const toxs = res.toxindromes || {};
-          const chavesTox = Object.keys(toxs);
-          if (chavesTox.length === 0) {
+          const chaves = Object.keys(toxs);
+
+          if (chaves.length === 0) {
             dom.radarToxindromesList.innerHTML = '<span style="font-size: 0.8rem; color: #64748b;">Nenhuma toxíndrome agregada ainda.</span>';
           } else {
-            chavesTox.forEach(t => {
+            chaves.forEach(k => {
               const chip = document.createElement('span');
               chip.className = 'tag';
-              chip.style.cssText = 'background: #e2e8f0; color: #1e293b; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;';
-              chip.textContent = `${t}: ${toxs[t]} caso(s)`;
+              chip.style.cssText = 'background: #f1f5f9; border: 1px solid #cbd5e1; color: #0f172a; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600;';
+              chip.textContent = `${k}: ${toxs[k]} caso(s)`;
               dom.radarToxindromesList.appendChild(chip);
             });
           }
         }
 
-        // Renderiza chips de Fármacos/Agentes
+        // Renderiza Chips de Fármacos e Agentes
         if (dom.radarAgentesList) {
           dom.radarAgentesList.innerHTML = '';
           const ags = res.agentes || {};
           const chavesAg = Object.keys(ags);
+
           if (chavesAg.length === 0) {
             dom.radarAgentesList.innerHTML = '<span style="font-size: 0.8rem; color: #64748b;">Nenhum princípio ativo registrado ainda.</span>';
           } else {
-            chavesAg.forEach(a => {
+            chavesAg.forEach(k => {
               const chip = document.createElement('span');
               chip.className = 'tag';
-              chip.style.cssText = 'background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem;';
-              chip.textContent = `${a}: ${ags[a]}x`;
+              chip.style.cssText = 'background: #e0f2fe; border: 1px solid #bae6fd; color: #0369a1; padding: 4px 10px; border-radius: 16px; font-size: 0.8rem; font-weight: 600;';
+              chip.textContent = `${k}: ${ags[k]}x`;
               dom.radarAgentesList.appendChild(chip);
             });
           }
         }
       }
-    } catch (err) {
-      console.warn('Falha ao abrir radar epidemiológico:', err);
+    } catch (e) {
+      console.warn('Falha ao atualizar Radar Epidemiológico:', e);
+      if (dom.radarTaxaSobrevivencia) dom.radarTaxaSobrevivencia.textContent = '100%';
+      if (dom.radarTotalAtendimentos) dom.radarTotalAtendimentos.textContent = '0';
     }
   }
 
@@ -439,15 +462,16 @@ const ClinicEngine = (() => {
 
   function renderPatientProfile() {
     if (!currentCase) return;
-    if (dom.patientName) dom.patientName.textContent = currentCase.paciente.nome;
+    const pac = currentCase.paciente || {};
+    if (dom.patientName) dom.patientName.textContent = pac.nome || 'Paciente';
     if (dom.patientMeta) {
-      dom.patientMeta.textContent = `${currentCase.paciente.idade} anos | ${currentCase.paciente.profissao} | Peso: ${currentCase.paciente.peso}`;
+      dom.patientMeta.textContent = `${pac.idade || '--'} anos | ${pac.profissao || 'Ocupação'} | Peso: ${pac.peso || '--'}`;
     }
-    if (dom.chiefComplaint) dom.chiefComplaint.textContent = `"${currentCase.queixaPrincipal}"`;
+    if (dom.chiefComplaint) dom.chiefComplaint.textContent = `"${currentCase.queixaPrincipal || 'Mal-estar não especificado'}"`;
     if (dom.patientHistory) {
       dom.patientHistory.innerHTML = `
-        <p style="margin-bottom: 8px;"><strong>Histórico de Admissão:</strong> ${currentCase.historicoAdmissao}</p>
-        <p style="font-size: 0.85rem; color: var(--text-muted, #64748b);"><strong>Alergias Conhecidas:</strong> ${currentCase.paciente.alergias}</p>
+        <p style="margin-bottom: 8px;"><strong>Histórico de Admissão:</strong> ${currentCase.historicoAdmissao || 'Admitido para elucidação diagnóstica.'}</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted, #64748b);"><strong>Alergias Conhecidas:</strong> ${pac.alergias || 'Nega alergias relatadas.'}</p>
       `;
     }
   }
@@ -605,8 +629,8 @@ const ClinicEngine = (() => {
     const initialBubble = document.createElement('div');
     initialBubble.className = 'chat-bubble patient';
     initialBubble.innerHTML = `
-      <strong>${currentCase.paciente.nome}:</strong>
-      <p>${currentCase.queixaPrincipal}</p>
+      <strong>${currentCase.paciente ? currentCase.paciente.nome : 'Paciente'}:</strong>
+      <p>${currentCase.queixaPrincipal || 'Estou passando mal...'}</p>
     `;
     dom.chatHistory.appendChild(initialBubble);
     conversationHistory.push(`Paciente: ${currentCase.queixaPrincipal}`);
@@ -689,7 +713,8 @@ const ClinicEngine = (() => {
     dom.questionInput.value = '';
     if (dom.sendQuestionBtn) dom.sendQuestionBtn.disabled = true;
 
-    const typingBubble = appendChatBubble('patient', currentCase.paciente.nome, '<em>Pensando e respondendo...</em>');
+    const nomePac = currentCase.paciente ? currentCase.paciente.nome : 'Paciente';
+    const typingBubble = appendChatBubble('patient', nomePac, '<em>Pensando e respondendo...</em>');
 
     let falaObtida = '';
     let apiSucesso = false;
@@ -698,9 +723,9 @@ const ClinicEngine = (() => {
       const recentHistory = conversationHistory.slice(-4).join('\n');
       const contextoCompleto = {
         casoId: currentCase.id,
-        nome: currentCase.paciente.nome,
-        idade: currentCase.paciente.idade,
-        pacienteProfissao: currentCase.paciente.profissao,
+        nome: nomePac,
+        idade: currentCase.paciente ? currentCase.paciente.idade : '45',
+        pacienteProfissao: currentCase.paciente ? currentCase.paciente.profissao : 'Autônomo',
         exposicaoReal: currentCase.contextoOculto ? currentCase.contextoOculto.exposicaoReal : '',
         sintomas: currentCase.contextoOculto ? currentCase.contextoOculto.sintomas : '',
         temperamento: currentCase.contextoOculto ? currentCase.contextoOculto.temperamento : '',
@@ -735,7 +760,7 @@ const ClinicEngine = (() => {
     }
 
     typingBubble.remove();
-    appendChatBubble('patient', currentCase.paciente.nome, falaObtida);
+    appendChatBubble('patient', nomePac, falaObtida);
     conversationHistory.push(`Estudante: ${text}`);
     conversationHistory.push(`Paciente: ${falaObtida}`);
 
@@ -884,7 +909,7 @@ const ClinicEngine = (() => {
     const diagnosis = dom.studentDiagnosis?.value.trim() || 'Não informado pelo estudante.';
     const conduct = dom.studentConduct?.value.trim() || 'Não informada pelo estudante.';
 
-    // Payload enriquecido para avaliação 120B e destilação de Padrão Ouro
+    // Payload completo transmitido para a avaliação 120B e destilação de Padrão Ouro
     const payload = {
       gabarito: currentCase.gabaritoPreceptor,
       diagnosticoAluno: diagnosis,
@@ -1010,14 +1035,15 @@ const ClinicEngine = (() => {
   // 10. GERAÇÃO PROCEDURAL (GROQ 120B COM COOLDOWN)
   // =========================================================
 
-  async function solicitarCasoProcedural() {
+  async function solicitarCasoProcedural(temaPredefinido = '') {
     initDomReferences();
     const btn = dom.btnGenerateAiCase || document.getElementById('btnGenerateAiCase');
     if (btn && btn.disabled) return;
 
+    const promptPadrao = temaPredefinido ? `Variação clínica de ${temaPredefinido}` : 'Intoxicação por Paracetamol';
     const topico = prompt(
       'Qual agravo farmacológico ou toxicológico deseja simular?\n\nExemplos:\n• Intoxicação por Paracetamol\n• Paciente exigente pedindo Ciprofloxacino para gripe\n• Intoxicação Ocupacional por Organofosforados\n• Idoso polimedicado com interação Varfarina + AINE',
-      'Intoxicação por Paracetamol'
+      promptPadrao
     );
     if (!topico || !topico.trim()) return;
 
@@ -1197,6 +1223,7 @@ const ClinicEngine = (() => {
     carregarAcervoComunitario,
     filtrarAcervo,
     assumirCasoDoAcervo,
+    gerarVariacaoComIa,
     abrirRadarEpidemiologico,
     fecharRadarEpidemiologico,
     openBed,
