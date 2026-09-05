@@ -9,6 +9,7 @@ const FiscalEngine = (() => {
   let scanInProgress = false;
   let logoPressTimer = null;
   let memberSearchTimer = null;
+  let dadosMembrosLote = [];
 
   const QR_PREFIX = 'LAIFT:v1:';
   const SESSION_STORAGE_KEY = 'laift_student_session';
@@ -36,7 +37,7 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // AUTENTICAÇÃO E MODAL DE ACESSO DO FISCAL
+  // 1. AUTENTICAÇÃO E MODAL DE ACESSO DO FISCAL
   // =========================================================
 
   function abrirModalLogin() {
@@ -120,7 +121,7 @@ const FiscalEngine = (() => {
       const eventInput = document.getElementById('eventName');
       if (eventInput) eventInput.value = res.evento || res.eventoAtivo || '';
 
-      getStatusBanner('Acesso fiscal liberado.', 'success');
+      getStatusBanner('Acesso fiscal liberado com sucesso.', 'success');
     } catch (err) {
       console.error(err);
       getStatusBanner('Falha ao autenticar terminal fiscal.', 'error');
@@ -138,7 +139,17 @@ const FiscalEngine = (() => {
 
     getStatusBanner('Atualizando evento...', 'loading');
     try {
-      const res = await ApiService.salvarEvento(eventName, fiscalSession);
+      let res;
+      if (typeof ApiService.salvarEvento === 'function') {
+        res = await ApiService.salvarEvento(eventName, fiscalSession);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'salvarEvento',
+          novoNome: eventName,
+          sessao: fiscalSession
+        });
+      }
+
       if (res && res.sucesso) {
         if (eventInput) eventInput.value = res.novoEvento || res.eventoAtivo || eventName;
         getStatusBanner('Evento ativo atualizado com sucesso.', 'success');
@@ -152,7 +163,7 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // MONITOR DE SAÚDE DO CLUSTER GROQ (TELEMETRIA EM TEMPO REAL)
+  // 2. MONITOR DE SAÚDE DO CLUSTER GROQ (TELEMETRIA EM TEMPO REAL)
   // =========================================================
 
   async function verificarSaudeRedeIA() {
@@ -222,7 +233,7 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // EXPORTAÇÃO CSV DE PRESENÇAS CONFIRMADAS
+  // 3. EXPORTAÇÃO CSV DE PRESENÇAS CONFIRMADAS
   // =========================================================
 
   async function baixarListaPresencaCsv() {
@@ -267,153 +278,294 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // IMPRESSÃO DE CRACHÁS EM LOTE (A4 / 8 UNIDADES CR-80)
+  // 4. GERENCIADOR DE CRACHÁS EM LOTE (SELEÇÃO, EDIÇÃO E FOTO)
   // =========================================================
 
-  function imprimirCrachasSelecionados(membrosAlvo) {
-    const lista = membrosAlvo || window.ultimosMembrosBuscados || [];
-    if (!lista || lista.length === 0) {
-      alert('Pesquise participantes na lista abaixo para gerar os crachás.');
+  function abrirModalLoteCrachas() {
+    const modal = document.getElementById('modalLoteCrachas');
+    if (!modal) return;
+
+    const base = window.ultimosMembrosBuscados || [];
+    if (base.length === 0) {
+      alert('Pesquise participantes na "Lista Nominal" antes de abrir o gerenciador de crachás.');
+      const searchInput = document.getElementById('memberSearch');
+      if (searchInput) searchInput.focus();
       return;
     }
 
-    const janelaImpressao = window.open('', '_blank');
-    if (!janelaImpressao) {
-      alert('Libere a abertura de popups para imprimir os crachás.');
+    dadosMembrosLote = base.map(m => ({
+      identificador: m.identificador,
+      nome: m.nomeExibicao || m.nome || 'Participante',
+      tipo: m.tipo || 'Membro',
+      tokenQr: m.tokenQr || '',
+      fotoUrl: '',
+      selecionado: true
+    }));
+
+    renderizarTabelaLote();
+    modal.style.display = 'flex';
+  }
+
+  function fecharModalLoteCrachas() {
+    const modal = document.getElementById('modalLoteCrachas');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function renderizarTabelaLote() {
+    const tbody = document.getElementById('tabelaCrachasLoteBody');
+    const filtroEl = document.getElementById('filtroCrachaLote');
+    const filtro = (filtroEl ? filtroEl.value : '').toLowerCase();
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    let totalSel = 0;
+
+    dadosMembrosLote.forEach((m, idx) => {
+      const match = m.nome.toLowerCase().includes(filtro) || m.identificador.toLowerCase().includes(filtro);
+      if (!match) return;
+
+      if (m.selecionado) totalSel++;
+
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid #e2e8f0';
+
+      tr.innerHTML = `
+        <td style="text-align: center; padding: 6px;">
+          <input type="checkbox" ${m.selecionado ? 'checked' : ''} onchange="FiscalEngine.toggleMembroLote(${idx}, this.checked)">
+        </td>
+        <td style="padding: 6px;">
+          <input type="text" value="${m.nome}" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 0.8rem; box-sizing: border-box;" onchange="FiscalEngine.atualizarNomeLote(${idx}, this.value)">
+          <small style="color: #64748b; font-family: monospace;">ID: ${m.identificador}</small>
+        </td>
+        <td style="padding: 6px;">
+          <select style="width: 100%; border: 1px solid #cbd5e1; border-radius: 4px; padding: 4px; font-size: 0.8rem; box-sizing: border-box;" onchange="FiscalEngine.atualizarTipoLote(${idx}, this.value)">
+            <option value="Membro" ${m.tipo === 'Membro' ? 'selected' : ''}>Membro</option>
+            <option value="Diretoria" ${m.tipo === 'Diretoria' ? 'selected' : ''}>Diretoria</option>
+            <option value="Visitante" ${m.tipo === 'Visitante' ? 'selected' : ''}>Visitante</option>
+            <option value="Palestrante" ${m.tipo === 'Palestrante' ? 'selected' : ''}>Palestrante</option>
+          </select>
+        </td>
+        <td style="padding: 6px;">
+          <input type="file" accept="image/*" style="font-size: 0.75rem; width: 100%;" onchange="FiscalEngine.carregarFotoLote(${idx}, this)">
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    const contador = document.getElementById('contadorCrachasSel');
+    if (contador) {
+      const folhas = Math.ceil(totalSel / 8);
+      contador.textContent = `${totalSel} selecionado(s) (${folhas} folha(s) A4)`;
+    }
+  }
+
+  function toggleMembroLote(index, checked) {
+    if (dadosMembrosLote[index]) dadosMembrosLote[index].selecionado = checked;
+    renderizarTabelaLote();
+  }
+
+  function atualizarNomeLote(index, val) {
+    if (dadosMembrosLote[index]) dadosMembrosLote[index].nome = val.trim();
+  }
+
+  function atualizarTipoLote(index, val) {
+    if (dadosMembrosLote[index]) dadosMembrosLote[index].tipo = val;
+  }
+
+  function carregarFotoLote(index, inputEl) {
+    if (inputEl.files && inputEl.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        if (dadosMembrosLote[index]) {
+          dadosMembrosLote[index].fotoUrl = e.target.result;
+          alert(`Foto anexada para ${dadosMembrosLote[index].nome}!`);
+        }
+      };
+      reader.readAsDataURL(inputEl.files[0]);
+    }
+  }
+
+  function marcarTodosLote(marcar) {
+    dadosMembrosLote.forEach(m => m.selecionado = marcar);
+    renderizarTabelaLote();
+  }
+
+  function filtrarTabelaLote() {
+    renderizarTabelaLote();
+  }
+
+  /**
+   * Renderiza a grade A4 contendo exatamente os participantes selecionados
+   */
+  function executarImpressaoLoteA4() {
+    const selecionados = dadosMembrosLote.filter(m => m.selecionado);
+    if (selecionados.length === 0) {
+      alert('Selecione ao menos um participante na tabela.');
       return;
     }
 
-    let crachasHtml = '';
-    lista.forEach(function(m) {
-      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&format=svg&data=' + encodeURIComponent('LAIFT:v1:' + (m.tokenQr || ''));
+    const janela = window.open('', '_blank');
+    if (!janela) {
+      alert('Libere a abertura de popups no navegador.');
+      return;
+    }
+
+    let cardsHtml = '';
+    selecionados.forEach(m => {
+      const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&format=svg&data=' + encodeURIComponent('LAIFT:v1:' + (m.tokenQr || m.identificador));
       
-      crachasHtml += `
+      const fotoHtml = m.fotoUrl 
+        ? `<img src="${m.fotoUrl}" class="foto-perfil" alt="Foto"/>`
+        : `<div class="avatar-placeholder">${m.nome.charAt(0).toUpperCase()}</div>`;
+
+      cardsHtml += `
         <div class="cracha-card">
-          <div class="cracha-header">
-            <div class="cracha-org">UNINASSAU SALVADOR</div>
-            <div class="cracha-title">LIGA ACADÊMICA LAIFT</div>
+          <div class="header">
+            <div class="instituicao">UNINASSAU SALVADOR</div>
+            <div class="liga">LIGA ACADÊMICA LAIFT</div>
           </div>
-          <div class="cracha-body">
-            <div class="cracha-qr-box">
-              <img src="${qrUrl}" alt="QR" class="cracha-qr"/>
+          <div class="corpo">
+            <div class="col-foto-qr">
+              ${fotoHtml}
+              <img src="${qrUrl}" class="qr-img" alt="QR Code"/>
             </div>
-            <div class="cracha-info">
-              <div class="cracha-nome">${m.nome || m.nomeExibicao || 'Participante'}</div>
-              <div class="cracha-badge ${String(m.tipo).toLowerCase() === 'diretoria' ? 'badge-dir' : ''}">${m.tipo || 'Membro'}</div>
-              <div class="cracha-id">ID: ${m.identificador || '---'}</div>
+            <div class="col-dados">
+              <div class="nome-participante">${m.nome}</div>
+              <div class="tag-role ${String(m.tipo).toLowerCase() === 'diretoria' ? 'diretoria' : ''}">${m.tipo}</div>
+              <div class="meta-id">Matrícula: ${m.identificador}</div>
             </div>
           </div>
-          <div class="cracha-footer">Farmacologia & Toxicologia Clínica</div>
+          <div class="rodape">Farmacologia Clínica e Toxicologia</div>
         </div>
       `;
     });
 
-    janelaImpressao.document.write(`
+    janela.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Crachás Oficiais LAIFT - Padrão CR-80</title>
+        <title>Impressão Oficial de Crachás — LAIFT</title>
         <style>
           @page {
             size: A4 portrait;
-            margin: 8mm;
+            margin: 10mm 8mm;
           }
           * {
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           }
           body {
             margin: 0;
             padding: 0;
             background: #fff;
           }
-          .pagina-a4 {
+          /* Grade 2 colunas x 4 linhas = 8 crachás padrão CR-80 por folha A4 */
+          .grade-a4 {
             display: grid;
-            grid-template-columns: repeat(2, 86mm);
+            grid-template-columns: 85.6mm 85.6mm;
             grid-auto-rows: 54mm;
-            gap: 4mm 6mm;
+            gap: 5mm 6mm;
             justify-content: center;
-            page-break-after: always;
           }
           .cracha-card {
-            width: 86mm;
+            width: 85.6mm;
             height: 54mm;
             border: 1px dashed #94a3b8;
             border-radius: 4mm;
-            padding: 3mm;
+            padding: 3.5mm;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            position: relative;
+            page-break-inside: avoid;
             background: #ffffff;
+            position: relative;
           }
-          .cracha-header {
+          .header {
             border-bottom: 1.5px solid #0f172a;
             padding-bottom: 1.5mm;
             text-align: center;
           }
-          .cracha-org {
-            font-size: 6pt;
+          .instituicao {
+            font-size: 6.5pt;
             font-weight: 700;
             color: #475569;
             letter-spacing: 0.5px;
           }
-          .cracha-title {
+          .liga {
             font-size: 8.5pt;
             font-weight: 800;
             color: #0f172a;
           }
-          .cracha-body {
+          .corpo {
             display: flex;
             align-items: center;
             gap: 3mm;
             margin: auto 0;
           }
-          .cracha-qr-box {
-            width: 26mm;
-            height: 26mm;
+          .col-foto-qr {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5mm;
+            width: 24mm;
+          }
+          .foto-perfil {
+            width: 22mm;
+            height: 22mm;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid #cbd5e1;
+          }
+          .avatar-placeholder {
+            width: 22mm;
+            height: 22mm;
+            border-radius: 50%;
+            background: #e2e8f0;
+            color: #1e293b;
+            font-size: 11pt;
+            font-weight: 700;
             display: flex;
             align-items: center;
             justify-content: center;
           }
-          .cracha-qr {
-            width: 100%;
-            height: 100%;
+          .qr-img {
+            width: 14mm;
+            height: 14mm;
           }
-          .cracha-info {
+          .col-dados {
             flex: 1;
             overflow: hidden;
           }
-          .cracha-nome {
-            font-size: 8pt;
+          .nome-participante {
+            font-size: 9pt;
             font-weight: 800;
             color: #0f172a;
-            line-height: 1.1;
-            max-height: 2.2em;
+            line-height: 1.2;
+            max-height: 2.4em;
             overflow: hidden;
           }
-          .cracha-badge {
+          .tag-role {
             display: inline-block;
             background: #e2e8f0;
             color: #334155;
-            font-size: 6pt;
+            font-size: 6.5pt;
             font-weight: 700;
-            padding: 1px 4px;
-            border-radius: 2px;
-            margin: 1.5mm 0 1mm 0;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin: 2mm 0 1.5mm;
             text-transform: uppercase;
           }
-          .badge-dir {
+          .tag-role.diretoria {
             background: #dbeafe;
             color: #1e40af;
           }
-          .cracha-id {
-            font-size: 6pt;
+          .meta-id {
+            font-size: 6.5pt;
             font-family: monospace;
             color: #64748b;
           }
-          .cracha-footer {
+          .rodape {
             border-top: 1px solid #e2e8f0;
             font-size: 5.5pt;
             color: #64748b;
@@ -423,8 +575,8 @@ const FiscalEngine = (() => {
         </style>
       </head>
       <body>
-        <div class="pagina-a4">
-          ${crachasHtml}
+        <div class="grade-a4">
+          ${cardsHtml}
         </div>
         <script>
           window.onload = function() {
@@ -434,11 +586,11 @@ const FiscalEngine = (() => {
       </body>
       </html>
     `);
-    janelaImpressao.document.close();
+    janela.document.close();
   }
 
   // =========================================================
-  // STUDIO DE CRACHÁS INDIVIDUAL
+  // 5. STUDIO DE CRACHÁS INDIVIDUAL
   // =========================================================
 
   function abrirStudioCracha(membro) {
@@ -474,7 +626,7 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // SCANNER DE QR CODE
+  // 6. SCANNER DE QR CODE
   // =========================================================
 
   function extractQrCredential(decodedText) {
@@ -521,7 +673,17 @@ const FiscalEngine = (() => {
         await closeScanner();
 
         try {
-          const res = await ApiService.carimbarPresenca(validCred, fiscalSession);
+          let res;
+          if (typeof ApiService.carimbarPresenca === 'function') {
+            res = await ApiService.carimbarPresenca(validCred, fiscalSession);
+          } else if (typeof ApiService.callAppsScript === 'function') {
+            res = await ApiService.callAppsScript({
+              acao: 'carimbarPresenca',
+              credencial: validCred,
+              sessao: fiscalSession
+            });
+          }
+
           if (res && res.sucesso) {
             getStatusBanner(res.mensagem || 'Presença confirmada.', 'success');
           } else {
@@ -564,7 +726,17 @@ const FiscalEngine = (() => {
 
     getStatusBanner('Registrando presença...', 'loading');
     try {
-      const res = await ApiService.carimbarPresencaManual(identifier, fiscalSession);
+      let res;
+      if (typeof ApiService.carimbarPresencaManual === 'function') {
+        res = await ApiService.carimbarPresencaManual(identifier, fiscalSession);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'carimbarPresencaManual',
+          identificador: identifier,
+          sessao: fiscalSession
+        });
+      }
+
       if (idInput) idInput.value = '';
 
       if (res && res.sucesso) {
@@ -579,7 +751,7 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // PESQUISA NOMINAL & LISTAGEM DE MEMBROS
+  // 7. PESQUISA NOMINAL & LISTAGEM DE MEMBROS
   // =========================================================
 
   function scheduleMemberSearch() {
@@ -746,7 +918,16 @@ const FiscalEngine = (() => {
 
     getStatusBanner('Enviando QR Code para seu e-mail...', 'loading');
     try {
-      const res = await ApiService.reenviarCredencialEmail(session.sessionToken);
+      let res;
+      if (typeof ApiService.reenviarCredencialEmail === 'function') {
+        res = await ApiService.reenviarCredencialEmail(session.sessionToken);
+      } else if (typeof ApiService.callAppsScript === 'function') {
+        res = await ApiService.callAppsScript({
+          acao: 'reenviarCredencialEmail',
+          tokenSessao: session.sessionToken
+        });
+      }
+
       if (res && res.sucesso) {
         getStatusBanner(res.mensagem || 'QR Code reenviado com sucesso.', 'success');
       } else {
@@ -759,13 +940,18 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // ENCERRAMENTO DE SESSÃO FISCAL
+  // 8. ENCERRAMENTO DE SESSÃO FISCAL
   // =========================================================
 
   async function logoutFiscal() {
     try {
       if (fiscalSession && typeof ApiService.logoutFiscal === 'function') {
         await ApiService.logoutFiscal(fiscalSession);
+      } else if (fiscalSession && typeof ApiService.callAppsScript === 'function') {
+        await ApiService.callAppsScript({
+          acao: 'logoutFiscal',
+          sessao: fiscalSession
+        });
       }
     } catch (e) {
       console.warn('Aviso de logout fiscal:', e);
@@ -809,7 +995,7 @@ const FiscalEngine = (() => {
   }
 
   // =========================================================
-  // INICIALIZAÇÃO DE GATILHOS (DUPLO CLIQUE, TOUCH E ATALHO)
+  // 9. INICIALIZAÇÃO DE GATILHOS (DUPLO CLIQUE, TOUCH E ATALHO)
   // =========================================================
 
   function initListeners() {
@@ -864,8 +1050,17 @@ const FiscalEngine = (() => {
     abrirStudioCracha,
     gerarCrachaDireto,
     baixarListaPresencaCsv,
-    imprimirCrachasSelecionados,
-    verificarSaudeRedeIA
+    verificarSaudeRedeIA,
+    abrirModalLoteCrachas,
+    fecharModalLoteCrachas,
+    toggleMembroLote,
+    atualizarNomeLote,
+    atualizarTipoLote,
+    carregarFotoLote,
+    marcarTodosLote,
+    filtrarTabelaLote,
+    executarImpressaoLoteA4,
+    imprimirCrachasSelecionados: abrirModalLoteCrachas
   };
 })();
 
@@ -880,5 +1075,7 @@ window.logoutFiscal = FiscalEngine.logoutFiscal;
 window.gerarCrachaDireto = FiscalEngine.gerarCrachaDireto;
 window.abrirStudioCracha = FiscalEngine.abrirStudioCracha;
 window.verificarSaudeRedeIA = FiscalEngine.verificarSaudeRedeIA;
+window.abrirModalLoteCrachas = FiscalEngine.abrirModalLoteCrachas;
+window.fecharModalLoteCrachas = FiscalEngine.fecharModalLoteCrachas;
 
 window.addEventListener('DOMContentLoaded', FiscalEngine.initListeners);
