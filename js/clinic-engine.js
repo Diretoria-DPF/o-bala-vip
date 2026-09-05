@@ -1,6 +1,14 @@
 /**
  * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE, ACERVO & RADAR EPIDEMIOLÓGICO)
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
+ * 
+ * Funcionalidades Centrais:
+ * - Alternância dinâmica entre Plantão Ativo e Acervo Coletivo (Biblioteca da Liga).
+ * - Filtros por toxíndrome e busca semântica em tempo real sobre o acervo.
+ * - Reuso de casos com custo zero de tokens e geração de variações por IA.
+ * - Modal do Radar Epidemiológico com telemetria incremental de sobrevida e agentes.
+ * - Roteiro semiológico em 4 eixos investigativos.
+ * - Avaliação com motor cognitivo 120B e destilação de Padrão Ouro para notas >= 85.
  */
 
 const ClinicEngine = (() => {
@@ -16,7 +24,7 @@ const ClinicEngine = (() => {
   let intentHistory = {};
   let caseOutcome = 'EM_ANDAMENTO';
   let activeSemiologyAxis = 'cronologia';
-  
+
   // Controle de Estado do Acervo Comunitário
   let modoExibicaoAtual = 'plantao'; // 'plantao' | 'acervo'
   let casosAcervoCache = [];
@@ -1032,7 +1040,7 @@ const ClinicEngine = (() => {
   }
 
   // =========================================================
-  // 10. GERAÇÃO PROCEDURAL (GROQ 120B COM COOLDOWN)
+  // 10. GERAÇÃO PROCEDURAL (GROQ 120B COM COOLDOWN & PERSISTÊNCIA)
   // =========================================================
 
   async function solicitarCasoProcedural(temaPredefinido = '') {
@@ -1079,9 +1087,13 @@ const ClinicEngine = (() => {
         if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
           clinicalCases.unshift(res.caso);
         }
+
+        // Invalida o cache local para que o novo caso apareça imediatamente na aba Acervo
+        casosAcervoCache = [];
+
         setModoExibicao('plantao');
         renderBedsGrid();
-        alert(`✅ Novo paciente admitido no leito: ${res.caso.paciente.nome} (${res.caso.titulo})!`);
+        alert(`✅ Novo paciente admitido no leito: ${res.caso.paciente.nome} (${res.caso.titulo})!\nO caso também foi registrado no Acervo Coletivo para todos os membros.`);
 
         const cooldownSegundos = (tipoUsuario === 'Visitante') ? 300 : 30;
         iniciarContagemCooldownIA(cooldownSegundos);
@@ -1238,7 +1250,7 @@ const ClinicEngine = (() => {
   };
 })();
 
-// Declarações globais para suportar chamadas inline no HTML
+// Declarações globais para chamadas inline no HTML
 window.ClinicEngine = ClinicEngine;
 window.submitPatientQuestion = ClinicEngine.submitPatientQuestion;
 window.finalizeClinicalCase = ClinicEngine.finalizeClinicalCase;
