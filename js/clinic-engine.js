@@ -1,14 +1,6 @@
 /**
  * MOTOR DA CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE, ACERVO & RADAR EPIDEMIOLÓGICO)
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
- * 
- * Funcionalidades Centrais:
- * - Alternância dinâmica entre Plantão Ativo e Acervo Coletivo (Biblioteca da Liga).
- * - Filtros por toxíndrome e busca semântica em tempo real sobre o acervo.
- * - Reuso de casos com custo zero de tokens e geração de variações por IA.
- * - Modal do Radar Epidemiológico com telemetria incremental de sobrevida e agentes.
- * - Roteiro semiológico em 4 eixos investigativos.
- * - Avaliação com motor cognitivo 120B e destilação de Padrão Ouro para notas >= 85.
  */
 
 const ClinicEngine = (() => {
@@ -24,7 +16,7 @@ const ClinicEngine = (() => {
   let intentHistory = {};
   let caseOutcome = 'EM_ANDAMENTO';
   let activeSemiologyAxis = 'cronologia';
-
+  
   // Controle de Estado do Acervo Comunitário
   let modoExibicaoAtual = 'plantao'; // 'plantao' | 'acervo'
   let casosAcervoCache = [];
@@ -174,7 +166,7 @@ const ClinicEngine = (() => {
           <span>Idade: <strong>${idade} anos</strong></span>
           <span>Perfil: <strong>${perfilComportamental}</strong></span>
         </div>
-        <button class="btn btn-primary" style="width: 100%;" type="button" onclick="ClinicEngine.openBed('${c.id}')">
+        <button class="btn btn-primary" style="width: 100%;" type="button" data-id="${c.id}" onclick="ClinicEngine.openBed(this.dataset.id)">
           ${isConcluido ? '🔄 Reavaliar Caso' : '🩺 Assumir Atendimento'}
         </button>
       `;
@@ -206,11 +198,15 @@ const ClinicEngine = (() => {
       }
 
       if (res && res.sucesso && Array.isArray(res.casos) && res.casos.length > 0) {
-        casosAcervoCache = res.casos.map(c => {
+        casosAcervoCache = res.casos.map((c, idx) => {
+          let parsed = c;
           if (typeof c === 'string') {
-            try { return JSON.parse(c); } catch (e) { return null; }
+            try { parsed = JSON.parse(c); } catch (e) { parsed = null; }
           }
-          return c;
+          if (parsed && !parsed.id) {
+            parsed.id = 'acervo_caso_' + idx;
+          }
+          return parsed;
         }).filter(Boolean);
 
         renderAcervoGrid(casosAcervoCache);
@@ -246,11 +242,12 @@ const ClinicEngine = (() => {
       return;
     }
 
-    casos.forEach(c => {
+    casos.forEach((c, index) => {
       const card = document.createElement('div');
       card.className = 'bed-card ambulatory';
       card.style.borderTop = '4px solid #0284c7';
 
+      const casoId = String(c.id || ('acervo_' + index));
       const nomePac = (c.paciente && c.paciente.nome) ? c.paciente.nome : 'Paciente';
       const idadePac = (c.paciente && c.paciente.idade) ? `${c.paciente.idade} anos` : '--';
       const tox = c.toxindrome || 'Geral';
@@ -263,7 +260,7 @@ const ClinicEngine = (() => {
         </div>
         <h4 style="margin: 8px 0 2px; font-size: 1.1rem; color: #0369a1;">${c.titulo || c.topico || 'Caso Clínico'}</h4>
         <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 8px;">Paciente: <strong>${nomePac} (${idadePac})</strong></div>
-        <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 40px;">"${c.queixaPrincipal || 'Caso clínico catalogado.'}"</p>
+        <p class="bed-complaint" style="font-style: italic; color: #475569; margin-bottom: 12px; min-height: 40px;">"${c.queixaPrincipal || 'Caso clínico catalogado no acervo.'}"</p>
         
         <div class="bed-meta" style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--gray); border-top: 1px solid #e2e8f0; padding-top: 6px; margin-bottom: 12px;">
           <span>Agente: <strong>${agente}</strong></span>
@@ -271,10 +268,10 @@ const ClinicEngine = (() => {
         </div>
 
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-primary btn-sm" style="flex: 2; background: #0284c7;" type="button" onclick="ClinicEngine.assumirCasoDoAcervo('${c.id}')">
+          <button class="btn btn-primary btn-sm" style="flex: 2; background: #0284c7;" type="button" data-id="${casoId}" onclick="ClinicEngine.assumirCasoDoAcervo(this.dataset.id)">
             🩺 Atender Este Caso
           </button>
-          <button class="btn btn-outline btn-sm" style="flex: 1; padding: 4px 6px;" type="button" title="Sintetizar caso derivado com IA" onclick="ClinicEngine.gerarVariacaoComIa('${agente !== 'Não informado' ? agente : c.topico}')">
+          <button class="btn btn-outline btn-sm" style="flex: 1; padding: 4px 6px;" type="button" title="Sintetizar caso derivado com IA" data-tema="${agente !== 'Não informado' ? agente : (c.topico || 'Toxicologia')}" onclick="ClinicEngine.gerarVariacaoComIa(this.dataset.tema)">
             ⚡ Variação IA
           </button>
         </div>
@@ -307,17 +304,33 @@ const ClinicEngine = (() => {
     renderAcervoGrid(filtrados);
   }
 
-  function assumirCasoDoAcervo(casoId) {
-    const caso = casosAcervoCache.find(c => c.id === casoId);
-    if (!caso) return;
+  function assumirCasoDoAcervo(identificador) {
+    initDomReferences();
 
+    let caso = casosAcervoCache.find(c => String(c.id).trim() === String(identificador).trim());
+    if (!caso && !isNaN(Number(identificador))) {
+      caso = casosAcervoCache[Number(identificador)];
+    }
+
+    if (!caso) {
+      alert('Não foi possível localizar este caso no acervo carregado.');
+      return;
+    }
+
+    // Mutação segura em clinicalCases sem reatribuição de const
     if (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases)) {
-      clinicalCases = clinicalCases.filter(c => c.id !== caso.id);
+      const idx = clinicalCases.findIndex(c => String(c.id) === String(caso.id));
+      if (idx !== -1) {
+        clinicalCases.splice(idx, 1);
+      }
       clinicalCases.unshift(caso);
     }
 
-    setModoExibicao('plantao');
-    openBed(caso.id);
+    // Transiciona diretamente para o leito de consulta
+    if (dom.dashboardView) dom.dashboardView.classList.add('hidden');
+    if (dom.workspaceView) dom.workspaceView.classList.remove('hidden');
+
+    startCase(caso);
   }
 
   function gerarVariacaoComIa(temaBase) {
@@ -416,11 +429,11 @@ const ClinicEngine = (() => {
     setModoExibicao(modoExibicaoAtual);
   }
 
-  function openBed(caseId) {
+  function openBed(caseIdOrObject) {
     initDomReferences();
     if (dom.dashboardView) dom.dashboardView.classList.add('hidden');
     if (dom.workspaceView) dom.workspaceView.classList.remove('hidden');
-    startCase(caseId);
+    startCase(caseIdOrObject);
   }
 
   function returnToBeds() {
@@ -432,15 +445,21 @@ const ClinicEngine = (() => {
     showBedsDashboard();
   }
 
-  function startCase(caseId) {
+  function startCase(caseIdOrObject) {
     initDomReferences();
 
-    const selected = (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases))
-      ? (clinicalCases.find(c => c.id === caseId) || clinicalCases[0])
-      : null;
+    let selected = null;
+    if (caseIdOrObject && typeof caseIdOrObject === 'object') {
+      selected = caseIdOrObject;
+    } else {
+      const idStr = String(caseIdOrObject).trim();
+      selected = (typeof clinicalCases !== 'undefined' && Array.isArray(clinicalCases))
+        ? (clinicalCases.find(c => String(c.id).trim() === idStr) || clinicalCases[0])
+        : null;
+    }
 
     if (!selected) {
-      console.error('[ClinicEngine] Caso clínico não encontrado.');
+      console.error('[ClinicEngine] Caso clínico não encontrado:', caseIdOrObject);
       return;
     }
 
@@ -917,7 +936,6 @@ const ClinicEngine = (() => {
     const diagnosis = dom.studentDiagnosis?.value.trim() || 'Não informado pelo estudante.';
     const conduct = dom.studentConduct?.value.trim() || 'Não informada pelo estudante.';
 
-    // Payload completo transmitido para a avaliação 120B e destilação de Padrão Ouro
     const payload = {
       gabarito: currentCase.gabaritoPreceptor,
       diagnosticoAluno: diagnosis,
@@ -1088,16 +1106,16 @@ const ClinicEngine = (() => {
           clinicalCases.unshift(res.caso);
         }
 
-        // Invalida o cache local para que o novo caso apareça imediatamente na aba Acervo
+        // Invalida o cache local para carregar o novo caso na aba Acervo
         casosAcervoCache = [];
 
         setModoExibicao('plantao');
         renderBedsGrid();
-        alert(`✅ Novo paciente admitido no leito: ${res.caso.paciente.nome} (${res.caso.titulo})!\nO caso também foi registrado no Acervo Coletivo para todos os membros.`);
+        alert(`✅ Novo paciente admitido no leito: ${res.caso.paciente ? res.caso.paciente.nome : 'Paciente'} (${res.caso.titulo || 'Caso Clínico'})!\nO caso foi registrado no Acervo Coletivo para todos os membros.`);
 
         const cooldownSegundos = (tipoUsuario === 'Visitante') ? 300 : 30;
         iniciarContagemCooldownIA(cooldownSegundos);
-        openBed(res.caso.id);
+        openBed(res.caso);
         return;
       }
 
@@ -1118,7 +1136,7 @@ const ClinicEngine = (() => {
         btn.disabled = false;
         btn.textContent = '⚡ Gerar Caso com IA';
       }
-      openBed(casoBackup.id);
+      openBed(casoBackup);
     }
   }
 
