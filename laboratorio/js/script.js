@@ -37,7 +37,7 @@
   // ==========================================
   // 3. TABELAS QUÍMICAS E CONSTANTES ORIGINAIS
   // ==========================================
-  const APPS_SCRIPT_GATEWAY = 'https://script.google.com/macros/s/AKfycbyhZk_3HZaVWLVHgyNyzL5IBT5SXb1w_gz3cdgAiQqQVjNvY5tTnb0EXUmsI8wGsGne/exec';
+  const APPS_SCRIPT_GATEWAY = 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
   const MM = { Na:23, Al:27, Zn:65.4, Mg:24.3, CuSO4:159.6, NaCl:58.4, CaCO3:100, KI:166, AgNO3:169.9, PbNO3:331, NaOH:40, HCl:36.5, Li:6.94, K:39.1, Ca:40.08, NaHCO3:84.0, K2CO3:138.2, KOH:56.1, LiOH:23.95, CaOH2:74.09, I2:253.8, S:32.06, P:30.97, Fe:55.8, Ni:58.7, Cu:63.5, Sn:118.7, Pb:207.2, HNO3:63.0, HClO4:100.5, H3PO4:98.0, AcidoSalicilico:138.12, pAminofenol:109.13, AcidoBenzoico:122.12 };
   const CONC_AQ = { H2O2_aq:3.0, PbNO3_aq:1.0, AgNO3_aq:1.0, CdNO3_aq:1.0, CuSO4_aq:1.0, FeCl3_aq:1.0, ZnSO4_aq:1.0, NiCl2_aq:1.0, SbCl3_aq:1.0, CaCl2_aq:1.0, BaCl2_aq:1.0, CoCl2_aq:1.0, SCN_aq:1.0, HCl_aq:6.0, H2SO4_aq:9.0, AcidoAcetico_aq:1.0, KI_aq:1.0, NH42S_aq:1.0, NaOH_aq:6.0, NH3_aq:5.0, Na2CO3_aq:1.0, NaClO_aq:2.0, NaHCO3_aq:1.0, K2CO3_aq:1.0, KOH_aq:6.0, LiOH_aq:5.0, CaOH2_aq:0.5, HNO3_aq:6.0, HClO4_aq:6.0, H3PO4_aq:4.0 };
   const BP = { H2O_l:100, Etanol_l:78.4, Acetona_l:56, Hexano_l:68.7, Benzeno_l:80.1, Tolueno_l:110.6, Metanol_l:64.7, Cloroformio_l:61.2, AnidridoAcetico_l:139.8, AlcoolIsopentilico_l:131.1, Anilina_l:184.1 };
