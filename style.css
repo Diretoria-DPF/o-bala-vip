@@ -59,12 +59,25 @@ body.theme-clinic {
   -webkit-tap-highlight-color: transparent;
 }
 
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background-color: var(--bg-main);
   color: var(--text-main);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+}
+
+/* Prevenção de auto-zoom em inputs em telas sensíveis ao toque (iOS/Android) */
+input, select, textarea {
+  font-size: 16px !important;
 }
 
 .hidden {
@@ -214,6 +227,20 @@ body {
 }
 
 /* =========================================================
+   ESTRUTURA UNIVERSAL DE IFRAMES (QUIZ & LAB)
+========================================================= */
+#quizFrame, #toxicoFrame, #labFrame {
+  width: 100% !important;
+  height: calc(100dvh - 140px) !important;
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  display: block;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* =========================================================
    BOTÕES E ENTRADAS
 ========================================================= */
 .btn {
@@ -309,6 +336,7 @@ body {
 
 input[type="text"],
 input[type="email"],
+input[type="password"],
 select,
 textarea {
   width: 100%;
@@ -317,7 +345,6 @@ textarea {
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-main);
-  font-size: 0.95rem;
   transition: var(--transition);
   margin-top: 6px;
   margin-bottom: 14px;
@@ -998,7 +1025,7 @@ label {
 }
 
 /* =========================================================
-   4. CLÍNICA MÉDICA VIRTUAL (OSCE COM GEMINI)
+   4. CLÍNICA MÉDICA VIRTUAL (OSCE COM GROQ / GEMINI)
 ========================================================= */
 .clinic-workspace {
   background: var(--surface);
@@ -1258,11 +1285,6 @@ label {
   font-weight: 700;
   color: var(--secondary);
   white-space: nowrap;
-}
-
-.suggestions-chips {
-  display: flex;
-  gap: 8px;
 }
 
 .suggestions-chips {
@@ -1575,11 +1597,9 @@ label {
   opacity: 0.5;
 }
 
-
 /* =========================================================
    ESTILOS DO TERMINAL FISCAL (PADRÃO LAIFT)
 ========================================================= */
-
 .badge-admin {
   display: inline-block;
   margin-bottom: 14px;
@@ -1985,37 +2005,38 @@ label {
     width: 100%;
   }
 
-   /* Notificação Toast de Conquista */
-.achievement-toast {
-  position: fixed;
-  top: 80px;
-  right: 24px;
-  background: linear-gradient(135deg, #1a365d, #2b6cb0);
-  color: #ffffff;
-  padding: 16px 22px;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  z-index: 9999;
-  border-left: 5px solid #facc15;
-  animation: slideInRight 0.4s ease, fadeOut 0.5s ease 4.5s forwards;
-}
+  /* Notificação Toast de Conquista */
+  .achievement-toast {
+    position: fixed;
+    top: 80px;
+    right: 24px;
+    background: linear-gradient(135deg, #1a365d, #2b6cb0);
+    color: #ffffff;
+    padding: 16px 22px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    z-index: 9999;
+    border-left: 5px solid #facc15;
+    animation: slideInRight 0.4s ease, fadeOut 0.5s ease 4.5s forwards;
+  }
 
-.achievement-icon {
-  font-size: 2.2rem;
-}
+  .achievement-icon {
+    font-size: 2.2rem;
+  }
 
-.achievement-text h4 {
-  font-size: 0.95rem;
-  color: #facc15;
-  margin-bottom: 2px;
-}
+  .achievement-text h4 {
+    font-size: 0.95rem;
+    color: #facc15;
+    margin-bottom: 2px;
+  }
 
-.achievement-text p {
-  font-size: 0.82rem;
-  color: #e2e8f0;
+  .achievement-text p {
+    font-size: 0.82rem;
+    color: #e2e8f0;
+  }
 }
 
 @keyframes slideInRight {
@@ -2025,6 +2046,4 @@ label {
 
 @keyframes fadeOut {
   to { opacity: 0; transform: translateY(-10px); visibility: hidden; }
-}
-   
 }
