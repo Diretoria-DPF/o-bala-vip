@@ -1,215 +1,255 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>LAIFT Engine</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LAIFT — Laboratório Virtual de Bancada & Síntese Farmacêutica</title>
   
-  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;800&family=Fira+Code:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Fontes de Alta Legibilidade -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Urbanist:wght@400;600;700;800&display=swap" rel="stylesheet">
   
+  <!-- Renderizador Vetorial 2D de Moléculas (SmilesDrawer) -->
+  <script src="https://unpkg.com/smiles-drawer@2.1.7/dist/smiles-drawer.min.js"></script>
+  
+  <!-- Estilos do Laboratório -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+  <!-- ==========================================
+       CABEÇALHO & NAVEGAÇÃO
+  ========================================== -->
   <header>
-    <h1>⚗️ LAIFT Engine</h1>
-    <span class="badge">Laboratório Acadêmico</span>
-    <div class="manual-btn" onclick="window.abrirManual()" title="Manual de Instruções">📖</div>
+    <h1>LABORATÓRIO VIRTUAL DE SÍNTESE & ANÁLISE</h1>
+    <span class="badge">SISTEMA LAIFT • PHARMACOPEIA DIGITAL & FIRST-PRINCIPLES</span>
+    <button class="manual-btn" id="btnManual" title="Manual e Guia de Bancada" onclick="abrirManual()">📖</button>
   </header>
-  
-  <div class="main-grid">
-    <div class="panel" style="display:flex;flex-direction:column;gap:0.6rem;">
-      <h3><span class="icon-dot"></span> Bancada de Controle</h3>
+
+  <!-- ==========================================
+       GRID PRINCIPAL DA BANCADA
+  ========================================== -->
+  <main class="main-grid">
+
+    <!-- PAINEL ESQUERDO: CONTROLES, REAGENTES E PRECURSORES -->
+    <aside class="panel panel-controls">
+      <h3><span class="icon-dot"></span> Reagentes & Precursores</h3>
+
       <div class="controls-scroll">
-        
-        <label>🧪 Vidraria Ativa</label>
-        <select id="vidrariaSelect" onchange="window.trocarVidraria()">
-          <option value="becker_250" selected>Béquer 250 mL</option>
-          <option value="becker_1000">Béquer 1 L</option>
-          <option value="erlen_250">Erlenmeyer Fechado 250 mL</option>
-          <option value="tubo_20">Tubo de Ensaio 20 mL</option>
+        <label for="vidrariaSelect">Vidraria de Reação:</label>
+        <select id="vidrariaSelect" onchange="trocarVidraria()">
+          <option value="becker_250" selected>Béquer Graduado (250 mL)</option>
+          <option value="erlen_250">Erlenmeyer com Rolha (250 mL - Sistema Fechado)</option>
+          <option value="becker_1000">Béquer Industrial (1000 mL)</option>
+          <option value="tubo_20">Tubo de Ensaio (20 mL)</option>
         </select>
-        
-        <label>⚗️ Catálogo de Reagentes</label>
-        <div class="reagent-catalog" id="catalogContainer"></div>
-        
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <div style="flex:1"><label>Volume (mL/g)</label><input type="number" id="qtdInput" value="10" min="0.1" step="0.1"></div>
-          <div style="flex:1"><label>Modo</label>
-            <select id="modoAdd">
-              <option value="tudo">Despejo Total</option>
-              <option value="jato">Jato (10mL/s)</option>
-              <option value="gota">Gota a Gota</option>
-            </select>
-          </div>
+
+        <label>Catálogo de Substâncias Farmacêuticas:</label>
+        <div id="catalogContainer" class="reagent-catalog">Carregando catálogo...</div>
+
+        <div style="margin-top: 10px;">
+          <label for="qtdInput">Quantidade:</label>
+          <input type="number" id="qtdInput" value="10" min="0.1" step="0.5">
         </div>
-        
-        <div class="btn-row" style="margin-top:6px;">
-          <button class="btn btn-play" id="btnStartAdd" onclick="window.iniciarAdicao()">▶ Adicionar</button>
-          <button class="btn btn-stop" onclick="window.pararAdicao()">⏸ Parar</button>
-          <button class="btn" style="background:#607d8b; color:#fff;" onclick="window.desfazerAcao()" title="Desfazer última adição">↩ Desfazer</button>
+
+        <label for="modoAdd">Modo de Inserção:</label>
+        <select id="modoAdd">
+          <option value="gota">Gota a Gota (Cinética Lenta)</option>
+          <option value="jato">Jato Contínuo (Moderado)</option>
+          <option value="tudo" selected>Carga Imediata (Alíquota Total)</option>
+        </select>
+
+        <div class="btn-row" style="margin-top: 10px;">
+          <button class="btn btn-play" id="btnStartAdd" onclick="iniciarAdicao()">▶ Adicionar</button>
+          <button class="btn btn-stop" onclick="pararAdicao()">⏸ Pausar</button>
+          <button class="btn btn-clear" onclick="desfazerAcao()">↩ Desfazer</button>
         </div>
-        
-        <label>⚙️ Controle de Tempo & Agitação</label>
+
+        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 12px 0;">
+
+        <!-- Controle Cinético e Térmico -->
+        <label>Sistema Térmico da Bancada:</label>
         <div class="btn-row">
-          <button class="btn btn-time active-btn" id="btnT1" onclick="window.setVelocidade(1)">1x</button>
-          <button class="btn btn-time" id="btnT2" onclick="window.setVelocidade(2)">2x</button>
-          <button class="btn btn-time" id="btnT5" onclick="window.setVelocidade(5)">5x</button>
-          <button class="btn" style="background:#e0e0e0; color:#000;" id="btnAgitador" onclick="window.toggleAgitador()">🌀 Agitador</button>
+          <button class="btn btn-fire" id="btnHeat" onclick="setModoTermico('aquecendo')">🔥 Aquecer</button>
+          <button class="btn btn-ice" id="btnCool" onclick="setModoTermico('resfriando')">❄️ Banho Gelo</button>
+          <button class="btn btn-lock" id="btnThermostat" onclick="setModoTermico('termostato')">🎯 Alvo</button>
         </div>
 
-        <label>🔥 Controle Térmico</label>
-        <div style="display:flex;gap:6px;">
-          <div style="flex:1"><label>Alvo °C</label><input type="number" id="tempAlvo" value="25" step="5"></div>
-          <div style="flex:1"><label>Potência</label><input type="range" id="heatSlider" min="1" max="10" value="5" oninput="window.ajustarPotenciaChama(this.value)"></div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 8px;">
+          <input type="number" id="tempAlvo" value="25" style="width: 80px;" title="Temperatura Alvo (°C)">
+          <span style="font-size: 0.75rem; color: var(--text-secondary);">°C Alvo</span>
+          <input type="range" id="heatSlider" min="1" max="10" value="5" oninput="ajustarPotenciaChama(this.value)" title="Intensidade da Chama" style="flex: 1;">
         </div>
-        
-        <div class="btn-row">
-          <button class="btn btn-fire" id="btnHeat" onclick="window.setModoTermico('aquecendo')">🔥 Aquecer</button>
-          <button class="btn btn-lock" id="btnThermostat" onclick="window.setModoTermico('termostato')">🔒 Travar</button>
-          <button class="btn btn-ice" id="btnCool" onclick="window.setModoTermico('resfriando')">❄️ Resfriar</button>
+
+        <div class="btn-row" style="margin-top: 10px;">
+          <button class="btn btn-play" id="btnAgitador" onclick="toggleAgitador()">🌪️ Agitador Magnético</button>
+          <button class="btn btn-reset" onclick="resetarLaboratorio()">🔄 Limpar Bancada</button>
         </div>
-        
-        <button class="btn btn-reset" style="width:100%;margin-top:8px;" onclick="window.resetarLaboratorio()">🗑️ Limpar Tudo</button>
       </div>
-    </div>
+    </aside>
 
-    <div class="visual-stage" id="visualStage">
-
-      <button id="btnCloseFocus" class="btn-close-focus" onclick="window.fecharFoco(event)">✖ Fechar Foco (Esc)</button>
-    
-      <div class="hud-overlay">
-        <div class="hud-card"><span class="hud-label">Temperatura</span><span class="hud-val" id="hudTemp">25.0 °C</span></div>
-        <div class="hud-card"><span class="hud-label">Pressão</span><span class="hud-val" id="hudPress">1.00 atm</span><span id="pressWarn" class="press-warning">⚠</span></div>
-        <div class="hud-card"><span class="hud-label">pH</span><span class="hud-val" id="hudPH">7.00</span></div>
-      </div>
+    <!-- PAINEL CENTRAL: VIDRARIA, PALCO FÍSICO E REAÇÃO VISUAL -->
+    <section class="visual-stage" id="visualStage">
       
+      <!-- HUD Superior -->
+      <div class="hud-overlay">
+        <div class="hud-card">
+          <div class="hud-label">Temperatura</div>
+          <div class="hud-val" id="hudTemp">25.0 °C</div>
+        </div>
+        <div class="hud-card">
+          <div class="hud-label">Pressão Interna</div>
+          <div class="hud-val" id="hudPress">1.00 atm <span id="pressWarn" class="press-warning"></span></div>
+        </div>
+        <div class="hud-card">
+          <div class="hud-label">pH da Solução</div>
+          <div class="hud-val" id="hudPH">7.00</div>
+        </div>
+        <div class="hud-card">
+          <div class="hud-label">Volume Reacional</div>
+          <div class="hud-val" id="volDisplay">0.0 / 250 mL</div>
+        </div>
+      </div>
+
+      <!-- Coluna Termométrica -->
       <div class="thermo-column">
-        <div class="thermo-stick"><div class="thermo-fill-bar" id="thermoFill"></div></div>
+        <div class="thermo-stick">
+          <div class="thermo-fill-bar" id="thermoFill"></div>
+        </div>
         <div class="thermo-bulb-circle" id="thermoBulb"></div>
       </div>
-      
-      <div class="tripod"></div>
-      
-      <div class="glassware-zone" id="glasswareZone" onclick="window.toggleFoco()" title="Clique para dar Zoom (Modo Foco)">
-        <div class="droplet-indicator" id="droplet"></div>
-        
+
+      <!-- Palco Central: Vidraria -->
+      <div class="glassware-zone" id="glasswareZone" onclick="toggleFoco()">
         <div class="glass-vessel vessel-beaker" id="vessel">
-          <div class="stopper-cap"></div>
+          <div class="stopper-cap" id="stopperCap"></div>
           <div class="content-fill">
-            
-            <div class="liquid-layer" id="liquidLayer">
-              <div class="precipitate-layer" id="precipLayer"></div>
-              <div class="bubble-overlay" id="bubbleOverlay"></div>
-            </div>
+            <div class="liquid-layer" id="liquidLayer"></div>
+            <div class="precipitate-layer" id="precipLayer"></div>
             <div class="freeze-overlay" id="freezeOverlay"></div>
+            <div class="bubble-overlay" id="bubbleOverlay"></div>
             <div class="gas-halo" id="gasHalo"></div>
-            
             <div class="agitador" id="agitadorFisico"></div>
           </div>
         </div>
       </div>
-      
-      <div class="flame-effect" id="flameFX"><div class="flame-core"></div><div class="flame-base"></div></div>
-      <div class="ice-aura-effect" id="iceFX"></div>
-      <div class="bench"></div>
-      
-      <div class="alert-fullscreen" id="alertOverlay">
-        <h2 id="alertTitle">⚠️ Alerta</h2>
-        <div id="alertMsg"></div>
-        <button class="btn btn-stop" style="margin-top:12px;width:180px;" onclick="window.resetarLaboratorio()">Resetar</button>
-      </div>
-      
-      <div class="signature">DPF :)</div>
-    </div>
 
-    <div class="side-panel-right">
+      <!-- Efeitos de Aquecimento / Resfriamento -->
+      <div class="flame-effect" id="flameFX">
+        <div class="flame-core"></div>
+        <div class="flame-base"></div>
+      </div>
+      <div class="ice-aura-effect" id="iceFX"></div>
+
+      <!-- Estruturas da Bancada -->
+      <div class="tripod"></div>
+      <div class="bench"></div>
+      <div class="signature">LAIFT • SISTEMA DE SÍNTESE</div>
+
+      <!-- Botão de Sair do Modo Foco -->
+      <button class="btn-close-focus" id="btnCloseFocus" onclick="toggleFoco()">✕ Sair do Modo Foco</button>
+    </section>
+
+    <!-- PAINEL DIREITO: INSPEÇÃO MOLECULAR 2D, TELEMETRIA E MISSÕES -->
+    <aside class="side-panel-right">
       
-      <div class="panel">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h3 style="margin:0;"><span class="icon-dot" style="background:var(--neon-green)"></span> Missão Ativa</h3>
-          <button class="btn btn-clear" style="color:var(--neon-green); border-color:var(--neon-green);" onclick="window.abrirLivroMissoes()" title="Ver todas as missões">📚 Livro</button>
+      <!-- Cartão de Inspeção Molecular 2D -->
+      <div class="panel" id="molecularInspectorPanel" style="border-color: #0284c7;">
+        <h3 style="color: #38bdf8;"><span class="icon-dot" style="background: #38bdf8;"></span> Inspeção Molecular 2D</h3>
+        
+        <div style="background: #020617; border-radius: 8px; border: 1px solid #1e3a5f; display: flex; justify-content: center; align-items: center; min-height: 170px; margin-bottom: 8px; position: relative;">
+          <canvas id="moleculeCanvas" width="250" height="160" style="display: block; max-width: 100%;"></canvas>
+          <span id="molPlaceholder" style="position: absolute; font-size: 0.72rem; color: #64748b; text-align: center; padding: 10px;">
+            Aguardando síntese ou composto formado...
+          </span>
         </div>
-        <div class="mission-box" id="missionBox">
-          <strong id="missionTitle">Missão 1: Neutralização</strong>
-          <p style="font-size:0.7rem; color:#b0bec5; margin-top:4px;" id="missionDesc">Atinge um pH entre 7.0 e 7.5 com um volume superior a 20 mL.</p>
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-            <span class="badge" id="missionStatus" style="border-color:#ff9800; color:#ff9800;">Pendente</span>
-            <button class="btn btn-play" id="btnNextMission" style="display:none; padding:4px 8px; font-size:0.6rem;" onclick="window.proximaMissao()">Próxima ⏭</button>
+
+        <div style="font-size: 0.75rem; line-height: 1.4; color: #cbd5e1;">
+          <div>Produto: <strong id="molName" style="color: #38bdf8;">Nenhum</strong></div>
+          <div style="margin-top: 2px;">IUPAC: <span id="molIupac" style="font-family: var(--font-mono); color: #94a3b8; word-break: break-all;">--</span></div>
+          <div style="margin-top: 4px; display: flex; justify-content: space-between; font-family: var(--font-mono);">
+            <span>Fórmula: <strong id="molFormula" style="color: #facc15;">--</strong></span>
+            <span>Massa: <strong id="molWeight" style="color: #a7f3d0;">-- g/mol</strong></span>
           </div>
         </div>
       </div>
-      
+
+      <!-- Gráfico de Titulação / pH -->
       <div class="panel">
-        <h3><span class="icon-dot"></span> Espécies no Recipiente</h3>
-        <div id="speciesTags" style="display:flex;flex-wrap:wrap;gap:3px;min-height:25px;"></div>
-        <label style="margin-top:6px;">Volume: <span id="volDisplay" style="color:var(--neon-cyan);font-family:var(--font-mono);">0.0 / 250 mL</span></label>
-      </div>
-      
-      <div class="panel">
-        <h3><span class="icon-dot"></span> Curva de pH (Titulação)</h3>
-        <div class="mini-canvas-wrap"><canvas id="phCanvas"></canvas></div>
-        <button class="btn btn-lock" style="width:100%;margin-top:4px;font-size:0.6rem;" onclick="window.limparCurvaPH()">Limpar Curva</button>
-      </div>
-      
-      <div class="panel">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <h3 style="margin:0;"><span class="icon-dot"></span> Registro de Eventos</h3>
-          <button class="btn btn-clear" onclick="window.limparRegistro()">🗑 Limpar</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <h3><span class="icon-dot"></span> Curva de Titulação / pH</h3>
+          <button class="btn btn-clear" onclick="limparCurvaPH()" style="padding: 2px 6px; font-size: 0.6rem;">Limpar</button>
         </div>
-        <div class="log-stream" id="logStream" style="margin-top:6px;">
-          <span style="color:#546e7a;">[Sistema] Laboratório Uninassau iniciado :).</span>
+        <div class="mini-canvas-wrap">
+          <canvas id="phCanvas"></canvas>
         </div>
       </div>
-      
-    </div>
-  </div> <div class="manual-modal" id="missionsModal">
-    <div class="manual-content">
-      <h3 style="color:var(--neon-green)">📚 Livro de Missões Químicas</h3>
-      <p style="font-size:0.8rem; margin-bottom:1rem;">Complete os objetivos no laboratório para desbloquear a próxima etapa.</p>
-      <div id="missionsList" style="background:#020617; padding:10px; border-radius:8px; border:1px solid #1e3a5f;"></div>
-      <button class="close-manual" style="background:#37474f;" onclick="window.fecharLivroMissoes()">Fechar Livro</button>
-    </div>
+
+      <!-- Diário de Bordo / Telemetria -->
+      <div class="panel">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <h3><span class="icon-dot"></span> Espécies no Vaso</h3>
+          <button class="btn btn-clear" onclick="limparRegistro()" style="padding: 2px 6px; font-size: 0.6rem;">Limpar Log</button>
+        </div>
+        <div id="speciesTags" style="margin-bottom: 8px; min-height: 24px;"></div>
+        <div class="log-stream" id="logStream"></div>
+      </div>
+
+      <!-- Missão / Roteiro Ativo -->
+      <div class="panel mission-box">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3 style="margin: 0; color: var(--neon-green);">🎯 Roteiro Prático</h3>
+          <button class="btn btn-clear" onclick="abrirLivroMissoes()">Livro</button>
+        </div>
+        <h4 id="missionTitle" style="font-size: 0.82rem; margin: 6px 0 2px; color: #ffffff;">Carregando roteiro...</h4>
+        <p id="missionDesc" style="font-size: 0.72rem; color: #cbd5e1; line-height: 1.35; margin-bottom: 6px;"></p>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="badge" id="missionStatus">Pendente</span>
+          <button class="btn btn-play" id="btnNextMission" onclick="proximaMissao()" style="display: none; padding: 3px 8px; font-size: 0.65rem;">Próxima ➔</button>
+        </div>
+      </div>
+
+    </aside>
+
+  </main>
+
+  <!-- ==========================================
+       MODAIS E TELAS DE SEGURANÇA
+  ========================================== -->
+  
+  <!-- Alerta de Acidente e Falha Crítica -->
+  <div class="alert-fullscreen" id="alertOverlay">
+    <h2 id="alertTitle">INCIDENTE LABORATORIAL</h2>
+    <div id="alertMsg"></div>
+    <button class="btn btn-reset" style="margin-top: 18px; padding: 10px 24px; font-size: 0.9rem;" onclick="resetarLaboratorio()">Restaurar Bancada e Segurança</button>
   </div>
 
+  <!-- Modal do Manual e Instruções -->
   <div class="manual-modal" id="manualModal">
     <div class="manual-content">
-      <h3>📖 Manual do Laboratório Quântico</h3>
-      <p><strong>Bem-vindo ao LAIFT Engine.</strong> Aqui você pode simular reações químicas com segurança. Siga as orientações abaixo para explorar o máximo do sistema.</p>
-      <h4 style="color:var(--neon-cyan); margin-top:1rem;">🧪 Regras Básicas</h4>
+      <h3>📖 Guia Técnico de Bancada & Síntese</h3>
+      <p>Bem-vindo ao simulador de farmacotécnica e físico-química da LAIFT.</p>
       <ul>
-        <li><strong>Adição de reagentes:</strong> escolha no catálogo, defina volume e modo (gota, jato ou despejo).</li>
-        <li><strong>Vidraria:</strong> béqueres abertos evaporam e trocam calor; o erlenmeyer fechado acumula gases e pressão.</li>
-        <li><strong>Temperatura:</strong> use os botões térmicos ou o termostato. A potência do fogo acelera o aquecimento.</li>
+        <li><strong>Adição e Misturas:</strong> Selecione os precursores no catálogo e adicione na vidraria. Reações ocorrem por leis estequiométricas e termodinâmicas reais.</li>
+        <li><strong>Inspeção Molecular:</strong> Sínteses bem-sucedidas projetam a estrutura química em 2D com dados canônicos da PubChem.</li>
+        <li><strong>Telemetria em Nuvem:</strong> Formulações estáveis e produtos inéditos são catalogados automaticamente na aba <code>Formulacoes_Laboratorio</code>.</li>
       </ul>
-      <h4 style="color:var(--neon-cyan); margin-top:1rem;">🔥 Ebulição e Congelamento</h4>
-      <ul>
-        <li><strong>Pontos de ebulição:</strong> água (100°C), etanol (78.4°C), acetona (56°C), hexano (68.7°C), benzeno (80.1°C), tolueno (110.6°C), metanol (64.7°C), clorofórmio (61.2°C). Ao atingir a temperatura, o líquido começa a evaporar.</li>
-        <li><strong>Congelamento:</strong> abaixo de 0°C a água congela, etanol a -114°C, acetona a -95°C. O líquido se transforma em sólido, reduzindo o volume líquido.</li>
-      </ul>
-      <h4 style="color:var(--neon-cyan); margin-top:1rem;">⚠️ Combinações Perigosas</h4>
-      <ul>
-        <li><strong>Metais alcalinos (Na, K, Li) + Água:</strong> reação explosiva, libera H₂ e calor. Pode estilhaçar a vidraria.</li>
-        <li><strong>Ácidos fortes + Água sanitária (NaClO):</strong> gera gás cloro (Cl₂), tóxico e pressuriza o sistema.</li>
-        <li><strong>Ácido + Carbonatos:</strong> efervescência rápida de CO₂, risco de transbordamento.</li>
-        <li><strong>Peróxido de hidrogênio + metais de transição (Fe³⁺, Pb²⁺):</strong> decomposição acelerada, libera O₂.</li>
-      </ul>
-      <h4 style="color:var(--neon-cyan); margin-top:1rem;">🧪 Precipitação e Cores</h4>
-      <ul>
-        <li><strong>Ag⁺ + Cl⁻ → precipitado branco (AgCl).</strong></li>
-        <li><strong>Pb²⁺ + I⁻ → amarelo intenso (PbI₂).</strong></li>
-        <li><strong>Cu²⁺ + OH⁻ → azul claro (Cu(OH)₂).</strong></li>
-        <li><strong>Fe³⁺ + OH⁻ → marrom avermelhado (Fe(OH)₃).</strong></li>
-        <li>Consulte a tabela completa no registro de eventos ao realizar misturas.</li>
-      </ul>
-      <p style="margin-top:1rem;"><strong>Dica:</strong> Use fenolftaleína para visualizar mudanças de pH (incolor em ácido, rosa em base).</p>
-      <button class="close-manual" onclick="window.fecharManual()">Fechar Manual</button>
+      <button class="close-manual" onclick="fecharManual()">Fechar Guia</button>
     </div>
   </div>
 
- <!-- Banco de Dados Estruturado do Laboratório -->
-  <script src="data/lab-database.js"></script>
+  <!-- Modal do Livro de Roteiros -->
+  <div class="manual-modal" id="missionsModal">
+    <div class="manual-content">
+      <h3 style="color: var(--neon-green);">📚 Roteiros Experimentais LAIFT</h3>
+      <div id="missionsList"></div>
+      <button class="close-manual" onclick="fecharLivroMissoes()">Fechar Livro</button>
+    </div>
+  </div>
 
-  <!-- Motor de Simulação de Bancada -->
+  <!-- Scripts: Base de Dados Farmacêutica e Motor Principal -->
+  <script src="data/lab-database.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
