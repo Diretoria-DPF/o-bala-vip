@@ -1,10 +1,11 @@
 /**
- * SIMULADOR DE FARMACOLOGIA LAIFT — MOTOR PRINCIPAL
- * Integração: SmilesDrawer, QuizAPIEngine (RxNav/PubChem/ChEBI) e Google Sheets.
+ * SIMULADOR DE FARMACOLOGIA LAIFT — MOTOR PRINCIPAL (VERSÃO RESILIENTE)
  */
 
-const APPS_SCRIPT_GATEWAY = 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
+// 1. Definição Segura do Gateway (Evita SyntaxError de redeclaração)
+var APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
 
+// 2. Estado Global da Aplicação
 let selectedTopics = new Set();
 let currentMode = "study"; 
 let filteredQuestions = [];
@@ -12,13 +13,14 @@ let currentQuestionIndex = 0;
 let userAnswers = [];
 let score = 0;
 let timeLeft = 0; 
-let timerInterval;
+let timerInterval = null;
 let quizActive = false;
 let quizCompleted = false;
 let quizStartTime = null;
 let smilesDrawerInstance = null;
+let bancoQuestoesUnificado = [];
 
-// Elementos da Interface
+// 3. Captura dos Elementos do DOM
 const topicsGrid = document.getElementById('topicsGrid');
 const startQuizBtn = document.getElementById('startQuiz');
 const selectAllBtn = document.getElementById('selectAll');
@@ -55,6 +57,30 @@ const infoBtn = document.getElementById('infoBtn');
 const instructionsModal = document.getElementById('instructionsModal');
 const closeModal = document.getElementById('closeModal');
 
+// 4. Normalizador de Banco de Dados (Suporta questions.js e quiz-database.js)
+function obterQuestoesDisponiveis() {
+    if (typeof allQuestions !== 'undefined' && Array.isArray(allQuestions) && allQuestions.length > 0) {
+        return allQuestions;
+    }
+    
+    if (typeof QUIZ_FARMACOLOGIA_DB !== 'undefined' && Array.isArray(QUIZ_FARMACOLOGIA_DB) && QUIZ_FARMACOLOGIA_DB.length > 0) {
+        return QUIZ_FARMACOLOGIA_DB.map((q, idx) => ({
+            id: q.id || idx + 1,
+            topic: q.modulo || q.topic || "Farmacologia Clínica",
+            farmacoAlvo: q.farmacoAlvo || null,
+            smiles: q.smiles || null,
+            pubchemCid: q.pubchemCid || null,
+            question: q.enunciado || q.question,
+            options: Array.isArray(q.options) ? q.options : (q.alternativas ? q.alternativas.map(a => a.texto) : []),
+            correct: typeof q.correct === 'number' ? q.correct : (q.alternativas ? q.alternativas.findIndex(a => a.correta) : 0),
+            explanation: q.explanation || (q.alternativas && q.alternativas.find(a => a.correta) ? q.alternativas.find(a => a.correta).feedback : ""),
+            analogiaDidatica: q.analogiaDidatica || ""
+        }));
+    }
+    
+    return [];
+}
+
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -64,64 +90,72 @@ function shuffleArray(array) {
 
 function initSmilesDrawer() {
     if (typeof SmilesDrawer !== 'undefined' && !smilesDrawerInstance) {
-        smilesDrawerInstance = new SmilesDrawer.Drawer({
-            width: 220,
-            height: 140,
-            bondThickness: 1.4,
-            bondLength: 14,
-            shortBondLength: 0.85,
-            compactDrawing: true,
-            themes: {
-                dark: {
-                    C: '#e2e8f0',
-                    O: '#ef4444',
-                    N: '#38bdf8',
-                    F: '#4ade80',
-                    CL: '#facc15',
-                    BR: '#fb923c',
-                    I: '#c084fc',
-                    P: '#f97316',
-                    S: '#eab308',
-                    BACKGROUND: 'transparent'
+        try {
+            smilesDrawerInstance = new SmilesDrawer.Drawer({
+                width: 220,
+                height: 140,
+                bondThickness: 1.4,
+                compactDrawing: true,
+                themes: {
+                    dark: {
+                        C: '#e2e8f0', O: '#ef4444', N: '#38bdf8', F: '#4ade80',
+                        CL: '#facc15', BR: '#fb923c', I: '#c084fc', BACKGROUND: 'transparent'
+                    }
                 }
-            }
-        });
+            });
+        } catch (e) {
+            console.warn('[SmilesDrawer] Falha na inicialização do motor gráfico:', e);
+        }
     }
 }
 
+// 5. Inicialização da Interface
 function initializeApp() {
+    bancoQuestoesUnificado = obterQuestoesDisponiveis();
+    
+    // Força a visibilidade da tela inicial
+    if (startScreen) startScreen.style.display = 'block';
+    if (quizContainer) quizContainer.style.display = 'none';
+    if (resultsContainer) resultsContainer.style.display = 'none';
+
+    if (bancoQuestoesUnificado.length === 0) {
+        if (topicsGrid) {
+            topicsGrid.innerHTML = '<p style="color: #ef4444; font-size: 0.85rem; padding: 10px;">⚠ Nenhuma questão foi carregada. Verifique se o arquivo questions.js ou quiz-database.js está na mesma pasta.</p>';
+        }
+        return;
+    }
+
     initSmilesDrawer();
 
-    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
-    const topics = [...new Set(questionsList.map(q => q.topic))];
+    const topics = [...new Set(bancoQuestoesUnificado.map(q => q.topic).filter(Boolean))];
     
-    totalTopicsElement.textContent = topics.length;
-    totalQsElement.textContent = questionsList.length;
-    totalQuestionsStatElement.textContent = questionsList.length;
+    if (totalTopicsElement) totalTopicsElement.textContent = topics.length;
+    if (totalQsElement) totalQsElement.textContent = bancoQuestoesUnificado.length;
+    if (totalQuestionsStatElement) totalQuestionsStatElement.textContent = bancoQuestoesUnificado.length;
     
-    topicsGrid.innerHTML = '';
-    topics.forEach(topic => {
-        const count = questionsList.filter(q => q.topic === topic).length;
-        const button = document.createElement('button');
-        button.className = 'topic-btn';
-        button.innerHTML = `<span>${topic}</span><span class="topic-count">${count}</span>`;
-        button.dataset.topic = topic;
-        button.addEventListener('click', () => toggleTopic(topic));
-        topicsGrid.appendChild(button);
-    });
+    if (topicsGrid) {
+        topicsGrid.innerHTML = '';
+        topics.forEach(topic => {
+            const count = bancoQuestoesUnificado.filter(q => q.topic === topic).length;
+            const button = document.createElement('button');
+            button.className = 'topic-btn';
+            button.innerHTML = `<span>${topic}</span><span class="topic-count">${count}</span>`;
+            button.dataset.topic = topic;
+            button.addEventListener('click', () => toggleTopic(topic));
+            topicsGrid.appendChild(button);
+        });
+    }
     
     const savedProgress = localStorage.getItem('pharmaQuizProgress');
-    if (savedProgress) {
+    if (savedProgress && continueBtn) {
         try {
             const progress = JSON.parse(savedProgress);
             if (progress.userAnswers && progress.userAnswers.length > 0) {
                 continueBtn.style.display = 'block';
-                updateStats();
             }
-        } catch (e) {
-            console.error('Erro ao carregar progresso:', e);
-        }
+        } catch (e) {}
     }
+    
     updateStats();
     updateDynamicButtons(); 
 }
@@ -129,20 +163,24 @@ function initializeApp() {
 function updateDynamicButtons() {
     const totalAvailableTopics = document.querySelectorAll('.topic-btn').length;
     
-    if (selectedTopics.size > 0) {
-        deselectAllBtn.classList.remove('secondary');
-        deselectAllBtn.classList.add('active-clear');
-    } else {
-        deselectAllBtn.classList.add('secondary');
-        deselectAllBtn.classList.remove('active-clear');
+    if (deselectAllBtn) {
+        if (selectedTopics.size > 0) {
+            deselectAllBtn.classList.remove('secondary');
+            deselectAllBtn.classList.add('active-clear');
+        } else {
+            deselectAllBtn.classList.add('secondary');
+            deselectAllBtn.classList.remove('active-clear');
+        }
     }
 
-    if (selectedTopics.size < totalAvailableTopics && totalAvailableTopics > 0) {
-        selectAllBtn.classList.remove('secondary');
-        selectAllBtn.classList.add('active-select');
-    } else {
-        selectAllBtn.classList.add('secondary');
-        selectAllBtn.classList.remove('active-select');
+    if (selectAllBtn) {
+        if (selectedTopics.size < totalAvailableTopics && totalAvailableTopics > 0) {
+            selectAllBtn.classList.remove('secondary');
+            selectAllBtn.classList.add('active-select');
+        } else {
+            selectAllBtn.classList.add('secondary');
+            selectAllBtn.classList.remove('active-select');
+        }
     }
 }
 
@@ -163,12 +201,11 @@ function updateTopicButtons() {
         if (selectedTopics.has(topic)) btn.classList.add('active');
         else btn.classList.remove('active');
     });
-    selectedTopicsElement.textContent = selectedTopics.size;
+    if (selectedTopicsElement) selectedTopicsElement.textContent = selectedTopics.size;
 }
 
 function selectAllTopics() {
-    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
-    const topics = [...new Set(questionsList.map(q => q.topic))];
+    const topics = [...new Set(bancoQuestoesUnificado.map(q => q.topic).filter(Boolean))];
     selectedTopics = new Set(topics);
     updateTopicButtons();
     updateStats();
@@ -196,7 +233,6 @@ function setMode(mode) {
 }
 
 function updateStats() {
-    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
     let answered = 0;
     let correct = 0;
     const savedProgress = localStorage.getItem('pharmaQuizProgress');
@@ -206,7 +242,7 @@ function updateStats() {
             if (progress.userAnswers) {
                 answered = progress.userAnswers.filter(a => a !== null).length;
                 correct = progress.userAnswers.reduce((acc, answer, index) => {
-                    if (answer !== null && questionsList[index] && answer === questionsList[index].correct) {
+                    if (answer !== null && bancoQuestoesUnificado[index] && answer === bancoQuestoesUnificado[index].correct) {
                         return acc + 1;
                     }
                     return acc;
@@ -215,47 +251,42 @@ function updateStats() {
         } catch (e) {}
     }
     
-    answeredStatElement.textContent = answered;
-    correctStatElement.textContent = correct;
-    const progressPercentage = questionsList.length > 0 ? Math.round((answered / questionsList.length) * 100) : 0;
-    progressStatElement.textContent = `${progressPercentage}%`;
+    if (answeredStatElement) answeredStatElement.textContent = answered;
+    if (correctStatElement) correctStatElement.textContent = correct;
+    const progressPercentage = bancoQuestoesUnificado.length > 0 ? Math.round((answered / bancoQuestoesUnificado.length) * 100) : 0;
+    if (progressStatElement) progressStatElement.textContent = `${progressPercentage}%`;
 
-    if (answered > 0) {
-        resetProgressBtn.style.display = 'block';
-    } else {
-        resetProgressBtn.style.display = 'none';
+    if (resetProgressBtn) {
+        resetProgressBtn.style.display = answered > 0 ? 'block' : 'none';
     }
 }
 
 function resetProgress() {
-    if (confirm("Tem certeza que deseja apagar todo o seu progresso? As respostas salvas serão zeradas.")) {
+    if (confirm("Tem certeza que deseja apagar todo o seu progresso salvo?")) {
         localStorage.removeItem('pharmaQuizProgress');
         userAnswers = [];
-        continueBtn.style.display = 'none';
-        resetProgressBtn.style.display = 'none';
+        if (continueBtn) continueBtn.style.display = 'none';
+        if (resetProgressBtn) resetProgressBtn.style.display = 'none';
         
-        if (quizActive || quizContainer.style.display === 'flex' || quizContainer.style.display === 'block') {
-            quizActive = false;
-            clearInterval(timerInterval);
-            quizContainer.style.display = 'none';
-            resultsContainer.style.display = 'none';
-            startScreen.style.display = 'flex';
-        }
+        quizActive = false;
+        clearInterval(timerInterval);
+        if (quizContainer) quizContainer.style.display = 'none';
+        if (resultsContainer) resultsContainer.style.display = 'none';
+        if (startScreen) startScreen.style.display = 'block';
         updateStats();
     }
 }
 
 function startQuiz() {
     if (selectedTopics.size === 0) { 
-        alert('Por favor, selecione pelo menos um tópico para começar!'); 
+        alert('Por favor, selecione pelo menos um tópico no menu lateral!'); 
         return; 
     }
     
-    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
-    filteredQuestions = [...questionsList.filter(q => selectedTopics.has(q.topic))];
+    filteredQuestions = [...bancoQuestoesUnificado.filter(q => selectedTopics.has(q.topic))];
     
     if (filteredQuestions.length === 0) { 
-        alert('Nenhuma questão encontrada para os tópicos selecionados!'); 
+        alert('Nenhuma questão encontrada para os tópicos selecionados.'); 
         return; 
     }
     
@@ -266,22 +297,9 @@ function startQuiz() {
     userAnswers = new Array(filteredQuestions.length).fill(null);
     quizStartTime = Date.now();
     
-    const savedProgress = localStorage.getItem('pharmaQuizProgress');
-    if (savedProgress && currentMode === 'study') {
-        try {
-            const progress = JSON.parse(savedProgress);
-            filteredQuestions.forEach((q, index) => {
-                const originalIndex = questionsList.findIndex(item => item.id === q.id);
-                if (originalIndex !== -1 && progress.userAnswers[originalIndex] !== null) {
-                    userAnswers[index] = progress.userAnswers[originalIndex];
-                }
-            });
-        } catch (e) {}
-    }
-    
-    startScreen.style.display = 'none';
-    quizContainer.style.display = 'block';
-    resultsContainer.style.display = 'none';
+    if (startScreen) startScreen.style.display = 'none';
+    if (quizContainer) quizContainer.style.display = 'block';
+    if (resultsContainer) resultsContainer.style.display = 'none';
     
     clearInterval(timerInterval); 
     
@@ -289,8 +307,10 @@ function startQuiz() {
         timeLeft = filteredQuestions.length * 90; 
         startTimer();
     } else {
-        timerElement.textContent = 'Modo Estudo';
-        timerElement.style.animation = 'none';
+        if (timerElement) {
+            timerElement.textContent = 'Modo Estudo';
+            timerElement.style.animation = 'none';
+        }
     }
     
     quizActive = true;
@@ -299,8 +319,7 @@ function startQuiz() {
 }
 
 function continueQuiz() {
-    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
-    filteredQuestions = [...questionsList];
+    filteredQuestions = [...bancoQuestoesUnificado];
     userAnswers = new Array(filteredQuestions.length).fill(null);
     quizStartTime = Date.now();
     
@@ -316,16 +335,18 @@ function continueQuiz() {
         }
     }
     
-    startScreen.style.display = 'none';
-    quizContainer.style.display = 'block';
-    resultsContainer.style.display = 'none';
+    if (startScreen) startScreen.style.display = 'none';
+    if (quizContainer) quizContainer.style.display = 'block';
+    if (resultsContainer) resultsContainer.style.display = 'none';
     
     currentMode = 'study';
     setMode('study');
     
     clearInterval(timerInterval);
-    timerElement.textContent = 'Continuando...';
-    timerElement.style.animation = 'none';
+    if (timerElement) {
+        timerElement.textContent = 'Modo Estudo';
+        timerElement.style.animation = 'none';
+    }
     
     quizActive = true;
     loadQuestion();
@@ -342,9 +363,7 @@ async function renderMolecularStructure(question) {
     const farmacoAlvo = question.farmacoAlvo || question.drug || null;
     let smiles = question.smiles || null;
 
-    if (label) {
-        label.textContent = farmacoAlvo || (smiles ? 'Estrutura Química' : '--');
-    }
+    if (label) label.textContent = farmacoAlvo || (smiles ? 'Estrutura Química' : '--');
 
     if (!smiles && farmacoAlvo && typeof QuizAPIEngine !== 'undefined') {
         if (label) label.textContent = `${farmacoAlvo} (Buscando...)`;
@@ -358,9 +377,9 @@ async function renderMolecularStructure(question) {
     if (smiles && typeof SmilesDrawer !== 'undefined') {
         initSmilesDrawer();
         SmilesDrawer.parse(smiles, (tree) => {
-            smilesDrawerInstance.draw(tree, canvas, 'dark', false);
+            if (smilesDrawerInstance) smilesDrawerInstance.draw(tree, canvas, 'dark', false);
         }, (err) => {
-            console.warn('Erro ao renderizar estrutura química:', err);
+            console.warn('[SmilesDrawer] Erro ao renderizar SMILES:', err);
         });
     }
 }
@@ -369,16 +388,15 @@ function loadQuestion() {
     if (!quizActive || currentQuestionIndex >= filteredQuestions.length) return;
     
     const question = filteredQuestions[currentQuestionIndex];
-    currentTopicElement.textContent = question.topic;
-    currentQuestionElement.textContent = currentQuestionIndex + 1;
-    totalQuestionsElement.textContent = filteredQuestions.length;
-    questionText.textContent = question.question;
+    if (currentTopicElement) currentTopicElement.textContent = question.topic;
+    if (currentQuestionElement) currentQuestionElement.textContent = currentQuestionIndex + 1;
+    if (totalQuestionsElement) totalQuestionsElement.textContent = filteredQuestions.length;
+    if (questionText) questionText.textContent = question.question;
     
     const progress = ((currentQuestionIndex + 1) / filteredQuestions.length) * 100;
-    progressBar.style.width = `${progress}%`;
-    optionsContainer.innerHTML = '';
+    if (progressBar) progressBar.style.width = `${progress}%`;
+    if (optionsContainer) optionsContainer.innerHTML = '';
     
-    // Projeção Molecular Integrada
     renderMolecularStructure(question);
 
     question.options.forEach((option, index) => {
@@ -406,20 +424,23 @@ function loadQuestion() {
             }
         });
         
-        optionsContainer.appendChild(optionElement);
+        if (optionsContainer) optionsContainer.appendChild(optionElement);
     });
     
-    prevBtn.disabled = currentQuestionIndex === 0;
+    if (prevBtn) prevBtn.disabled = currentQuestionIndex === 0;
     if (currentQuestionIndex === filteredQuestions.length - 1) {
-        nextBtn.style.display = 'none';
-        finishBtn.style.display = 'block';
+        if (nextBtn) nextBtn.style.display = 'none';
+        if (finishBtn) finishBtn.style.display = 'block';
     } else {
-        nextBtn.style.display = 'block';
-        finishBtn.style.display = 'none';
+        if (nextBtn) nextBtn.style.display = 'block';
+        if (finishBtn) finishBtn.style.display = 'none';
     }
     
-    explanation.style.display = 'none';
-    explanation.classList.remove('show');
+    if (explanation) {
+        explanation.style.display = 'none';
+        explanation.classList.remove('show');
+    }
+    
     if (userAnswers[currentQuestionIndex] !== null && currentMode === 'study') {
         showExplanation();
     }
@@ -444,19 +465,17 @@ function showExplanation() {
         else if (index === userAnswer && userAnswer !== question.correct) option.classList.add('incorrect');
     });
     
-    explanationText.textContent = question.explanation;
+    if (explanationText) explanationText.textContent = question.explanation;
 
-    // Analogia Pedagógica
     if (feedbackAnalogia) {
         if (question.analogiaDidatica) {
-            feedbackAnalogia.innerHTML = `💡 <strong>Analogia Prática:</strong> ${question.analogiaDidatica}`;
+            feedbackAnalogia.innerHTML = `💡 <strong>Analogia Didática:</strong> ${question.analogiaDidatica}`;
             feedbackAnalogia.style.display = 'block';
         } else {
             feedbackAnalogia.style.display = 'none';
         }
     }
 
-    // Botão de Dossiê Farmacológico
     if (btnVerDossie) {
         const farmacoAlvo = question.farmacoAlvo || question.drug || null;
         if (farmacoAlvo) {
@@ -467,8 +486,10 @@ function showExplanation() {
         }
     }
 
-    explanation.style.display = 'block';
-    explanation.classList.add('show');
+    if (explanation) {
+        explanation.style.display = 'block';
+        explanation.classList.add('show');
+    }
 }
 
 async function abrirDossieClinico(farmacoAlvo) {
@@ -477,7 +498,7 @@ async function abrirDossieClinico(farmacoAlvo) {
     if (!modal || !content) return;
 
     modal.style.display = 'flex';
-    content.innerHTML = `<p style="color: #94a3b8;">Consultando NLM (RxClass), PubChem e ChEBI para <strong>${farmacoAlvo}</strong>...</p>`;
+    content.innerHTML = `<p style="color: #94a3b8;">Consultando bases biomédicas (RxNav / ChEBI / PubChem) para <strong>${farmacoAlvo}</strong>...</p>`;
 
     if (typeof QuizAPIEngine !== 'undefined') {
         const dossie = await QuizAPIEngine.gerarDossieFarmaco(farmacoAlvo);
@@ -494,7 +515,7 @@ async function abrirDossieClinico(farmacoAlvo) {
         `;
     } else {
         content.innerHTML = `
-            <p>Serviço de consulta de APIs científicas indisponível no momento.</p>
+            <p>Serviço de consulta de APIs científicas não carregado.</p>
             <button class="control-btn secondary" style="margin-top: 10px;" onclick="document.getElementById('modalDossieQuiz').style.display='none'">Fechar</button>
         `;
     }
@@ -524,7 +545,7 @@ async function persistirMetricasQuiz(scoreTotal, totalQuestoes, tempoGasto) {
     } catch (e) {}
 
     const topicosArray = Array.from(selectedTopics);
-    const modulo = topicosArray.length > 0 ? topicosArray.slice(0, 3).join(', ') : "Farmacologia Geral";
+    const modulo = topicosArray.length > 0 ? topicosArray.slice(0, 3).join(', ') : "Farmacologia";
 
     const payload = {
         acao: "registrarMetricasQuiz",
@@ -546,7 +567,7 @@ async function persistirMetricasQuiz(scoreTotal, totalQuestoes, tempoGasto) {
             body: JSON.stringify(payload)
         });
     } catch (err) {
-        console.warn("[Quiz Engine] Falha na sincronização das métricas:", err);
+        console.warn("[Quiz Engine] Falha na persistência das métricas:", err);
     }
 }
 
@@ -577,165 +598,48 @@ function finishQuiz() {
 }
 
 function showResults(score, topicScores, topicCounts) {
-    quizContainer.style.display = 'none';
-    resultsContainer.style.display = 'block';
-    resultsContainer.innerHTML = '';
-    
-    const percentage = (score / filteredQuestions.length) * 100;
-    
-    const header = document.createElement('h2');
-    header.textContent = '🎯 RESULTADOS DO SIMULADO';
-    resultsContainer.appendChild(header);
-    
-    const scoreDisplay = document.createElement('div');
-    scoreDisplay.className = 'score-display';
-    scoreDisplay.textContent = `${score}/${filteredQuestions.length}`;
-    resultsContainer.appendChild(scoreDisplay);
-    
-    const scoreText = document.createElement('div');
-    scoreText.className = 'score-text';
-    
-    let performanceText = '';
-    if (percentage >= 90) performanceText = '🎉 Excelente! Domínio total do conteúdo, Pensamento Provador no máximo!';
-    else if (percentage >= 70) performanceText = '👍 Muito bom! Você está bem preparado!';
-    else if (percentage >= 50) performanceText = '📚 Bom, mas o pensamento provador diz que precisamos revisar alguns conceitos.';
-    else performanceText = '🔁 Recomendo voltar aos conceitos básicos e afiar o machado da farmacologia.';
-    
-    scoreText.textContent = `${percentage.toFixed(1)}% de acertos. ${performanceText}`;
-    resultsContainer.appendChild(scoreText);
-    
-    const topicsTitle = document.createElement('h3');
-    topicsTitle.textContent = '📊 Desempenho por Tópico:';
-    resultsContainer.appendChild(topicsTitle);
-    
-    const topicsContainer = document.createElement('div');
-    topicsContainer.className = 'topic-performance';
-    
-    for (const topic in topicCounts) {
-        const topicScore = topicScores[topic] || 0;
-        const topicPercentage = (topicScore / topicCounts[topic]) * 100;
+    if (quizContainer) quizContainer.style.display = 'none';
+    if (resultsContainer) {
+        resultsContainer.style.display = 'block';
+        resultsContainer.innerHTML = '';
         
-        const topicDiv = document.createElement('div');
-        topicDiv.style.marginBottom = '15px';
+        const percentage = (score / filteredQuestions.length) * 100;
         
-        const topicHeader = document.createElement('div');
-        topicHeader.style.display = 'flex';
-        topicHeader.style.justifyContent = 'space-between';
-        topicHeader.style.marginBottom = '5px';
+        const header = document.createElement('h2');
+        header.textContent = '🎯 RESULTADOS DO SIMULADO';
+        resultsContainer.appendChild(header);
         
-        const topicName = document.createElement('span');
-        topicName.textContent = topic;
-        topicName.style.fontWeight = 'bold';
+        const scoreDisplay = document.createElement('div');
+        scoreDisplay.className = 'score-display';
+        scoreDisplay.textContent = `${score}/${filteredQuestions.length}`;
+        resultsContainer.appendChild(scoreDisplay);
         
-        const topicScoreElement = document.createElement('span');
-        topicScoreElement.textContent = `${topicScore}/${topicCounts[topic]} (${topicPercentage.toFixed(0)}%)`;
-        topicScoreElement.style.color = topicPercentage >= 70 ? 'var(--success)' : 
-                                      topicPercentage >= 50 ? 'var(--warning)' : 
-                                      'var(--danger)';
+        const scoreText = document.createElement('div');
+        scoreText.className = 'score-text';
+        scoreText.textContent = `${percentage.toFixed(1)}% de aproveitamento.`;
+        resultsContainer.appendChild(scoreText);
         
-        topicHeader.appendChild(topicName);
-        topicHeader.appendChild(topicScoreElement);
-        
-        const progressBar = document.createElement('div');
-        progressBar.className = 'performance-bar';
-        
-        const progressFill = document.createElement('div');
-        progressFill.className = 'performance-fill';
-        progressFill.style.width = `${topicPercentage}%`;
-        progressFill.style.background = topicPercentage >= 70 ? 'var(--success)' : 
-                                       topicPercentage >= 50 ? 'var(--warning)' : 
-                                       'var(--danger)';
-        
-        progressBar.appendChild(progressFill);
-        topicDiv.appendChild(topicHeader);
-        topicDiv.appendChild(progressBar);
-        topicsContainer.appendChild(topicDiv);
+        const actionButtons = document.createElement('div');
+        actionButtons.className = 'action-buttons';
+        actionButtons.style.marginTop = '20px';
+
+        const restartBtn = document.createElement('button');
+        restartBtn.className = 'home-btn';
+        restartBtn.textContent = '🏠 Voltar aos Tópicos';
+        restartBtn.addEventListener('click', () => {
+            localStorage.removeItem('pharmaQuizProgress');
+            userAnswers = [];
+            if (resultsContainer) resultsContainer.style.display = 'none';
+            if (startScreen) startScreen.style.display = 'block';
+            selectedTopics.clear();
+            updateTopicButtons();
+            updateStats();
+            updateDynamicButtons();
+        });
+
+        actionButtons.appendChild(restartBtn);
+        resultsContainer.appendChild(actionButtons);
     }
-    
-    resultsContainer.appendChild(topicsContainer);
-    
-    const actionButtons = document.createElement('div');
-    actionButtons.className = 'action-buttons';
-
-    const reviewBtn = document.createElement('button');
-    reviewBtn.className = 'restart-btn';
-    reviewBtn.textContent = '🔍 Revisar Erradas';
-    reviewBtn.addEventListener('click', () => reviewWrongQuestions());
-
-    const retryBtn = document.createElement('button');
-    retryBtn.className = 'restart-btn';
-    retryBtn.style.background = 'var(--warning)';
-    retryBtn.textContent = '🔄 Refazer Este Simulado';
-    retryBtn.addEventListener('click', () => {
-        localStorage.removeItem('pharmaQuizProgress');
-        userAnswers = new Array(filteredQuestions.length).fill(null);
-        currentQuestionIndex = 0;
-        quizStartTime = Date.now();
-        
-        resultsContainer.style.display = 'none';
-        quizContainer.style.display = 'block';
-        quizActive = true;
-        
-        if (currentMode === 'exam') {
-            timeLeft = filteredQuestions.length * 90;
-            startTimer();
-        } else {
-            timerElement.textContent = 'Modo Estudo';
-            timerElement.style.animation = 'none';
-        }
-        
-        loadQuestion();
-        updateStats();
-    });
-    
-    const restartBtn = document.createElement('button');
-    restartBtn.className = 'home-btn';
-    restartBtn.textContent = '🏠 Selecionar Novos Tópicos';
-    restartBtn.addEventListener('click', () => {
-        localStorage.removeItem('pharmaQuizProgress');
-        userAnswers = [];
-        continueBtn.style.display = 'none';
-        resetProgressBtn.style.display = 'none';
-        
-        resultsContainer.style.display = 'none';
-        startScreen.style.display = 'flex';
-        selectedTopics.clear();
-        updateTopicButtons();
-        updateStats();
-        updateDynamicButtons();
-    });
-
-    actionButtons.appendChild(reviewBtn);
-    actionButtons.appendChild(retryBtn);
-    actionButtons.appendChild(restartBtn);
-    resultsContainer.appendChild(actionButtons);
-}
-
-function reviewWrongQuestions() {
-    const wrongQuestions = filteredQuestions.filter((question, index) => {
-        return userAnswers[index] !== question.correct;
-    });
-    
-    if (wrongQuestions.length === 0) {
-        alert('Parabéns! Você não errou nenhuma questão!');
-        return;
-    }
-    
-    filteredQuestions = wrongQuestions;
-    userAnswers = new Array(wrongQuestions.length).fill(null);
-    currentQuestionIndex = 0;
-    currentMode = 'study';
-    quizStartTime = Date.now();
-    
-    resultsContainer.style.display = 'none';
-    quizContainer.style.display = 'block';
-    quizActive = true;
-    
-    clearInterval(timerInterval);
-    timerElement.textContent = 'Modo Estudo (Revisão)';
-    timerElement.style.animation = 'none';
-    
-    loadQuestion();
 }
 
 function startTimer() {
@@ -753,6 +657,7 @@ function startTimer() {
 }
 
 function updateTimerDisplay() {
+    if (!timerElement) return;
     const minutes = Math.floor(timeLeft / 60);
     const seconds = timeLeft % 60;
     timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
@@ -763,10 +668,9 @@ function updateTimerDisplay() {
 function saveProgress() {
     if (currentMode === 'exam') return;
 
-    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
-    const allUserAnswers = new Array(questionsList.length).fill(null);
+    const allUserAnswers = new Array(bancoQuestoesUnificado.length).fill(null);
     filteredQuestions.forEach((q, filteredIndex) => {
-        const originalIndex = questionsList.findIndex(item => item.id === q.id);
+        const originalIndex = bancoQuestoesUnificado.findIndex(item => item.id === q.id);
         if (originalIndex !== -1) {
             allUserAnswers[originalIndex] = userAnswers[filteredIndex];
         }
@@ -779,23 +683,23 @@ function saveProgress() {
     localStorage.setItem('pharmaQuizProgress', JSON.stringify(progress));
 }
 
-// Event Listeners
-infoBtn.addEventListener('click', () => { instructionsModal.style.display = 'flex'; });
-closeModal.addEventListener('click', () => { instructionsModal.style.display = 'none'; });
+// 6. Vinculação de Eventos
+if (infoBtn) infoBtn.addEventListener('click', () => { if (instructionsModal) instructionsModal.style.display = 'flex'; });
+if (closeModal) closeModal.addEventListener('click', () => { if (instructionsModal) instructionsModal.style.display = 'none'; });
 window.addEventListener('click', (e) => {
-    if (e.target === instructionsModal) { instructionsModal.style.display = 'none'; }
+    if (e.target === instructionsModal) instructionsModal.style.display = 'none';
     const modalDossie = document.getElementById('modalDossieQuiz');
-    if (e.target === modalDossie) { modalDossie.style.display = 'none'; }
+    if (e.target === modalDossie) modalDossie.style.display = 'none';
 });
 
-startQuizBtn.addEventListener('click', startQuiz);
-continueBtn.addEventListener('click', continueQuiz);
-resetProgressBtn.addEventListener('click', resetProgress);
-selectAllBtn.addEventListener('click', selectAllTopics);
-deselectAllBtn.addEventListener('click', deselectAllTopics);
-prevBtn.addEventListener('click', prevQuestion);
-nextBtn.addEventListener('click', nextQuestion);
-finishBtn.addEventListener('click', finishQuiz);
+if (startQuizBtn) startQuizBtn.addEventListener('click', startQuiz);
+if (continueBtn) continueBtn.addEventListener('click', continueQuiz);
+if (resetProgressBtn) resetProgressBtn.addEventListener('click', resetProgress);
+if (selectAllBtn) selectAllBtn.addEventListener('click', selectAllTopics);
+if (deselectAllBtn) deselectAllBtn.addEventListener('click', deselectAllTopics);
+if (prevBtn) prevBtn.addEventListener('click', prevQuestion);
+if (nextBtn) nextBtn.addEventListener('click', nextQuestion);
+if (finishBtn) finishBtn.addEventListener('click', finishQuiz);
 
 modeButtons.forEach(btn => {
     btn.addEventListener('click', () => setMode(btn.dataset.mode));
@@ -806,12 +710,8 @@ document.addEventListener('keydown', (e) => {
     if (document.activeElement.classList.contains('option') && (e.key === 'Enter' || e.key === ' ')) return;
     
     switch(e.key) {
-        case 'ArrowLeft': 
-            if (!prevBtn.disabled) prevQuestion(); 
-            break;
-        case 'ArrowRight':
-            if (!nextBtn.disabled && nextBtn.style.display !== 'none') nextQuestion(); 
-            break;
+        case 'ArrowLeft': if (prevBtn && !prevBtn.disabled) prevQuestion(); break;
+        case 'ArrowRight': if (nextBtn && !nextBtn.disabled && nextBtn.style.display !== 'none') nextQuestion(); break;
         case '1': case '2': case '3': case '4':
             const optionIndex = parseInt(e.key) - 1;
             if (optionIndex >= 0 && optionIndex < 4) selectOption(optionIndex);
@@ -819,4 +719,9 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-window.addEventListener('load', initializeApp);
+// Inicialização imediata assim que o HTML estiver pronto
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    initializeApp();
+}
