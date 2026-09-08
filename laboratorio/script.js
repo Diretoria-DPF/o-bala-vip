@@ -172,6 +172,18 @@
   async function catalogarFormulacaoNoBanco(nomeProduto, reagentesArray, tempAtual, agitacaoLigada, observacaoReacao) {
     let identificador = 'Visitante';
     try {
+      // Chamada enriquecida no script.js
+  const dadosConsolidados = await ChemicalAPIEngine.resolveCompleteCompound(nomeProduto);
+
+  if (dadosConsolidados) {
+    projetarEstruturaMolecular(
+      dadosConsolidados.smiles,
+      nomeProduto,
+      dadosConsolidados.iupac,
+      dadosConsolidados.formula,
+      dadosConsolidados.molarMass
+    );
+  }
       const sessao = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
       if (sessao.identifier) identificador = sessao.identifier;
     } catch (e) {}
