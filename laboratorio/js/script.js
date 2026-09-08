@@ -1066,6 +1066,9 @@
     if (drawer) drawer.style.display = drawer.style.display === 'flex' ? 'none' : 'flex';
   };
 
+  // ==========================================
+  // 11. DOSSIÊ CLÍNICO E PRECEPTOR DE BANCADA (COM MOTOR LOCAL)
+  // ==========================================
   window.enviarDuvidaLab = async function() {
     const input = document.getElementById('labChatInput');
     const msg = input ? input.value.trim() : '';
@@ -1077,36 +1080,82 @@
     chatBox.scrollTop = chatBox.scrollHeight;
 
     const idTemp = 'lab_typing_' + Date.now();
-    chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor" id="${idTemp}">Analisando bancada e parâmetros físico-químicos...</div>`;
+    chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor" id="${idTemp}">Consultando base farmacotécnica e parâmetros...</div>`;
     chatBox.scrollTop = chatBox.scrollHeight;
 
-    const especiesLista = Array.from(sys.especies.keys()).join(', ') || 'Nenhuma';
-    const payload = {
-      acao: 'consultarPreceptorIA',
-      duvida: msg,
-      modulo: 'Laboratório de Bancada',
-      contexto: `Temperatura: ${sys.temp.toFixed(1)}°C, pH: ${calcularpH().toFixed(2)}, Volume: ${sys.vol.toFixed(1)}mL, Espécies: ${especiesLista}, Sistema: ${sys.isClosed ? 'Fechado' : 'Aberto'}, Agitador: ${agitadorAtivo ? 'Ligado' : 'Desligado'}`
-    };
-
     try {
-      const res = await fetch(APPS_SCRIPT_GATEWAY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      // 1. Processamento Local Imediato (Rápido, 0 Tokens, Alta Precisão)
+      let respostaTexto = "";
+      if (typeof LabPreceptorEngine !== 'undefined') {
+        respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
+      }
+
+      // 2. Se o motor local não gerou resposta específica, consulta o gateway remoto (Apps Script / IA)
+      if (!respostaTexto && APPS_SCRIPT_GATEWAY) {
+        const especiesLista = Array.from(sys.especies.keys()).join(', ') || 'Nenhuma';
+        const res = await fetch(APPS_SCRIPT_GATEWAY, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            acao: 'consultarPreceptorIA',
+            duvida: msg,
+            modulo: 'Laboratório de Bancada',
+            contexto: `T:${sys.temp.toFixed(1)}C, pH:${calcularpH().toFixed(2)}, Vol:${sys.vol.toFixed(1)}mL, Espécies:${especiesLista}, Sistema:${sys.isClosed ? 'Fechado' : 'Aberto'}`
+          })
+        });
+        const data = await res.json();
+        respostaTexto = data.resposta;
+      }
+
       const elTyping = document.getElementById(idTemp);
       if (elTyping) elTyping.remove();
 
-      const respostaTexto = data.resposta || `Dica do Preceptor: Com a temperatura em ${sys.temp.toFixed(1)}°C e pH em ${calcularpH().toFixed(2)}, observe as espécies presentes (${especiesLista}) para antecipar desvios de equilíbrio ou reações cinéticas.`;
-      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">${respostaTexto}</div>`;
+      // Renderiza a resposta formatando quebras de linha Markdown
+      const htmlFormatado = (respostaTexto || "Dica do Preceptor: Acompanhe os parâmetros de temperatura e pH no painel superior.").replace(/\n/g, '<br>');
+      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">${htmlFormatado}</div>`;
     } catch (e) {
       const elTyping = document.getElementById(idTemp);
       if (elTyping) elTyping.remove();
-      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">Orientação de Bancada: Seu sistema está a <strong>${sys.temp.toFixed(1)}°C</strong> com pH <strong>${calcularpH().toFixed(2)}</strong>. Verifique se os precursores exigem catalisador ácido (ex: H₂SO₄) ou ativação térmica controlada para atingir o estado de transição.</div>`;
+      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">Orientação de Bancada: Sistema a <strong>${sys.temp.toFixed(1)}°C</strong> com pH <strong>${calcularpH().toFixed(2)}</strong>. Verifique o catálogo de precursores para avançar na síntese.</div>`;
     }
     chatBox.scrollTop = chatBox.scrollHeight;
   };
+
+
+  // Alertas Proativos do Preceptor no Chat (Disparados uma vez por evento crítico)
+  let alertaPressaoEmitido = false;
+  let alertaSinteseQuasePronta = false;
+
+  function verificarAlertasProativosPreceptor() {
+    const chatBox = document.getElementById('labChatMessages');
+    if (!chatBox) return;
+
+    // Alerta de Pressão Crítica em Sistema Fechado
+    if (sys.isClosed && sys.pressao > 3.0 && !alertaPressaoEmitido) {
+      alertaPressaoEmitido = true;
+      chatBox.innerHTML += `
+        <div class="lab-chat-msg msg-preceptor" style="border-left-color: #ef4444;">
+          ⚠️ <strong>Atenção Imediata:</strong> A pressão interna atingiu <strong>${sys.pressao.toFixed(2)} atm</strong>. Reduza a chama ou remova a rolha do frasco para evitar estilhaçamento da vidraria!
+        </div>
+      `;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    } else if (sys.pressao <= 1.5) {
+      alertaPressaoEmitido = false;
+    }
+
+    // Alerta de Precursores Presentes sem Ativação Térmica (Ex: AAS)
+    const temSalicilico = (sys.especies.get('AcidoSalicilico_s') || 0) > 0;
+    const temAnidrido = (sys.especies.get('AnidridoAcetico_l') || 0) > 0;
+    if (temSalicilico && temAnidrido && sys.temp < 50 && !alertaSinteseQuasePronta) {
+      alertaSinteseQuasePronta = true;
+      chatBox.innerHTML += `
+        <div class="lab-chat-msg msg-preceptor">
+          💡 <strong>Dica Farmacotécnica:</strong> Você reuniu os precursores da Aspirina no vaso, mas a temperatura (${sys.temp.toFixed(1)}°C) está abaixo da energia de ativação necessária. Ligue o aquecedor para atingir <strong>60°C</strong> e ative o agitador.
+        </div>
+      `;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+  }
 
   // ==========================================
   // 12. LOOP TÉRMICO E CONTROLES DE AMBIENTE
