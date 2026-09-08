@@ -743,15 +743,67 @@ const ClinicEngine = (() => {
 
     const nomePac = currentCase.paciente ? currentCase.paciente.nome : 'Paciente';
     
-    // Lista de reações orgânicas no lugar do texto estático
-    const reacoesHumanas = [
-      `<em>${nomePac} busca o fôlego antes de responder...</em>`,
-      `<em>${nomePac} pensa por um instante com expressão de dor...</em>`,
-      `<em>${nomePac} ajeita-se no leito e tenta explicar...</em>`,
-      `<em>${nomePac} olha preocupado(a) e responde...</em>`
-      `<em>${nomePac} pensando e respondendo...</em>`
+    // 1. Reações Gerais e Cotidianas (Paciente Estável)
+    const reacoesGerais = [
+      `<em>${nomePac} pensa por um instante com a mão no queixo antes de responder...</em>`,
+      `<em>${nomePac} ajeita-se com calma no leito e tenta organizar as ideias...</em>`,
+      `<em>${nomePac} olha atentamente para você e começa a explicar...</em>`,
+      `<em>${nomePac} engole em seco, buscando lembrar dos detalhes do ocorrido...</em>`,
+      `<em>${nomePac} respira fundo e responde em tom colaborativo...</em>`,
+      `<em>${nomePac} gesticula suavemente enquanto tenta descrever o que sente...</em>`,
+      `<em>${nomePac} faz uma pausa reflexiva e retoma a conversa...</em>`,
+      `<em>${nomePac} assente com a cabeça antes de responder...</em>`,
+      `<em>${nomePac} apoia o braço na cama e detalha a situação...</em>`
     ];
-    const reacaoSorteada = reacoesHumanas[Math.floor(Math.random() * reacoesHumanas.length)];
+
+    // 2. Reações de Dor Intensa, Falta de Ar ou Fraqueza (Vitalidade Baixa < 50%)
+    const reacoesDorOuFraqueza = [
+      `<em>${nomePac} aperta o peito com a mão e tenta falar...</em>`,
+      `<em>${nomePac} puxa o ar com dificuldade entre os lábios trêmulos...</em>`,
+      `<em>${nomePac} faz uma careta nítida de dor e apoia a cabeça na maca...</em>`,
+      `<em>${nomePac} responde em tom baixo e pausado devido ao cansaço...</em>`,
+      `<em>${nomePac} fecha os olhos sentindo uma pontada forte...</em>`,
+      `<em>${nomePac} passa a mão na testa suada, com respiração curta e ofegante...</em>`,
+      `<em>${nomePac} tenta encontrar uma posição menos dolorosa antes de sussurrar...</em>`,
+      `<em>${nomePac} tosse fraco, demonstrando desconforto evidente...</em>`,
+      `<em>${nomePac} aperta a barra lateral da maca enquanto busca forças para responder...</em>`,
+      `<em>${nomePac} hesita com náusea antes de conseguir pronunciar as palavras...</em>`
+    ];
+
+    // 3. Reações de Ansiedade, Insegurança ou Medo
+    const reacoesAnsiosas = [
+      `<em>${nomePac} esfrega as mãos nervosamente e responde com voz trêmula...</em>`,
+      `<em>${nomePac} olha apreensivo(a) para os aparelhos de monitoramento antes de falar...</em>`,
+      `<em>${nomePac} pergunta com o olhar marejado se o quadro é grave...</em>`,
+      `<em>${nomePac} morde o lábio inferior inquieto(a), demonstrando angústia...</em>`,
+      `<em>${nomePac} gagueja ligeiramente pelo nervosismo antes de completar a frase...</em>`,
+      `<em>${nomePac} olha em direção à porta do leito e fala em tom de preocupação...</em>`
+    ];
+
+    // 4. Reações de Impaciência, Pressa ou Ceticismo ("Dr. Google" / Exigente ou Paciência < 50%)
+    const reacoesImpacientes = [
+      `<em>${nomePac} cruza os braços impaciente e responde em tom incisivo...</em>`,
+      `<em>${nomePac} gesticula demonstrando pressa para que a conduta seja logo tomada...</em>`,
+      `<em>${nomePac} suspira fundo, como se estivesse cansado(a) de responder perguntas...</em>`,
+      `<em>${nomePac} olha para o relógio na parede antes de retrucar rapidamente...</em>`,
+      `<em>${nomePac} balança a cabeça em desaprovação e insiste no medicamento...</em>`,
+      `<em>${nomePac} bate a mão na maca, demonstrando irritação com a demora...</em>`,
+      `<em>${nomePac} fala em tom ríspido, cobrando exames ou receita direta...</em>`
+    ];
+
+    // Seleção contextual baseada no estado clínico e psicológico
+    let poolReacoes = reacoesGerais;
+    const isExigente = currentCase.contextoOculto && String(currentCase.contextoOculto.temperamento).toLowerCase().includes('exigente');
+
+    if (vitality < 45) {
+      poolReacoes = reacoesDorOuFraqueza;
+    } else if (patience < 45 || isExigente) {
+      poolReacoes = reacoesImpacientes;
+    } else if (patience < 70) {
+      poolReacoes = reacoesAnsiosas;
+    }
+
+    const reacaoSorteada = poolReacoes[Math.floor(Math.random() * poolReacoes.length)];
     const typingBubble = appendChatBubble('patient', nomePac, reacaoSorteada);
 
     let falaObtida = '';
