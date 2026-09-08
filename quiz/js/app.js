@@ -1,3 +1,10 @@
+/**
+ * SIMULADOR DE FARMACOLOGIA LAIFT — MOTOR PRINCIPAL
+ * Integração: SmilesDrawer, QuizAPIEngine (RxNav/PubChem/ChEBI) e Google Sheets.
+ */
+
+const APPS_SCRIPT_GATEWAY = 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
+
 let selectedTopics = new Set();
 let currentMode = "study"; 
 let filteredQuestions = [];
@@ -8,13 +15,15 @@ let timeLeft = 0;
 let timerInterval;
 let quizActive = false;
 let quizCompleted = false;
+let quizStartTime = null;
+let smilesDrawerInstance = null;
 
+// Elementos da Interface
 const topicsGrid = document.getElementById('topicsGrid');
 const startQuizBtn = document.getElementById('startQuiz');
 const selectAllBtn = document.getElementById('selectAll');
 const deselectAllBtn = document.getElementById('deselectAll');
 const continueBtn = document.getElementById('continueBtn');
-// Puxando o novo botão do HTML
 const resetProgressBtn = document.getElementById('resetProgressBtn');
 const modeButtons = document.querySelectorAll('.mode-btn');
 const startScreen = document.getElementById('startScreen');
@@ -29,6 +38,8 @@ const questionText = document.getElementById('questionText');
 const optionsContainer = document.getElementById('optionsContainer');
 const explanation = document.getElementById('explanation');
 const explanationText = document.getElementById('explanationText');
+const feedbackAnalogia = document.getElementById('feedbackAnalogia');
+const btnVerDossie = document.getElementById('btnVerDossie');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const finishBtn = document.getElementById('finishBtn');
@@ -51,15 +62,46 @@ function shuffleArray(array) {
     }
 }
 
+function initSmilesDrawer() {
+    if (typeof SmilesDrawer !== 'undefined' && !smilesDrawerInstance) {
+        smilesDrawerInstance = new SmilesDrawer.Drawer({
+            width: 220,
+            height: 140,
+            bondThickness: 1.4,
+            bondLength: 14,
+            shortBondLength: 0.85,
+            compactDrawing: true,
+            themes: {
+                dark: {
+                    C: '#e2e8f0',
+                    O: '#ef4444',
+                    N: '#38bdf8',
+                    F: '#4ade80',
+                    CL: '#facc15',
+                    BR: '#fb923c',
+                    I: '#c084fc',
+                    P: '#f97316',
+                    S: '#eab308',
+                    BACKGROUND: 'transparent'
+                }
+            }
+        });
+    }
+}
+
 function initializeApp() {
-    const topics = [...new Set(allQuestions.map(q => q.topic))];
+    initSmilesDrawer();
+
+    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
+    const topics = [...new Set(questionsList.map(q => q.topic))];
+    
     totalTopicsElement.textContent = topics.length;
-    totalQsElement.textContent = allQuestions.length;
-    totalQuestionsStatElement.textContent = allQuestions.length;
+    totalQsElement.textContent = questionsList.length;
+    totalQuestionsStatElement.textContent = questionsList.length;
     
     topicsGrid.innerHTML = '';
     topics.forEach(topic => {
-        const count = allQuestions.filter(q => q.topic === topic).length;
+        const count = questionsList.filter(q => q.topic === topic).length;
         const button = document.createElement('button');
         button.className = 'topic-btn';
         button.innerHTML = `<span>${topic}</span><span class="topic-count">${count}</span>`;
@@ -125,7 +167,8 @@ function updateTopicButtons() {
 }
 
 function selectAllTopics() {
-    const topics = [...new Set(allQuestions.map(q => q.topic))];
+    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
+    const topics = [...new Set(questionsList.map(q => q.topic))];
     selectedTopics = new Set(topics);
     updateTopicButtons();
     updateStats();
@@ -153,11 +196,7 @@ function setMode(mode) {
 }
 
 function updateStats() {
-    let availableQuestions = 0;
-    if (selectedTopics.size > 0) {
-        availableQuestions = allQuestions.filter(q => selectedTopics.has(q.topic)).length;
-    }
-    
+    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
     let answered = 0;
     let correct = 0;
     const savedProgress = localStorage.getItem('pharmaQuizProgress');
@@ -167,7 +206,7 @@ function updateStats() {
             if (progress.userAnswers) {
                 answered = progress.userAnswers.filter(a => a !== null).length;
                 correct = progress.userAnswers.reduce((acc, answer, index) => {
-                    if (answer !== null && allQuestions[index] && answer === allQuestions[index].correct) {
+                    if (answer !== null && questionsList[index] && answer === questionsList[index].correct) {
                         return acc + 1;
                     }
                     return acc;
@@ -178,10 +217,9 @@ function updateStats() {
     
     answeredStatElement.textContent = answered;
     correctStatElement.textContent = correct;
-    const progressPercentage = allQuestions.length > 0 ? Math.round((answered / allQuestions.length) * 100) : 0;
+    const progressPercentage = questionsList.length > 0 ? Math.round((answered / questionsList.length) * 100) : 0;
     progressStatElement.textContent = `${progressPercentage}%`;
 
-    // Lógica para mostrar ou esconder o botão de reiniciar progresso
     if (answered > 0) {
         resetProgressBtn.style.display = 'block';
     } else {
@@ -189,54 +227,51 @@ function updateStats() {
     }
 }
 
-// ------------------------------------------------------------------
-// NOVA FUNÇÃO: Limpa absolutamente todo o cache e respostas salvas
-// ------------------------------------------------------------------
 function resetProgress() {
-    if (confirm("Tem certeza que deseja apagar todo o seu progresso? As respostas salvas serão zeradas e você poderá praticar novamente do zero.")) {
-        // Apaga do cache do navegador
+    if (confirm("Tem certeza que deseja apagar todo o seu progresso? As respostas salvas serão zeradas.")) {
         localStorage.removeItem('pharmaQuizProgress');
-        
-        // Zera as variáveis globais
         userAnswers = [];
-        
-        // Esconde os botões da barra lateral
         continueBtn.style.display = 'none';
         resetProgressBtn.style.display = 'none';
         
-        // Se o usuário estiver no meio da tela de questões, remove de lá
-        if (quizActive || quizContainer.style.display === 'flex') {
+        if (quizActive || quizContainer.style.display === 'flex' || quizContainer.style.display === 'block') {
             quizActive = false;
             clearInterval(timerInterval);
             quizContainer.style.display = 'none';
             resultsContainer.style.display = 'none';
             startScreen.style.display = 'flex';
         }
-        
-        // Atualiza a barra de estatísticas
         updateStats();
     }
 }
 
 function startQuiz() {
-    if (selectedTopics.size === 0) { alert('Por favor, selecione pelo menos um tópico para começar!'); return; }
+    if (selectedTopics.size === 0) { 
+        alert('Por favor, selecione pelo menos um tópico para começar!'); 
+        return; 
+    }
     
-    filteredQuestions = [...allQuestions.filter(q => selectedTopics.has(q.topic))];
+    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
+    filteredQuestions = [...questionsList.filter(q => selectedTopics.has(q.topic))];
     
-    if (filteredQuestions.length === 0) { alert('Nenhuma questão encontrada para os tópicos selecionados!'); return; }
+    if (filteredQuestions.length === 0) { 
+        alert('Nenhuma questão encontrada para os tópicos selecionados!'); 
+        return; 
+    }
     
-    if(currentMode === 'exam') {
+    if (currentMode === 'exam') {
         shuffleArray(filteredQuestions);
     }
 
     userAnswers = new Array(filteredQuestions.length).fill(null);
+    quizStartTime = Date.now();
     
     const savedProgress = localStorage.getItem('pharmaQuizProgress');
     if (savedProgress && currentMode === 'study') {
         try {
             const progress = JSON.parse(savedProgress);
             filteredQuestions.forEach((q, index) => {
-                const originalIndex = allQuestions.findIndex(item => item.id === q.id);
+                const originalIndex = questionsList.findIndex(item => item.id === q.id);
                 if (originalIndex !== -1 && progress.userAnswers[originalIndex] !== null) {
                     userAnswers[index] = progress.userAnswers[originalIndex];
                 }
@@ -245,7 +280,7 @@ function startQuiz() {
     }
     
     startScreen.style.display = 'none';
-    quizContainer.style.display = 'flex';
+    quizContainer.style.display = 'block';
     resultsContainer.style.display = 'none';
     
     clearInterval(timerInterval); 
@@ -264,8 +299,10 @@ function startQuiz() {
 }
 
 function continueQuiz() {
-    filteredQuestions = [...allQuestions];
+    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
+    filteredQuestions = [...questionsList];
     userAnswers = new Array(filteredQuestions.length).fill(null);
+    quizStartTime = Date.now();
     
     const savedProgress = localStorage.getItem('pharmaQuizProgress');
     if (savedProgress) {
@@ -274,11 +311,13 @@ function continueQuiz() {
             userAnswers = [...progress.userAnswers];
             currentQuestionIndex = userAnswers.findIndex(answer => answer === null);
             if (currentQuestionIndex === -1) currentQuestionIndex = 0;
-        } catch (e) { currentQuestionIndex = 0; }
+        } catch (e) { 
+            currentQuestionIndex = 0; 
+        }
     }
     
     startScreen.style.display = 'none';
-    quizContainer.style.display = 'flex';
+    quizContainer.style.display = 'block';
     resultsContainer.style.display = 'none';
     
     currentMode = 'study';
@@ -290,6 +329,40 @@ function continueQuiz() {
     
     quizActive = true;
     loadQuestion();
+}
+
+async function renderMolecularStructure(question) {
+    const canvas = document.getElementById('quizMolCanvas');
+    const label = document.getElementById('quizMolLabel');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const farmacoAlvo = question.farmacoAlvo || question.drug || null;
+    let smiles = question.smiles || null;
+
+    if (label) {
+        label.textContent = farmacoAlvo || (smiles ? 'Estrutura Química' : '--');
+    }
+
+    if (!smiles && farmacoAlvo && typeof QuizAPIEngine !== 'undefined') {
+        if (label) label.textContent = `${farmacoAlvo} (Buscando...)`;
+        const info = await QuizAPIEngine.buscarEstruturaMolecular(farmacoAlvo);
+        if (info && info.smiles) {
+            smiles = info.smiles;
+            if (label) label.textContent = `${farmacoAlvo} ${info.cid ? `(CID: ${info.cid})` : ''}`;
+        }
+    }
+
+    if (smiles && typeof SmilesDrawer !== 'undefined') {
+        initSmilesDrawer();
+        SmilesDrawer.parse(smiles, (tree) => {
+            smilesDrawerInstance.draw(tree, canvas, 'dark', false);
+        }, (err) => {
+            console.warn('Erro ao renderizar estrutura química:', err);
+        });
+    }
 }
 
 function loadQuestion() {
@@ -305,6 +378,9 @@ function loadQuestion() {
     progressBar.style.width = `${progress}%`;
     optionsContainer.innerHTML = '';
     
+    // Projeção Molecular Integrada
+    renderMolecularStructure(question);
+
     question.options.forEach((option, index) => {
         const optionElement = document.createElement('div');
         optionElement.className = 'option';
@@ -342,6 +418,7 @@ function loadQuestion() {
         finishBtn.style.display = 'none';
     }
     
+    explanation.style.display = 'none';
     explanation.classList.remove('show');
     if (userAnswers[currentQuestionIndex] !== null && currentMode === 'study') {
         showExplanation();
@@ -368,7 +445,59 @@ function showExplanation() {
     });
     
     explanationText.textContent = question.explanation;
+
+    // Analogia Pedagógica
+    if (feedbackAnalogia) {
+        if (question.analogiaDidatica) {
+            feedbackAnalogia.innerHTML = `💡 <strong>Analogia Prática:</strong> ${question.analogiaDidatica}`;
+            feedbackAnalogia.style.display = 'block';
+        } else {
+            feedbackAnalogia.style.display = 'none';
+        }
+    }
+
+    // Botão de Dossiê Farmacológico
+    if (btnVerDossie) {
+        const farmacoAlvo = question.farmacoAlvo || question.drug || null;
+        if (farmacoAlvo) {
+            btnVerDossie.style.display = 'inline-block';
+            btnVerDossie.onclick = () => abrirDossieClinico(farmacoAlvo);
+        } else {
+            btnVerDossie.style.display = 'none';
+        }
+    }
+
+    explanation.style.display = 'block';
     explanation.classList.add('show');
+}
+
+async function abrirDossieClinico(farmacoAlvo) {
+    const modal = document.getElementById('modalDossieQuiz');
+    const content = document.getElementById('dossieContent');
+    if (!modal || !content) return;
+
+    modal.style.display = 'flex';
+    content.innerHTML = `<p style="color: #94a3b8;">Consultando NLM (RxClass), PubChem e ChEBI para <strong>${farmacoAlvo}</strong>...</p>`;
+
+    if (typeof QuizAPIEngine !== 'undefined') {
+        const dossie = await QuizAPIEngine.gerarDossieFarmaco(farmacoAlvo);
+        content.innerHTML = `
+            <h3 style="color: #38bdf8; margin-top: 0;">📋 Ficha Farmacológica: ${dossie.farmaco}</h3>
+            <div style="font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; text-align: left;">
+                <p><strong>Classe Terapêutica (ATC):</strong> <span style="color: #4ade80;">${dossie.classesATC}</span></p>
+                <p><strong>Identificador RxCUI:</strong> <code>${dossie.rxcui}</code></p>
+                <p><strong>Nomenclatura IUPAC:</strong> <span style="font-family: monospace; color: #94a3b8;">${dossie.iupac}</span></p>
+                <p><strong>Fórmula / Massa:</strong> ${dossie.formula} • ${dossie.pesoMolecular} g/mol</p>
+                <p><strong>Papel Biológico (ChEBI):</strong><br><em>${dossie.definicao}</em></p>
+            </div>
+            <button class="control-btn secondary" style="margin-top: 14px; width: 100%;" onclick="document.getElementById('modalDossieQuiz').style.display='none'">Fechar Ficha</button>
+        `;
+    } else {
+        content.innerHTML = `
+            <p>Serviço de consulta de APIs científicas indisponível no momento.</p>
+            <button class="control-btn secondary" style="margin-top: 10px;" onclick="document.getElementById('modalDossieQuiz').style.display='none'">Fechar</button>
+        `;
+    }
 }
 
 function nextQuestion() {
@@ -382,6 +511,42 @@ function prevQuestion() {
     if (currentQuestionIndex > 0) {
         currentQuestionIndex--;
         loadQuestion();
+    }
+}
+
+async function persistirMetricasQuiz(scoreTotal, totalQuestoes, tempoGasto) {
+    let alunoIdentificador = "Visitante";
+    let alunoNome = "Aluno Virtual";
+    try {
+        const sessao = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
+        if (sessao.identifier) alunoIdentificador = sessao.identifier;
+        if (sessao.name) alunoNome = sessao.name;
+    } catch (e) {}
+
+    const topicosArray = Array.from(selectedTopics);
+    const modulo = topicosArray.length > 0 ? topicosArray.slice(0, 3).join(', ') : "Farmacologia Geral";
+
+    const payload = {
+        acao: "registrarMetricasQuiz",
+        identificador: alunoIdentificador,
+        nome: alunoNome,
+        modulo: modulo,
+        modo: currentMode === 'exam' ? "Modo Prova" : "Modo Estudo",
+        acertos: scoreTotal,
+        total: totalQuestoes,
+        aproveitamento: totalQuestoes > 0 ? Math.round((scoreTotal / totalQuestoes) * 100) : 0,
+        tempoGasto: tempoGasto,
+        topicos: topicosArray.join(', ') || "Geral"
+    };
+
+    try {
+        await fetch(APPS_SCRIPT_GATEWAY, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+        });
+    } catch (err) {
+        console.warn("[Quiz Engine] Falha na sincronização das métricas:", err);
     }
 }
 
@@ -406,6 +571,8 @@ function finishQuiz() {
         }
     });
     
+    const tempoGasto = quizStartTime ? Math.max(1, Math.round((Date.now() - quizStartTime) / 1000)) : 0;
+    persistirMetricasQuiz(score, filteredQuestions.length, tempoGasto);
     showResults(score, topicScores, topicCounts);
 }
 
@@ -490,13 +657,11 @@ function showResults(score, topicScores, topicCounts) {
     const actionButtons = document.createElement('div');
     actionButtons.className = 'action-buttons';
 
-    // Botão para Revisar apenas as erradas
     const reviewBtn = document.createElement('button');
     reviewBtn.className = 'restart-btn';
     reviewBtn.textContent = '🔍 Revisar Erradas';
     reviewBtn.addEventListener('click', () => reviewWrongQuestions());
 
-    // Novo botão: Refazer este simulado (Mantém os mesmos tópicos e zera as respostas)
     const retryBtn = document.createElement('button');
     retryBtn.className = 'restart-btn';
     retryBtn.style.background = 'var(--warning)';
@@ -505,12 +670,13 @@ function showResults(score, topicScores, topicCounts) {
         localStorage.removeItem('pharmaQuizProgress');
         userAnswers = new Array(filteredQuestions.length).fill(null);
         currentQuestionIndex = 0;
+        quizStartTime = Date.now();
         
         resultsContainer.style.display = 'none';
-        quizContainer.style.display = 'flex';
+        quizContainer.style.display = 'block';
         quizActive = true;
         
-        if(currentMode === 'exam') {
+        if (currentMode === 'exam') {
             timeLeft = filteredQuestions.length * 90;
             startTimer();
         } else {
@@ -522,7 +688,6 @@ function showResults(score, topicScores, topicCounts) {
         updateStats();
     });
     
-    // Botão para voltar à tela inicial escolhendo novos temas
     const restartBtn = document.createElement('button');
     restartBtn.className = 'home-btn';
     restartBtn.textContent = '🏠 Selecionar Novos Tópicos';
@@ -560,9 +725,10 @@ function reviewWrongQuestions() {
     userAnswers = new Array(wrongQuestions.length).fill(null);
     currentQuestionIndex = 0;
     currentMode = 'study';
+    quizStartTime = Date.now();
     
     resultsContainer.style.display = 'none';
-    quizContainer.style.display = 'flex';
+    quizContainer.style.display = 'block';
     quizActive = true;
     
     clearInterval(timerInterval);
@@ -595,11 +761,12 @@ function updateTimerDisplay() {
 }
 
 function saveProgress() {
-    if(currentMode === 'exam') return;
+    if (currentMode === 'exam') return;
 
-    const allUserAnswers = new Array(allQuestions.length).fill(null);
+    const questionsList = (typeof allQuestions !== 'undefined') ? allQuestions : [];
+    const allUserAnswers = new Array(questionsList.length).fill(null);
     filteredQuestions.forEach((q, filteredIndex) => {
-        const originalIndex = allQuestions.findIndex(item => item.id === q.id);
+        const originalIndex = questionsList.findIndex(item => item.id === q.id);
         if (originalIndex !== -1) {
             allUserAnswers[originalIndex] = userAnswers[filteredIndex];
         }
@@ -612,15 +779,17 @@ function saveProgress() {
     localStorage.setItem('pharmaQuizProgress', JSON.stringify(progress));
 }
 
+// Event Listeners
 infoBtn.addEventListener('click', () => { instructionsModal.style.display = 'flex'; });
 closeModal.addEventListener('click', () => { instructionsModal.style.display = 'none'; });
 window.addEventListener('click', (e) => {
     if (e.target === instructionsModal) { instructionsModal.style.display = 'none'; }
+    const modalDossie = document.getElementById('modalDossieQuiz');
+    if (e.target === modalDossie) { modalDossie.style.display = 'none'; }
 });
 
 startQuizBtn.addEventListener('click', startQuiz);
 continueBtn.addEventListener('click', continueQuiz);
-// Ouvinte do novo botão de Reiniciar Progresso
 resetProgressBtn.addEventListener('click', resetProgress);
 selectAllBtn.addEventListener('click', selectAllTopics);
 deselectAllBtn.addEventListener('click', deselectAllTopics);
@@ -637,7 +806,9 @@ document.addEventListener('keydown', (e) => {
     if (document.activeElement.classList.contains('option') && (e.key === 'Enter' || e.key === ' ')) return;
     
     switch(e.key) {
-        case 'ArrowLeft': if (!prevBtn.disabled) prevQuestion(); break;
+        case 'ArrowLeft': 
+            if (!prevBtn.disabled) prevQuestion(); 
+            break;
         case 'ArrowRight':
             if (!nextBtn.disabled && nextBtn.style.display !== 'none') nextQuestion(); 
             break;
