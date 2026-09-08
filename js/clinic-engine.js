@@ -730,6 +730,7 @@ const ClinicEngine = (() => {
   // 7. SUBMISSÃO DE PERGUNTAS (GROQ 20B COM FEW-SHOT)
   // =========================================================
 
+  // Dentro de submitPatientQuestion() no js/clinic-engine.js:
   async function submitPatientQuestion() {
     if (!dom.questionInput || !isCaseActive || !currentCase) return;
 
@@ -741,7 +742,17 @@ const ClinicEngine = (() => {
     if (dom.sendQuestionBtn) dom.sendQuestionBtn.disabled = true;
 
     const nomePac = currentCase.paciente ? currentCase.paciente.nome : 'Paciente';
-    const typingBubble = appendChatBubble('patient', nomePac, '<em>Pensando e respondendo...</em>');
+    
+    // Lista de reações orgânicas no lugar do texto estático
+    const reacoesHumanas = [
+      `<em>${nomePac} busca o fôlego antes de responder...</em>`,
+      `<em>${nomePac} pensa por um instante com expressão de dor...</em>`,
+      `<em>${nomePac} ajeita-se no leito e tenta explicar...</em>`,
+      `<em>${nomePac} olha preocupado(a) e responde...</em>`
+      `<em>${nomePac} pensando e respondendo...</em>`
+    ];
+    const reacaoSorteada = reacoesHumanas[Math.floor(Math.random() * reacoesHumanas.length)];
+    const typingBubble = appendChatBubble('patient', nomePac, reacaoSorteada);
 
     let falaObtida = '';
     let apiSucesso = false;
@@ -779,7 +790,7 @@ const ClinicEngine = (() => {
         }
       }
     } catch (apiError) {
-      console.warn('[ClinicEngine] API indisponível, usando contingência local:', apiError);
+      console.warn('[ClinicEngine] Fallback local ativado:', apiError);
     }
 
     if (!apiSucesso || !falaObtida) {
