@@ -38,10 +38,10 @@
   // 3. TABELAS QUÍMICAS E CONSTANTES ORIGINAIS
   // ==========================================
   const APPS_SCRIPT_GATEWAY = 'https://script.google.com/macros/s/AKfycbyhZk_3HZaVWLVHgyNyzL5IBT5SXb1w_gz3cdgAiQqQVjNvY5tTnb0EXUmsI8wGsGne/exec';
-  const MM = { Na:23, Al:27, Zn:65.4, Mg:24.3, CuSO4:159.6, NaCl:58.4, CaCO3:100, KI:166, AgNO3:169.9, PbNO3:331, NaOH:40, HCl:36.5, Li:6.94, K:39.1, Ca:40.08, NaHCO3:84.0, K2CO3:138.2, KOH:56.1, LiOH:23.95, CaOH2:74.09, I2:253.8, S:32.06, P:30.97, Fe:55.8, Ni:58.7, Cu:63.5, Sn:118.7, Pb:207.2, HNO3:63.0, HClO4:100.5, H3PO4:98.0 };
-  const CONC_AQ = { H2O2_aq:3.0, PbNO3_aq:1.0, AgNO3_aq:1.0, CdNO3_aq:1.0, CuSO4_aq:1.0, FeCl3_aq:1.0, ZnSO4_aq:1.0, NiCl2_aq:1.0, SbCl3_aq:1.0, CaCl2_aq:1.0, BaCl2_aq:1.0, HCl_aq:6.0, H2SO4_aq:9.0, AcidoAcetico_aq:1.0, KI_aq:1.0, NH42S_aq:1.0, NaOH_aq:6.0, NH3_aq:5.0, Na2CO3_aq:1.0, NaClO_aq:2.0, NaHCO3_aq:1.0, K2CO3_aq:1.0, KOH_aq:6.0, LiOH_aq:5.0, CaOH2_aq:0.5, HNO3_aq:6.0, HClO4_aq:6.0, H3PO4_aq:4.0 };
-  const BP = { H2O_l:100, Etanol_l:78.4, Acetona_l:56, Hexano_l:68.7, Benzeno_l:80.1, Tolueno_l:110.6, Metanol_l:64.7, Cloroformio_l:61.2 };
-  const FP = { H2O_l:0, Etanol_l:-114, Acetona_l:-95, Hexano_l:-95, Benzeno_l:5.5, Tolueno_l:-95, Metanol_l:-98, Cloroformio_l:-63.5 };
+  const MM = { Na:23, Al:27, Zn:65.4, Mg:24.3, CuSO4:159.6, NaCl:58.4, CaCO3:100, KI:166, AgNO3:169.9, PbNO3:331, NaOH:40, HCl:36.5, Li:6.94, K:39.1, Ca:40.08, NaHCO3:84.0, K2CO3:138.2, KOH:56.1, LiOH:23.95, CaOH2:74.09, I2:253.8, S:32.06, P:30.97, Fe:55.8, Ni:58.7, Cu:63.5, Sn:118.7, Pb:207.2, HNO3:63.0, HClO4:100.5, H3PO4:98.0, AcidoSalicilico:138.12, pAminofenol:109.13, AcidoBenzoico:122.12 };
+  const CONC_AQ = { H2O2_aq:3.0, PbNO3_aq:1.0, AgNO3_aq:1.0, CdNO3_aq:1.0, CuSO4_aq:1.0, FeCl3_aq:1.0, ZnSO4_aq:1.0, NiCl2_aq:1.0, SbCl3_aq:1.0, CaCl2_aq:1.0, BaCl2_aq:1.0, CoCl2_aq:1.0, SCN_aq:1.0, HCl_aq:6.0, H2SO4_aq:9.0, AcidoAcetico_aq:1.0, KI_aq:1.0, NH42S_aq:1.0, NaOH_aq:6.0, NH3_aq:5.0, Na2CO3_aq:1.0, NaClO_aq:2.0, NaHCO3_aq:1.0, K2CO3_aq:1.0, KOH_aq:6.0, LiOH_aq:5.0, CaOH2_aq:0.5, HNO3_aq:6.0, HClO4_aq:6.0, H3PO4_aq:4.0 };
+  const BP = { H2O_l:100, Etanol_l:78.4, Acetona_l:56, Hexano_l:68.7, Benzeno_l:80.1, Tolueno_l:110.6, Metanol_l:64.7, Cloroformio_l:61.2, AnidridoAcetico_l:139.8, AlcoolIsopentilico_l:131.1, Anilina_l:184.1 };
+  const FP = { H2O_l:0, Etanol_l:-114, Acetona_l:-95, Hexano_l:-95, Benzeno_l:5.5, Tolueno_l:-95, Metanol_l:-98, Cloroformio_l:-63.5, AnidridoAcetico_l:-73, AlcoolIsopentilico_l:-117, Anilina_l:-6 };
   const PRECIP_TABLE = [
     { cat:'Ag+', an:'Cl-', cC:1, cA:1, prod:'AgCl_s', cor:'#f5f5f5', nomePubChem:'Silver chloride' }, { cat:'Pb2+', an:'Cl-', cC:1, cA:2, prod:'PbCl2_s', cor:'#eceff1', nomePubChem:'Lead(II) chloride' },
     { cat:'Pb2+', an:'I-', cC:1, cA:2, prod:'PbI2_s', cor:'#ffeb3b', nomePubChem:'Lead(II) iodide' }, { cat:'Ag+', an:'I-', cC:1, cA:1, prod:'AgI_s', cor:'#fff9c4', nomePubChem:'Silver iodide' },
@@ -60,6 +60,7 @@
   let sys = { maxVol:250, vol:0, temp:25, pressao:1, isClosed:false, modoTermico:'ambiente', especies:new Map(), shattered:false, fenolftaleina:false };
   let historico = [], timerAdd = null, timerLoop = null, qtdRestante = 0, incrAdd = 1, phDataPoints = [];
   let velocidadeTempo = 1, agitadorAtivo = false, focoAtivo = false, reagentesAdicionados = new Set(), reacoesCatalogadas = new Set();
+  let smilesDrawerInstance = null;
 
   const logEl = document.getElementById('logStream'), phCanvas = document.getElementById('phCanvas'), phCtx = phCanvas.getContext('2d');
   phCanvas.width = 280; phCanvas.height = 140;
@@ -91,8 +92,69 @@
   function removerEspecie(chave, mmol) { const atual = sys.especies.get(chave)||0; const novo = Math.max(0, atual-mmol); if (novo < 1e-12) sys.especies.delete(chave); else sys.especies.set(chave, novo); }
 
   // ==========================================
-  // 5. ORÁCULO PUBCHEM & PERSISTÊNCIA NA NUVEM
+  // 5. ORÁCULO PUBCHEM, SMILESDRAWER & NUVEM
   // ==========================================
+  function initSmilesDrawer() {
+    try {
+      if (typeof SmilesDrawer !== 'undefined') {
+        smilesDrawerInstance = new SmilesDrawer.Drawer({
+          width: 250,
+          height: 160,
+          bondThickness: 1.5,
+          bondLength: 15,
+          shortBondLength: 0.85,
+          bondSpacing: 0.18 * 15,
+          atomVisualization: 'default',
+          isomeric: true,
+          compactDrawing: true,
+          themes: {
+            dark: {
+              C: '#e0e0e0', O: '#ff5252', N: '#40c4ff', F: '#69f0ae',
+              CL: '#ffd740', BR: '#ff6e40', I: '#e040fb', P: '#ffab40',
+              S: '#ffd740', BACKGROUND: 'transparent'
+            }
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('SmilesDrawer indisponível:', e);
+    }
+  }
+
+  function projetarEstruturaMolecular(smiles, nome, iupac, formula, peso) {
+    const canvas = document.getElementById('moleculeCanvas');
+    const placeholder = document.getElementById('molPlaceholder');
+    const elName = document.getElementById('molName');
+    const elIupac = document.getElementById('molIupac');
+    const elFormula = document.getElementById('molFormula');
+    const elWeight = document.getElementById('molWeight');
+
+    if (elName) elName.textContent = nome || 'Nenhum';
+    if (elIupac) elIupac.textContent = iupac || '--';
+    if (elFormula) elFormula.textContent = formula || '--';
+    if (elWeight) elWeight.textContent = peso ? `${peso} g/mol` : '--';
+
+    if (!canvas || !smiles || smiles === '--') {
+      if (placeholder) placeholder.style.display = 'block';
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+
+    if (placeholder) placeholder.style.display = 'none';
+
+    if (typeof SmilesDrawer !== 'undefined') {
+      SmilesDrawer.parse(smiles, function(tree) {
+        if (!smilesDrawerInstance) initSmilesDrawer();
+        smilesDrawerInstance.draw(tree, canvas, 'dark', false);
+      }, function(err) {
+        console.warn('Falha ao renderizar SMILES:', err);
+      });
+    }
+  }
+
   async function consultarDadosPubChem(termo) {
     try {
       const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termo.trim())}/property/MolecularWeight,MolecularFormula,CanonicalSMILES,IUPACName/JSON`;
@@ -139,6 +201,49 @@
     }
   }
 
+  function verificarSinteseFarmaceutica() {
+    if (typeof LAB_DATABASE === 'undefined' || !LAB_DATABASE.reactions) return;
+
+    LAB_DATABASE.reactions.forEach(rx => {
+      if (!rx.reagentesObrigatorios) return;
+      const todosPresentes = rx.reagentesObrigatorios.every(r => reagentesAdicionados.has(r));
+      const catalisadorOk = !rx.catalisador || reagentesAdicionados.has(rx.catalisador);
+      const tempOk = sys.temp >= (rx.tempMinima || 20);
+      const agitacaoOk = !rx.precisaAgitador || agitadorAtivo;
+
+      if (todosPresentes && catalisadorOk && tempOk && agitacaoOk) {
+        if (!reacoesCatalogadas.has(rx.id)) {
+          reacoesCatalogadas.add(rx.id);
+
+          const prodInfo = (LAB_DATABASE.species && LAB_DATABASE.species[rx.produtoId]) ? LAB_DATABASE.species[rx.produtoId] : {};
+          
+          tocarSom('sucesso');
+          log(`✨ SÍNTESE CONCLUÍDA: ${rx.nomeComposto}!`, 'log-info');
+
+          projetarEstruturaMolecular(
+            prodInfo.smiles || '--',
+            prodInfo.label || rx.nomeComposto,
+            prodInfo.iupac || '--',
+            prodInfo.formula || '--',
+            prodInfo.molarMass || '--'
+          );
+
+          if (rx.corPrecipitado) {
+            adicionarEspecie(rx.produtoId, 8);
+          }
+
+          catalogarFormulacaoNoBanco(
+            prodInfo.pubchemQuery || rx.nomeComposto,
+            Array.from(reagentesAdicionados),
+            sys.temp,
+            agitadorAtivo,
+            rx.descricao || 'Síntese farmacêutica concluída com sucesso.'
+          );
+        }
+      }
+    });
+  }
+
   // ==========================================
   // 6. SISTEMA AVANÇADO DE MISSÕES
   // ==========================================
@@ -147,11 +252,11 @@
     { titulo: "Missão 2: Chuva de Ouro", desc: "Forma um precipitado amarelo intenso de Iodeto de Chumbo (PbI₂).", check: () => qtd('PbI2_s') > 0.1 },
     { titulo: "Missão 3: Libertação de Gás H₂", desc: "Faz um metal sólido reagir com ácido para gerar gás Hidrogénio.", check: () => qtd('H2_g') > 1 },
     { titulo: "Missão 4: Ponto de Ebulição", desc: "Aquece a água no laboratório até que comece a evaporar ativamente (100°C).", check: () => sys.temp >= 100 && qtd('H2O_l') > 0 },
-    { titulo: "Missão 5: Hidróxido Azul", desc: "Cria um precipitado azul claro de Hidróxido de Cobre (Cu(OH)₂).", check: () => qtd('Cu(OH)2_s') > 0.1 },
+    { titulo: "Missão 5: Síntese da Aspirina", desc: "Mistura Ácido Salicílico + Anidrido Acético com H₂SO₄ sob aquecimento (>60°C).", check: () => reacoesCatalogadas.has('sintese_aspirina') },
     { titulo: "Missão 6: Chuva de Prata", desc: "Mistura Nitrato de Prata (AgNO₃) com Cloreto (Ex: NaCl ou HCl) para formar AgCl.", check: () => qtd('AgCl_s') > 0.1 },
-    { titulo: "Missão 7: Gelo de Laboratório", desc: "Usa o sistema de resfriamento para baixar a temperatura da água até congelar (0°C).", check: () => sys.temp <= 0 && qtd('H2O_s') > 0 },
+    { titulo: "Missão 7: Síntese de Paracetamol", desc: "Mistura 4-Aminofenol + Anidrido Acético sob aquecimento e agitação (>55°C).", check: () => reacoesCatalogadas.has('sintese_paracetamol') },
     { titulo: "Missão 8: Ambiente Super Ácido", desc: "Cria uma solução altamente corrosiva com pH menor ou igual a 2.0.", check: () => calcularpH() <= 2.0 && sys.vol > 10 },
-    { titulo: "Missão 9: Ambiente Super Básico", desc: "Cria uma solução fortemente alcalina com pH maior ou igual a 12.0.", check: () => calcularpH() >= 12.0 && sys.vol > 10 },
+    { titulo: "Missão 9: Aroma de Banana (Éster)", desc: "Mistura Ácido Acético com Álcool Isopentílico catalisado por H₂SO₄ sob calor.", check: () => reacoesCatalogadas.has('sintese_aroma_banana') },
     { titulo: "Missão 10: Efervescência de Carbonato", desc: "Mistura um carbonato (como NaHCO₃ ou CaCO₃) com ácido para liberar CO₂.", check: () => qtd('CO2_g') > 0.5 }
   ];
   let missaoAtual = 0;
@@ -207,6 +312,7 @@
     document.getElementById('btnStartAdd').innerText = '▶ Adicionar'; window.setModoTermico('ambiente'); document.getElementById('tempAlvo').value = 25;
     sys.especies.clear(); sys.vol = 0; sys.temp = 25; sys.pressao = 1; sys.shattered = false; sys.fenolftaleina = false; historico = []; phDataPoints = []; reagentesAdicionados.clear(); reacoesCatalogadas.clear();
     document.getElementById('alertOverlay').style.display = 'none'; document.getElementById('qtdInput').value = '10'; document.getElementById('bubbleOverlay').style.opacity = '0'; document.getElementById('pressWarn').style.display = 'none'; document.getElementById('freezeOverlay').style.opacity = '0';
+    projetarEstruturaMolecular(null);
     atualizarUI_Missao();
     atualizarUI(); window.limparCurvaPH(); log('Sistema resetado.', 'log-info');
   }
@@ -300,6 +406,8 @@
         'SbCl3_aq': [['Sb3+', 1], ['Cl-', 3]],
         'CaCl2_aq': [['Ca2+', 1], ['Cl-', 2]],
         'BaCl2_aq': [['Ba2+', 1], ['Cl-', 2]],
+        'CoCl2_aq': [['Co2+', 1], ['Cl-', 2]],
+        'SCN_aq': [['K+', 1], ['SCN-', 1]],
         'H2O2_aq': [['H2O2', 1]],
         'NaHCO3_aq': [['Na+', 1], ['HCO3-', 1]],
         'K2CO3_aq': [['K+', 2], ['CO3_2-', 1]],
@@ -328,6 +436,7 @@
     }
 
     atualizarEquilibrio();
+    verificarSinteseFarmaceutica();
     atualizarEstadoFisico();
     atualizarUI();
     verificarMissoes();
@@ -512,7 +621,7 @@
     
     let pptH=0, pptCor='transparent', best={q:0,c:'transparent'};
     PRECIP_TABLE.forEach(p=>{ let q=qtd(p.prod); if(q>0.05){ pptH+=4; if(q>best.q) best={q:q, c:p.cor}; } });
-    if(qtd('Al_s')>0||qtd('Zn_s')>0||qtd('Mg_s')>0||qtd('Ca_s')>0||qtd('S_s')>0||qtd('I2_s')>0||qtd('Fe_s')>0||qtd('Ni_s')>0||qtd('Cu_s')>0||qtd('Sn_s')>0||qtd('Pb_s')>0){ pptH+=4; if(best.q===0) best.c='#b0bec5'; }
+    if(qtd('Al_s')>0||qtd('Zn_s')>0||qtd('Mg_s')>0||qtd('Ca_s')>0||qtd('S_s')>0||qtd('I2_s')>0||qtd('Fe_s')>0||qtd('Ni_s')>0||qtd('Cu_s')>0||qtd('Sn_s')>0||qtd('Pb_s')>0||qtd('AcidoSalicilico_s')>0||qtd('pAminofenol_s')>0||qtd('AAS_s')>0||qtd('Paracetamol_s')>0){ pptH+=4; if(best.q===0) best.c='#b0bec5'; }
     document.getElementById('precipLayer').style.height = Math.min(pptH,45)+'%'; document.getElementById('precipLayer').style.backgroundColor = best.c;
     
     const gasEl=document.getElementById('gasHalo');
@@ -566,6 +675,7 @@
     agitadorAtivo = !agitadorAtivo; 
     document.getElementById('btnAgitador').classList.toggle('active-btn', agitadorAtivo); 
     document.getElementById('agitadorFisico').classList.toggle('ativo', agitadorAtivo); 
+    verificarSinteseFarmaceutica();
   };
   
   window.toggleFoco = function() { 
@@ -594,11 +704,25 @@
     else if (sys.modoTermico==='resfriando') { sys.temp-=1.8 * velocidadeTempo; if(sys.temp<-120) sys.temp=-120; alterou=true; }
     else if (sys.modoTermico==='termostato') { const alvo=parseFloat(document.getElementById('tempAlvo').value)||25; if(sys.temp<alvo-0.3){ sys.temp+=incr*0.4; alterou=true; } else if(sys.temp>alvo+0.3){ sys.temp-=0.8*velocidadeTempo; alterou=true; } }
     else if (sys.modoTermico==='ambiente') { if(sys.temp>25.3){ sys.temp-=0.4*velocidadeTempo; alterou=true; } else if(sys.temp<24.7){ sys.temp+=0.4*velocidadeTempo; alterou=true; } else sys.temp=25; }
-    if (alterou) { atualizarEquilibrio(); atualizarEstadoFisico(); atualizarUI(); registrarPontoPH(); }
+    if (alterou) { 
+      atualizarEquilibrio(); 
+      verificarSinteseFarmaceutica();
+      atualizarEstadoFisico(); 
+      atualizarUI(); 
+      registrarPontoPH(); 
+    }
   }
 
   function construirCatalogo() {
     const grupos = [
+      ['💊 Precursores Farmacêuticos', [
+        ['AcidoSalicilico_s','Ácido Salicílico (Precursor AAS)'],
+        ['AnidridoAcetico_l','Anidrido Acético (Agente Acetilante)'],
+        ['pAminofenol_s','4-Aminofenol (Precursor Paracetamol)'],
+        ['AlcoolIsopentilico_l','Álcool Isopentílico (Síntese Éster)'],
+        ['Anilina_l','Anilina Pura (Precursor Acetanilida)'],
+        ['AcidoBenzoico_s','Ácido Benzóico (Síntese Benzoatos)']
+      ]],
       ['💧 Solventes Polares', [['H2O_l','Água Destilada (H₂O)'], ['Etanol_l','Etanol Absoluto (C₂H₆O)'], ['Acetona_l','Acetona Pura (C₃H₆O)'], ['Metanol_l','Metanol (CH₃OH)']]],
       ['🛢️ Solventes Apolares', [['Hexano_l','Hexano (C₆H₁₄)'], ['Benzeno_l','Benzeno (C₆H₆)'], ['Tolueno_l','Tolueno (C₇H₈)'], ['Cloroformio_l','Clorofórmio (CHCl₃)']]],
       ['⚠️ Alto Risco', [['Na_s','Sódio Metálico (Na)'], ['Li_s','Lítio Metálico (Li)'], ['K_s','Potássio Metálico (K)'], ['H2O2_aq','Peróxido de Hidrogênio (H₂O₂)']]],
@@ -648,6 +772,7 @@
   construirCatalogo(); 
   resetarLaboratorio(); 
   atualizarUI_Missao();
+  initSmilesDrawer();
   timerLoop = setInterval(loopTermico, 200);
   log('🚀 LAIFT Engine Uninassau iniciado com Sucesso!', 'log-info');
 })();
