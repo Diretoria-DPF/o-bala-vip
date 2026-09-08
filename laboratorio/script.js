@@ -37,20 +37,21 @@
   // ==========================================
   // 3. TABELAS QUÍMICAS E CONSTANTES ORIGINAIS
   // ==========================================
+  const APPS_SCRIPT_GATEWAY = 'https://script.google.com/macros/s/AKfycbyhZk_3HZaVWLVHgyNyzL5IBT5SXb1w_gz3cdgAiQqQVjNvY5tTnb0EXUmsI8wGsGne/exec';
   const MM = { Na:23, Al:27, Zn:65.4, Mg:24.3, CuSO4:159.6, NaCl:58.4, CaCO3:100, KI:166, AgNO3:169.9, PbNO3:331, NaOH:40, HCl:36.5, Li:6.94, K:39.1, Ca:40.08, NaHCO3:84.0, K2CO3:138.2, KOH:56.1, LiOH:23.95, CaOH2:74.09, I2:253.8, S:32.06, P:30.97, Fe:55.8, Ni:58.7, Cu:63.5, Sn:118.7, Pb:207.2, HNO3:63.0, HClO4:100.5, H3PO4:98.0 };
   const CONC_AQ = { H2O2_aq:3.0, PbNO3_aq:1.0, AgNO3_aq:1.0, CdNO3_aq:1.0, CuSO4_aq:1.0, FeCl3_aq:1.0, ZnSO4_aq:1.0, NiCl2_aq:1.0, SbCl3_aq:1.0, CaCl2_aq:1.0, BaCl2_aq:1.0, HCl_aq:6.0, H2SO4_aq:9.0, AcidoAcetico_aq:1.0, KI_aq:1.0, NH42S_aq:1.0, NaOH_aq:6.0, NH3_aq:5.0, Na2CO3_aq:1.0, NaClO_aq:2.0, NaHCO3_aq:1.0, K2CO3_aq:1.0, KOH_aq:6.0, LiOH_aq:5.0, CaOH2_aq:0.5, HNO3_aq:6.0, HClO4_aq:6.0, H3PO4_aq:4.0 };
   const BP = { H2O_l:100, Etanol_l:78.4, Acetona_l:56, Hexano_l:68.7, Benzeno_l:80.1, Tolueno_l:110.6, Metanol_l:64.7, Cloroformio_l:61.2 };
   const FP = { H2O_l:0, Etanol_l:-114, Acetona_l:-95, Hexano_l:-95, Benzeno_l:5.5, Tolueno_l:-95, Metanol_l:-98, Cloroformio_l:-63.5 };
   const PRECIP_TABLE = [
-    { cat:'Ag+', an:'Cl-', cC:1, cA:1, prod:'AgCl_s', cor:'#f5f5f5' }, { cat:'Pb2+', an:'Cl-', cC:1, cA:2, prod:'PbCl2_s', cor:'#eceff1' },
-    { cat:'Pb2+', an:'I-', cC:1, cA:2, prod:'PbI2_s', cor:'#ffeb3b' }, { cat:'Ag+', an:'I-', cC:1, cA:1, prod:'AgI_s', cor:'#fff9c4' },
-    { cat:'Cu2+', an:'OH-', cC:1, cA:2, prod:'Cu(OH)2_s', cor:'#4dd0e1' }, { cat:'Fe3+', an:'OH-', cC:1, cA:3, prod:'Fe(OH)3_s', cor:'#8d6e63' },
-    { cat:'Ni2+', an:'OH-', cC:1, cA:2, prod:'Ni(OH)2_s', cor:'#a5d6a7' }, { cat:'Ca2+', an:'CO3_2-', cC:1, cA:1, prod:'CaCO3_s', cor:'#fafafa' },
-    { cat:'Ba2+', an:'CO3_2-', cC:1, cA:1, prod:'BaCO3_s', cor:'#f5f5f5' }, { cat:'Pb2+', an:'S_2-', cC:1, cA:1, prod:'PbS_s', cor:'#212121' },
-    { cat:'Ag+', an:'S_2-', cC:2, cA:1, prod:'Ag2S_s', cor:'#1a1a1a' }, { cat:'Cu2+', an:'S_2-', cC:1, cA:1, prod:'CuS_s', cor:'#1b1b1b' },
-    { cat:'Cd2+', an:'S_2-', cC:1, cA:1, prod:'CdS_s', cor:'#fdd835' }, { cat:'Zn2+', an:'S_2-', cC:1, cA:1, prod:'ZnS_s', cor:'#e8eaf6' },
-    { cat:'Sb3+', an:'S_2-', cC:2, cA:3, prod:'Sb2S3_s', cor:'#ff7043' }, { cat:'Ca2+', an:'SO4_2-', cC:1, cA:1, prod:'CaSO4_s', cor:'#f5f5f5' },
-    { cat:'Ba2+', an:'SO4_2-', cC:1, cA:1, prod:'BaSO4_s', cor:'#ffffff' }, { cat:'Pb2+', an:'SO4_2-', cC:1, cA:1, prod:'PbSO4_s', cor:'#eceff1' }
+    { cat:'Ag+', an:'Cl-', cC:1, cA:1, prod:'AgCl_s', cor:'#f5f5f5', nomePubChem:'Silver chloride' }, { cat:'Pb2+', an:'Cl-', cC:1, cA:2, prod:'PbCl2_s', cor:'#eceff1', nomePubChem:'Lead(II) chloride' },
+    { cat:'Pb2+', an:'I-', cC:1, cA:2, prod:'PbI2_s', cor:'#ffeb3b', nomePubChem:'Lead(II) iodide' }, { cat:'Ag+', an:'I-', cC:1, cA:1, prod:'AgI_s', cor:'#fff9c4', nomePubChem:'Silver iodide' },
+    { cat:'Cu2+', an:'OH-', cC:1, cA:2, prod:'Cu(OH)2_s', cor:'#4dd0e1', nomePubChem:'Copper(II) hydroxide' }, { cat:'Fe3+', an:'OH-', cC:1, cA:3, prod:'Fe(OH)3_s', cor:'#8d6e63', nomePubChem:'Iron(III) hydroxide' },
+    { cat:'Ni2+', an:'OH-', cC:1, cA:2, prod:'Ni(OH)2_s', cor:'#a5d6a7', nomePubChem:'Nickel(II) hydroxide' }, { cat:'Ca2+', an:'CO3_2-', cC:1, cA:1, prod:'CaCO3_s', cor:'#fafafa', nomePubChem:'Calcium carbonate' },
+    { cat:'Ba2+', an:'CO3_2-', cC:1, cA:1, prod:'BaCO3_s', cor:'#f5f5f5', nomePubChem:'Barium carbonate' }, { cat:'Pb2+', an:'S_2-', cC:1, cA:1, prod:'PbS_s', cor:'#212121', nomePubChem:'Lead(II) sulfide' },
+    { cat:'Ag+', an:'S_2-', cC:2, cA:1, prod:'Ag2S_s', cor:'#1a1a1a', nomePubChem:'Silver sulfide' }, { cat:'Cu2+', an:'S_2-', cC:1, cA:1, prod:'CuS_s', cor:'#1b1b1b', nomePubChem:'Copper(II) sulfide' },
+    { cat:'Cd2+', an:'S_2-', cC:1, cA:1, prod:'CdS_s', cor:'#fdd835', nomePubChem:'Cadmium sulfide' }, { cat:'Zn2+', an:'S_2-', cC:1, cA:1, prod:'ZnS_s', cor:'#e8eaf6', nomePubChem:'Zinc sulfide' },
+    { cat:'Sb3+', an:'S_2-', cC:2, cA:3, prod:'Sb2S3_s', cor:'#ff7043', nomePubChem:'Antimony trisulfide' }, { cat:'Ca2+', an:'SO4_2-', cC:1, cA:1, prod:'CaSO4_s', cor:'#f5f5f5', nomePubChem:'Calcium sulfate' },
+    { cat:'Ba2+', an:'SO4_2-', cC:1, cA:1, prod:'BaSO4_s', cor:'#ffffff', nomePubChem:'Barium sulfate' }, { cat:'Pb2+', an:'SO4_2-', cC:1, cA:1, prod:'PbSO4_s', cor:'#eceff1', nomePubChem:'Lead(II) sulfate' }
   ];
 
   // ==========================================
@@ -58,7 +59,7 @@
   // ==========================================
   let sys = { maxVol:250, vol:0, temp:25, pressao:1, isClosed:false, modoTermico:'ambiente', especies:new Map(), shattered:false, fenolftaleina:false };
   let historico = [], timerAdd = null, timerLoop = null, qtdRestante = 0, incrAdd = 1, phDataPoints = [];
-  let velocidadeTempo = 1, agitadorAtivo = false, focoAtivo = false;
+  let velocidadeTempo = 1, agitadorAtivo = false, focoAtivo = false, reagentesAdicionados = new Set(), reacoesCatalogadas = new Set();
 
   const logEl = document.getElementById('logStream'), phCanvas = document.getElementById('phCanvas'), phCtx = phCanvas.getContext('2d');
   phCanvas.width = 280; phCanvas.height = 140;
@@ -90,7 +91,56 @@
   function removerEspecie(chave, mmol) { const atual = sys.especies.get(chave)||0; const novo = Math.max(0, atual-mmol); if (novo < 1e-12) sys.especies.delete(chave); else sys.especies.set(chave, novo); }
 
   // ==========================================
-  // 5. SISTEMA AVANÇADO DE MISSÕES
+  // 5. ORÁCULO PUBCHEM & PERSISTÊNCIA NA NUVEM
+  // ==========================================
+  async function consultarDadosPubChem(termo) {
+    try {
+      const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termo.trim())}/property/MolecularWeight,MolecularFormula,CanonicalSMILES,IUPACName/JSON`;
+      const resp = await fetch(url);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (data.PropertyTable && data.PropertyTable.Properties && data.PropertyTable.Properties.length > 0) {
+        const p = data.PropertyTable.Properties[0];
+        return { cid: p.CID, formula: p.MolecularFormula, pesoMolecular: p.MolecularWeight, smiles: p.CanonicalSMILES, iupac: p.IUPACName };
+      }
+    } catch (e) { console.warn('[PubChem] Consulta falhou:', e); }
+    return null;
+  }
+
+  async function catalogarFormulacaoNoBanco(nomeProduto, reagentesArray, tempAtual, agitacaoLigada, observacaoReacao) {
+    let identificador = 'Visitante';
+    try {
+      const sessao = JSON.parse(localStorage.getItem('laift_student_session') || '{}');
+      if (sessao.identifier) identificador = sessao.identifier;
+    } catch (e) {}
+
+    const dadosPubChem = await consultarDadosPubChem(nomeProduto);
+    const payload = {
+      acao: 'registrarFormulacaoLab',
+      identificador: identificador,
+      produto: nomeProduto,
+      reagentes: reagentesArray || Array.from(reagentesAdicionados),
+      temperatura: tempAtual !== undefined ? tempAtual : sys.temp,
+      agitacao: agitacaoLigada !== undefined ? agitacaoLigada : agitadorAtivo,
+      sistema: sys.isClosed ? 'Fechado' : 'Aberto',
+      observacoes: observacaoReacao || 'Reação detectada na bancada virtual.',
+      dadosPubChem: dadosPubChem || { formula: 'Indeterminada', pesoMolecular: '--', smiles: '--', iupac: nomeProduto, cid: '--' }
+    };
+
+    try {
+      await fetch(APPS_SCRIPT_GATEWAY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      log(`🧪 Composto [${nomeProduto}] catalogado no acervo!`, 'log-info');
+    } catch (err) {
+      console.warn('[Laboratório] Não foi possível persistir a reação:', err);
+    }
+  }
+
+  // ==========================================
+  // 6. SISTEMA AVANÇADO DE MISSÕES
   // ==========================================
   const missoes = [
     { titulo: "Missão 1: Neutralização Básica", desc: "Atinge um pH entre 7.0 e 7.5 usando ácido e base. (Volume > 20mL).", check: () => calcularpH() >= 7.0 && calcularpH() <= 7.5 && sys.vol >= 20 },
@@ -139,47 +189,8 @@
     }
   }
 
-  window.proximaMissao = function() { missaoAtual++; resetarLaboratorio(); atualizarUI_Missao(); };
-  
-  window.abrirLivroMissoes = function() {
-    let html = '<ul style="list-style:none; padding:0;">';
-    missoes.forEach((m, i) => {
-      let status = i < missaoAtual ? "✅ Concluída" : i === missaoAtual ? "▶ Em Progresso" : "🔒 Bloqueada";
-      let color = i < missaoAtual ? "var(--neon-green)" : i === missaoAtual ? "#ff9800" : "#546e7a";
-      html += `<li style="color:${color}; margin-bottom:12px; border-bottom:1px dashed #1e3a5f; padding-bottom:8px;"><strong>${m.titulo}</strong> <span style="font-size:0.6rem;">(${status})</span><br><span style="color:#b0bec5; font-size:0.75rem;">${m.desc}</span></li>`;
-    });
-    html += '</ul>';
-    document.getElementById('missionsList').innerHTML = html;
-    document.getElementById('missionsModal').style.display = 'flex';
-  };
-  
-  window.fecharLivroMissoes = function() { document.getElementById('missionsModal').style.display = 'none'; };
-
-  // Funções do Livro de Missões exportadas para o HTML
-  window.proximaMissao = function() { 
-    missaoAtual++; 
-    resetarLaboratorio(); 
-    atualizarUI_Missao(); 
-  };
-  
-  window.abrirLivroMissoes = function() {
-    let html = '<ul style="list-style:none; padding:0;">';
-    missoes.forEach((m, i) => {
-      let status = i < missaoAtual ? "✅ Concluída" : i === missaoAtual ? "▶ Em Progresso" : "🔒 Bloqueada";
-      let color = i < missaoAtual ? "var(--neon-green)" : i === missaoAtual ? "#ff9800" : "#546e7a";
-      html += `<li style="color:${color}; margin-bottom:12px; border-bottom:1px dashed #1e3a5f; padding-bottom:8px;"><strong>${m.titulo}</strong> <span style="font-size:0.6rem;">(${status})</span><br><span style="color:#b0bec5; font-size:0.75rem;">${m.desc}</span></li>`;
-    });
-    html += '</ul>';
-    document.getElementById('missionsList').innerHTML = html;
-    document.getElementById('missionsModal').style.display = 'flex';
-  };
-  
-  window.fecharLivroMissoes = function() {
-    document.getElementById('missionsModal').style.display = 'none';
-  };
-
   // ==========================================
-  // 6. INCIDENTES, RESET E TROCA DE VIDRARIA
+  // 7. INCIDENTES, RESET E TROCA DE VIDRARIA
   // ==========================================
   function dispararAlerta(titulo, msg) {
     if (window.pararAdicao) window.pararAdicao();
@@ -194,7 +205,7 @@
   function resetarLaboratorio() {
     if (timerAdd) { clearInterval(timerAdd); timerAdd = null; }
     document.getElementById('btnStartAdd').innerText = '▶ Adicionar'; window.setModoTermico('ambiente'); document.getElementById('tempAlvo').value = 25;
-    sys.especies.clear(); sys.vol = 0; sys.temp = 25; sys.pressao = 1; sys.shattered = false; sys.fenolftaleina = false; historico = []; phDataPoints = [];
+    sys.especies.clear(); sys.vol = 0; sys.temp = 25; sys.pressao = 1; sys.shattered = false; sys.fenolftaleina = false; historico = []; phDataPoints = []; reagentesAdicionados.clear(); reacoesCatalogadas.clear();
     document.getElementById('alertOverlay').style.display = 'none'; document.getElementById('qtdInput').value = '10'; document.getElementById('bubbleOverlay').style.opacity = '0'; document.getElementById('pressWarn').style.display = 'none'; document.getElementById('freezeOverlay').style.opacity = '0';
     atualizarUI_Missao();
     atualizarUI(); window.limparCurvaPH(); log('Sistema resetado.', 'log-info');
@@ -213,7 +224,7 @@
   }
 
   // ==========================================
-  // 7. ANIMAÇÕES E INÍCIO DE ADIÇÃO
+  // 8. ANIMAÇÕES E INÍCIO DE ADIÇÃO
   // ==========================================
   function animarDespejo(modo) {
     const zone = document.getElementById('glasswareZone'); const animEl = document.createElement('div');
@@ -250,11 +261,12 @@
   }
 
   // ==========================================
-  // 8. LÓGICA QUÍMICA
+  // 9. LÓGICA QUÍMICA
   // ==========================================
   function processarCarga(reag, qtdAdd) {
     if (qtdAdd <= 0 || sys.shattered) return;
     let mmol = 0;
+    reagentesAdicionados.add(reag);
 
     if (reag.endsWith('_l')) {
       adicionarEspecie(reag, qtdAdd * 10);
@@ -318,7 +330,7 @@
     atualizarEquilibrio();
     atualizarEstadoFisico();
     atualizarUI();
-    verificarMissoes(); // Verifica se a adição concluiu a missão
+    verificarMissoes();
     registrarPontoPH();
   }
 
@@ -346,7 +358,7 @@
       removerEspecie('H+', r);
       removerEspecie('OH-', r);
       adicionarEspecie('H2O_l', r);
-      sys.temp += r * 0.05; // Reação exotérmica
+      sys.temp += r * 0.05;
     }
     
     // Reações de Metais e Carbonatos com Ácido
@@ -366,7 +378,7 @@
 
         if (hNow >= valencia) {
           let r = Math.min(qm, hNow / valencia);
-          if (!agitadorAtivo) r *= 0.5; // Reação mais lenta sem agitação
+          if (!agitadorAtivo) r *= 0.5;
           
           removerEspecie(m, r); removerEspecie('H+', valencia * r); adicionarEspecie(ion, r); adicionarEspecie('H2_g', r * (valencia === 2 ? 1 : valencia === 3 ? 1.5 : 0.5));
           sys.temp += r * (m === 'Na_s' ? 5 : m === 'Li_s' ? 4.5 : m === 'K_s' ? 5.5 : m === 'Ca_s' ? 3 : 2);
@@ -419,6 +431,10 @@
       if (cq > 0 && aq > 0) {
         let fc = cq / p.cC; let fa = aq / p.cA; let m = Math.min(fc, fa);
         removerEspecie(p.cat, m * p.cC); removerEspecie(p.an, m * p.cA); adicionarEspecie(p.prod, m);
+        if (m > 0.1 && !reacoesCatalogadas.has(p.prod)) {
+          reacoesCatalogadas.add(p.prod);
+          catalogarFormulacaoNoBanco(p.nomePubChem || p.prod.replace('_s', ''), Array.from(reagentesAdicionados), sys.temp, agitadorAtivo, `Precipitado insolúvel formado (${p.cor}).`);
+        }
       }
     });
   }
@@ -472,7 +488,7 @@
   }
 
   // ==========================================
-  // 9. ATUALIZAÇÕES DA INTERFACE E GRÁFICOS
+  // 10. ATUALIZAÇÕES DA INTERFACE E GRÁFICOS
   // ==========================================
   function calcularpH() {
     const volL = sys.vol/1000; if (volL<=0) return 7;
@@ -536,7 +552,7 @@
   function limparCurvaPH() { phDataPoints=[]; desenharCurvaPH(); log('Curva de pH limpa.'); }
 
   // ==========================================
-  // 10. FUNÇÕES EXPORTADAS (BOTÕES HTML) E LOOP
+  // 11. FUNÇÕES EXPORTADAS (BOTÕES HTML) E LOOP
   // ==========================================
   window.setVelocidade = function(v) {
     velocidadeTempo = v;
@@ -603,6 +619,19 @@
   }
 
   // Exportações Finais
+  window.proximaMissao = function() { missaoAtual++; resetarLaboratorio(); atualizarUI_Missao(); };
+  window.abrirLivroMissoes = function() {
+    let html = '<ul style="list-style:none; padding:0;">';
+    missoes.forEach((m, i) => {
+      let status = i < missaoAtual ? "✅ Concluída" : i === missaoAtual ? "▶ Em Progresso" : "🔒 Bloqueada";
+      let color = i < missaoAtual ? "var(--neon-green)" : i === missaoAtual ? "#ff9800" : "#546e7a";
+      html += `<li style="color:${color}; margin-bottom:12px; border-bottom:1px dashed #1e3a5f; padding-bottom:8px;"><strong>${m.titulo}</strong> <span style="font-size:0.6rem;">(${status})</span><br><span style="color:#b0bec5; font-size:0.75rem;">${m.desc}</span></li>`;
+    });
+    html += '</ul>';
+    document.getElementById('missionsList').innerHTML = html;
+    document.getElementById('missionsModal').style.display = 'flex';
+  };
+  window.fecharLivroMissoes = function() { document.getElementById('missionsModal').style.display = 'none'; };
   window.abrirManual = () => document.getElementById('manualModal').style.display = 'flex'; 
   window.fecharManual = () => document.getElementById('manualModal').style.display = 'none';
   window.resetarLaboratorio = resetarLaboratorio; 
@@ -612,11 +641,13 @@
   window.limparCurvaPH = limparCurvaPH; 
   window.limparRegistro = limparRegistro;
   window.desfazerAcao = desfazerAcao;
+  window.consultarDadosPubChem = consultarDadosPubChem;
+  window.catalogarFormulacaoNoBanco = catalogarFormulacaoNoBanco;
 
   // Início Automático
   construirCatalogo(); 
   resetarLaboratorio(); 
-  atualizarUI_Missao(); // Assegura que a primeira Missão aparece ao iniciar
+  atualizarUI_Missao();
   timerLoop = setInterval(loopTermico, 200);
   log('🚀 LAIFT Engine Uninassau iniciado com Sucesso!', 'log-info');
 })();
