@@ -1,52 +1,16 @@
 /**
  * LAIFT — MOTOR COGNITIVO DO PRECEPTOR VIRTUAL DE BANCADA
  * Arquitetura em Cascata de 3 Camadas:
- *   Camada 1: Base Curada Expandida (Catálogo Farmacêutico & Industrial) + IndexedDB Local (0 tokens, resposta instantânea)
+ *   Camada 1: Base Curada Expandida + IndexedDB Local (0 tokens, resposta instantânea)
  *   Camada 2: Cache Global Compartilhado na Planilha (Apps Script / Acervo)
  *   Camada 3: Inferência Cognitiva Dinâmica via Cluster Groq (openai/gpt-oss-120b)
  */
 
 window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
 
-
-// Função executada ao carregar o script para indexar qualquer quantidade de sínteses
-  carregarBaseSintesesDinamica() {
-    if (typeof window.BANCO_SINTESES_LAIFT === 'undefined' || !Array.isArray(window.BANCO_SINTESES_LAIFT)) {
-      return;
-    }
-
-    window.BANCO_SINTESES_LAIFT.forEach(item => {
-      // Cria chaves de busca primárias e secundárias (sem acento, minúsculas, nome comercial)
-      const chaveId = item.id.replace('sintese_', '').toLowerCase().trim();
-      const chaveNome = item.nomeComposto.toLowerCase().trim();
-      const chaveNormalizada = chaveNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-
-      const dadosFormatados = {
-        nome: item.nomeComposto,
-        reagentes: Array.isArray(item.reagentesObrigatorios) ? item.reagentesObrigatorios : [],
-        catalisador: item.catalisador || 'Sem catalisador específico',
-        solvente: item.solvente || 'Meio direto',
-        tempMin: item.tempMinima,
-        tempMax: item.tempMaxima,
-        tempoReacao: item.tempoReacao || '--',
-        equacao: item.equacaoQuimica || '--',
-        perigos: Array.isArray(item.perigos) ? item.perigos.join(', ') : (item.perigos || 'Manipulação padrão'),
-        tipoReacao: item.tipoReacao || 'Síntese química',
-        descricao: item.descricao || ''
-      };
-
-      // Registra no dicionário de busca rápida
-      this.ROTAS_SINTESE[chaveId] = dadosFormatados;
-      this.ROTAS_SINTESE[chaveNormalizada] = dadosFormatados;
-    });
-
-    console.log(`✅ [Preceptor] ${Object.keys(this.ROTAS_SINTESE).length} rotas de síntese indexadas na Camada 1.`);
-  }
-
-
 const LabPreceptorEngine = {
   // =========================================================================
-  // 1. BASE DE SÍNTESES FARMACÊUTICAS E INDUSTRIAIS (CAMADA 1)
+  // 1. BASE BASE INICIAL DE ROTAS CURADAS (CAMADA 1)
   // =========================================================================
   ROTAS_SINTESE: {
     "aspirina": {
@@ -88,7 +52,54 @@ const LabPreceptorEngine = {
       tipoReacao: "Sulfometilação nucleofílica seguida de salificação",
       descricao: "Reação da 4-metilaminoantipirina com formaldeído e bissulfito de sódio, seguida de metilação e salificação alcalina."
     },
-   
+    "ibuprofeno": {
+      nome: "Ibuprofeno",
+      reagentes: ["Isobutilbenzeno", "Cloreto de Acetila", "Dióxido de Carbono (CO2)"],
+      catalisador: "Cloreto de Alumínio (AlCl3) / Catalisador de Paládio",
+      solvente: "Diclorometano (CH2Cl2)",
+      tempMin: 0,
+      tempMax: 25,
+      tempoReacao: "2 h",
+      equacao: "C10H14 + CH3COCl + CO2 -> C13H18O2",
+      perigos: "Corrosivo e inflamável; liberação vigorosa de gás HCl durante a acilação.",
+      tipoReacao: "Acoplamento de Friedel-Crafts + Carboxilação",
+      descricao: "Acilação de Friedel-Crafts do isobutilbenzeno, seguida de redução e carboxilação catalisada por paládio (processo BHC)."
+    }
+  },
+
+  // Ingestão dinâmica de arrays de sínteses externas (BANCO_SINTESES_LAIFT)
+  carregarBaseSintesesDinamica() {
+    if (typeof window.BANCO_SINTESES_LAIFT === 'undefined' || !Array.isArray(window.BANCO_SINTESES_LAIFT)) {
+      return;
+    }
+
+    window.BANCO_SINTESES_LAIFT.forEach(item => {
+      if (!item || !item.nomeComposto) return;
+      const chaveId = (item.id || '').replace(/^sintese_/, '').toLowerCase().trim();
+      const chaveNome = (item.nomeComposto || '').toLowerCase().trim();
+      const chaveNormalizada = chaveNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const dadosFormatados = {
+        nome: item.nomeComposto,
+        reagentes: Array.isArray(item.reagentesObrigatorios) ? item.reagentesObrigatorios : [],
+        catalisador: item.catalisador || 'Sem catalisador específico',
+        solvente: item.solvente || 'Meio direto',
+        tempMin: item.tempMinima !== undefined ? item.tempMinima : (item.tempMin || 20),
+        tempMax: item.tempMaxima !== undefined ? item.tempMaxima : (item.tempMax || 100),
+        tempoReacao: item.tempoReacao || '--',
+        equacao: item.equacaoQuimica || item.equacao || '--',
+        perigos: Array.isArray(item.perigos) ? item.perigos.join(', ') : (item.perigos || 'Manipulação padrão'),
+        tipoReacao: item.tipoReacao || 'Síntese química',
+        descricao: item.descricao || ''
+      };
+
+      if (chaveId) this.ROTAS_SINTESE[chaveId] = dadosFormatados;
+      if (chaveNome) this.ROTAS_SINTESE[chaveNome] = dadosFormatados;
+      if (chaveNormalizada) this.ROTAS_SINTESE[chaveNormalizada] = dadosFormatados;
+    });
+
+    console.log(`✅ [Preceptor] ${Object.keys(this.ROTAS_SINTESE).length} rotas de síntese indexadas.`);
+  },
 
   // =========================================================================
   // 2. DISPARO REMOTO AO APPS SCRIPT (CAMADA 3 — GROQ 120B)
@@ -144,12 +155,10 @@ const LabPreceptorEngine = {
   // =========================================================================
   async processarMensagem(msgUsuario, sys, calcularpH, agitadorAtivo) {
     const texto = msgUsuario.toLowerCase().trim();
-
-    // Normalização semântica (remove acentos para comparação uniforme)
     const textoSemAcento = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     // 1. Diagnóstico do vaso atual
-    if (textoSemAcento.includes("o que tem") || textoSemAcento.includes("acontecendo") || textoSemAcento.includes("analis") || textoSemAcento.includes("diagnostico") || textoSemAcento.includes("status do vaso")) {
+    if (textoSemAcento.includes("o que tem") || textoSemAcento.includes("acontecendo") || textoSemAcento.includes("analis") || textoSemAcento.includes("diagnostico") || textoSemAcento.includes("status")) {
       const diag = this.gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo);
       return `
 **🔬 Diagnóstico da Vidraria Atual:**
@@ -161,7 +170,18 @@ ${diag.detalhes}
       `.trim();
     }
 
-    // 2. Extração limpa do nome do composto
+    // 2. Predição de incompatibilidades
+    if (textoSemAcento.includes("acontece se") || textoSemAcento.includes("misturar") || textoSemAcento.includes("adicionar") || textoSemAcento.includes("colocar")) {
+      if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
+        for (const [reag, info] of Object.entries(LAB_DATABASE.species)) {
+          if (textoSemAcento.includes(reag.toLowerCase()) || textoSemAcento.includes((info.label || '').toLowerCase())) {
+            return this.predizerMistura(reag, sys);
+          }
+        }
+      }
+    }
+
+    // 3. Extração limpa do composto solicitado
     const termoComposto = textoSemAcento
       .replace(/como sintetizar|como fazer|rota de sintese de|sintese de|sintetizar|como preparar|preparo de|reacao de|fazer/gi, '')
       .replace(/[?.,!]/g, '')
@@ -220,7 +240,7 @@ ${diag.detalhes}
     try {
       const respostaIA = await this.consultarGroqRemoto(msgUsuario, sys, calcularpH, agitadorAtivo);
 
-      // Sincroniza em segundo plano com a planilha para consultas futuras custarem 0 tokens
+      // Persistência em segundo plano na planilha para alimentar o aprendizado
       if (termoComposto.length >= 3 && gateway) {
         fetch(gateway, {
           method: 'POST',
@@ -277,12 +297,43 @@ ${diag.detalhes}
       detalhes: `**Espécies presentes:** ${especiesNomes || "Apenas solvente base"}. Agitador: **${agitadorAtivo ? "Ativo" : "Desligado"}**.`,
       alerta: sys.pressao > 2.0 ? `Pressão elevada (${sys.pressao.toFixed(2)} atm)!` : "Parâmetros estáveis."
     };
+  },
+
+  predizerMistura(reagenteAlvo, sys) {
+    const temAcido = (sys.especies.get('H+') || 0) > 0.1 || (sys.especies.get('HCl_aq') || 0) > 0 || (sys.especies.get('H2SO4_aq') || 0) > 0;
+    const temAgua = (sys.especies.get('H2O_l') || 0) > 0;
+
+    if (['Na_s', 'Li_s', 'K_s'].includes(reagenteAlvo) && temAgua) {
+      return "⚠️ **PERIGO EXTREMO:** Metais alcalinos reagem violentamente com água liberando calor suficiente para ignição do gás hidrogênio (H₂).";
+    }
+
+    if (reagenteAlvo === 'NaClO_aq' && temAcido) {
+      return "⚠️ **ALERTA TOXICOLÓGICO:** A acidificação de hipoclorito gera **Gás Cloro (Cl₂)**, altamente corrosivo e asfixiante.";
+    }
+
+    if (['CaCO3_s', 'NaHCO3_s', 'NaHCO3_aq', 'Na2CO3_aq'].includes(reagenteAlvo) && temAcido) {
+      return "🧪 **Efervescência:** Reação com liberação rápida de **Dióxido de Carbono (CO₂)**. Cuidado com sobrepressão em sistema fechado.";
+    }
+
+    return "A adição alterará a estequiometria e o pH da mistura. Acompanhe a curva de pH após o despejo.";
   }
 };
 
 // =========================================================================
-// 4. UTILITÁRIOS GLOBAIS DO CHAT
+// 4. EXPORTAÇÃO GLOBAL E UTILITÁRIOS DO CHAT
 // =========================================================================
+window.LabPreceptorEngine = LabPreceptorEngine;
+
+window.enviarDuvidaRapida = function(pergunta) {
+  const input = document.getElementById('labChatInput');
+  if (input) {
+    input.value = pergunta;
+    if (typeof window.enviarDuvidaLab === 'function') {
+      window.enviarDuvidaLab();
+    }
+  }
+};
+
 window.limparChatPreceptor = function() {
   const chatBox = document.getElementById('labChatMessages');
   if (!chatBox) return;
@@ -301,7 +352,7 @@ window.limparChatPreceptor = function() {
   chatBox.scrollTop = 0;
 };
 
-// Inicialização automática das sínteses
+// Inicialização automática das rotas dinâmicas
 if (typeof LabPreceptorEngine !== 'undefined') {
   LabPreceptorEngine.carregarBaseSintesesDinamica();
 }
