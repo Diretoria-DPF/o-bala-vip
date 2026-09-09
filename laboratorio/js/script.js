@@ -6,9 +6,9 @@
 (function() {
   'use strict';
 
-  // ==========================================
+  // =========================================================================
   // 1. SISTEMA DE TELEMETRIA E DIAGNÓSTICO
-  // ==========================================
+  // =========================================================================
   const relatorioErros = [];
   window.addEventListener('error', function(e) {
     relatorioErros.push(`[ERRO] ${e.message} (Linha: ${e.lineno})`);
@@ -21,17 +21,23 @@
     }
   });
 
-  // ==========================================
+  // =========================================================================
   // 2. SISTEMA DE ÁUDIO SINTÉTICO (Web Audio API)
-  // ==========================================
+  // =========================================================================
   let audioCtx = null;
   function initAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) audioCtx = new AudioContextClass();
+    }
   }
 
   function tocarSom(tipo) {
     if (!audioCtx) return;
     try {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
       const osc = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
       osc.connect(gainNode);
@@ -66,9 +72,9 @@
     }
   }
 
-  // ==========================================
+  // =========================================================================
   // 3. TABELAS FÍSICO-QUÍMICAS E GATEWAYS
-  // ==========================================
+  // =========================================================================
   const APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
   window.APPS_SCRIPT_GATEWAY = APPS_SCRIPT_GATEWAY;
 
@@ -89,7 +95,7 @@
     'Cloroformio_l': { label: 'Clorofórmio', formula: 'CHCl3', molarMass: 119.38, density: 1.489, bp: 61.2, fp: -63.5, smiles: 'ClC(Cl)Cl', iupac: 'trichloromethane', pubchemQuery: 'Chloroform' },
     'AcidoAcetico_aq': { label: 'Ácido Acético', formula: 'C2H4O2', molarMass: 60.05, density: 1.05, bp: 118, fp: 16.6, smiles: 'CC(=O)O', iupac: 'acetic acid', pubchemQuery: 'Acetic acid' },
     
-    // Produtos Farmacêuticos
+    // Fármacos e Produtos Estruturados
     'AAS_s': { label: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, density: 1.4, bp: 140, fp: 135, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', iupac: '2-acetyloxybenzoic acid', pubchemQuery: 'Aspirin' },
     'C9H8O4_s': { label: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, density: 1.4, bp: 140, fp: 135, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', iupac: '2-acetyloxybenzoic acid', pubchemQuery: 'Aspirin' },
     'Paracetamol_s': { label: 'Paracetamol (Acetaminofeno)', formula: 'C8H9NO2', molarMass: 151.16, density: 1.29, bp: 420, fp: 169, smiles: 'CC(=O)NC1=CC=C(O)C=C1', iupac: 'N-(4-hydroxyphenyl)acetamide', pubchemQuery: 'Acetaminophen' },
@@ -99,7 +105,7 @@
     'Acetanilida_s': { label: 'Acetanilida', formula: 'C8H9NO', molarMass: 135.17, density: 1.21, bp: 304, fp: 114.3, smiles: 'CC(=O)Nc1ccccc1', iupac: 'N-phenylacetamide', pubchemQuery: 'Acetanilide' },
     'AcetatoIsopentila_l': { label: 'Acetato de Isopentila', formula: 'C7H14O2', molarMass: 130.18, density: 0.876, bp: 142, fp: -78.5, smiles: 'CC(=O)OCCC(C)C', iupac: '3-methylbutyl acetate', pubchemQuery: 'Isoamyl acetate' },
 
-    // Inorgânicos e Precipitados
+    // Sais e Precipitados Inorgânicos
     'PbI2_s': { label: 'Iodeto de Chumbo II', formula: 'PbI2', molarMass: 461.01, density: 6.16, bp: 954, fp: 402, smiles: 'I[Pb]I', iupac: 'lead(2+) diiodide', pubchemQuery: 'Lead(II) iodide' },
     'AgCl_s': { label: 'Cloreto de Prata', formula: 'AgCl', molarMass: 143.32, density: 5.56, bp: 1550, fp: 455, smiles: '[Cl-].[Ag+]', iupac: 'silver(1+) chloride', pubchemQuery: 'Silver chloride' },
     'BaSO4_s': { label: 'Sulfato de Bário', formula: 'BaSO4', molarMass: 233.39, density: 4.5, bp: null, fp: 1580, smiles: '[Ba+2].[O-]S(=O)(=O)[O-]', iupac: 'barium sulfate', pubchemQuery: 'Barium sulfate' },
@@ -152,9 +158,9 @@
     { cat:'Pb2+', an:'SO4_2-', cC:1, cA:1, prod:'PbSO4_s', cor:'#eceff1', nomePubChem:'Lead(II) sulfate' }
   ];
 
-  // ==========================================
+  // =========================================================================
   // 4. MOTOR DE BANCO DE DADOS LOCAL (IndexedDB)
-  // ==========================================
+  // =========================================================================
   const DB_CACHE = {
     db: null,
     async init() {
@@ -197,9 +203,9 @@
     }
   };
 
-  // ==========================================
+  // =========================================================================
   // 5. ESTADO GLOBAL DO LABORATÓRIO
-  // ==========================================
+  // =========================================================================
   const sys = {
     maxVol: 250,
     vol: 0,
@@ -277,9 +283,9 @@
     else sys.especies.set(chave, novo);
   }
 
-  // ==========================================
+  // =========================================================================
   // 6. VISUALIZADOR 2D HÍBRIDO & 3D (3Dmol.js)
-  // ==========================================
+  // =========================================================================
   function initSmilesDrawer() {
     try {
       if (typeof SmilesDrawer !== 'undefined' && !smilesDrawerInstance) {
@@ -523,9 +529,27 @@
       return;
     }
 
-    const info = (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species && LAB_DATABASE.species[alvoId])
+    // Busca cascata: LAB_DATABASE.species -> DICIONARIO_MOLECULAR -> BANCO_SINTESES_LAIFT
+    let info = (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species && LAB_DATABASE.species[alvoId])
       ? LAB_DATABASE.species[alvoId]
       : (DICIONARIO_MOLECULAR[alvoId] || null);
+
+    if (!info && typeof window.BANCO_SINTESES_LAIFT !== 'undefined') {
+      const synth = window.BANCO_SINTESES_LAIFT.find(s => s.produtoId === alvoId || s.id === alvoId);
+      if (synth) {
+        info = {
+          label: synth.nomeComposto,
+          formula: synth.formula || '--',
+          molarMass: synth.molarMass || '--',
+          density: synth.density || '--',
+          bp: synth.tempMaxima || null,
+          fp: synth.tempMinima || null,
+          smiles: synth.smiles || '--',
+          iupac: synth.iupac || synth.nomeComposto,
+          pubchemQuery: synth.nomeComposto
+        };
+      }
+    }
 
     const nomeDisplay = info?.label || alvoId.replace(/_s|_g|_l|_aq/g, '');
     const smiles = info?.smiles || '--';
@@ -555,9 +579,9 @@
 
   window.atualizarInspecaoMolecular = atualizarInspecaoMolecular;
 
-  // ==========================================
+  // =========================================================================
   // 7. DOSSIÊ TÉCNICO MULTIBASES (PUBCHEM / CHEBI / WIKIDATA)
-  // ==========================================
+  // =========================================================================
   window.abrirDossieCompostoAtual = async function() {
     const btn = document.getElementById('btnDossieLab');
     const nome = (btn ? btn.getAttribute('data-composto') : null) || compostoAtualParaDossie;
@@ -654,32 +678,48 @@
     }
   }
 
-  // ==========================================
-  // 8. VERIFICAÇÃO DE SÍNTESE E REAÇÕES
-  // ==========================================
+  // =========================================================================
+  // 8. VERIFICAÇÃO UNIFICADA DE SÍNTESE E REAÇÕES (LAB_DATABASE + BANCO_SINTESES)
+  // =========================================================================
   async function verificarSinteseFarmaceutica() {
-    if (typeof LAB_DATABASE === 'undefined' || !LAB_DATABASE.reactions) return;
+    let reacoesParaVerificar = [];
 
-    for (const rx of LAB_DATABASE.reactions) {
+    if (typeof LAB_DATABASE !== 'undefined' && Array.isArray(LAB_DATABASE.reactions)) {
+      reacoesParaVerificar = reacoesParaVerificar.concat(LAB_DATABASE.reactions);
+    }
+
+    // Integra dinamicamente todo o acervo do sinteses-database.js
+    if (typeof window.BANCO_SINTESES_LAIFT !== 'undefined' && Array.isArray(window.BANCO_SINTESES_LAIFT)) {
+      const idsExistentes = new Set(reacoesParaVerificar.map(r => r.id));
+      window.BANCO_SINTESES_LAIFT.forEach(rx => {
+        if (!idsExistentes.has(rx.id)) {
+          reacoesParaVerificar.push(rx);
+        }
+      });
+    }
+
+    if (reacoesParaVerificar.length === 0) return;
+
+    for (const rx of reacoesParaVerificar) {
       if (!rx.reagentesObrigatorios) continue;
       const todosPresentes = rx.reagentesObrigatorios.every(r => reagentesAdicionados.has(r));
       const catalisadorOk = !rx.catalisador || reagentesAdicionados.has(rx.catalisador);
-      const tempOk = sys.temp >= (rx.tempMinima || 20);
+      const tempOk = sys.temp >= (rx.tempMinima || rx.tempMin || 20);
       const agitacaoOk = !rx.precisaAgitador || agitadorAtivo;
 
       if (todosPresentes && catalisadorOk && tempOk && agitacaoOk) {
         if (!reacoesCatalogadas.has(rx.id)) {
           reacoesCatalogadas.add(rx.id);
-          sys.ultimoProdutoFormado = rx.produtoId;
+          sys.ultimoProdutoFormado = rx.produtoId || rx.id;
 
           tocarSom('sucesso');
           log(`✨ SÍNTESE CONCLUÍDA: ${rx.nomeComposto}!`, 'log-info');
 
           if (rx.corPrecipitado) {
-            adicionarEspecie(rx.produtoId, 8);
+            adicionarEspecie(rx.produtoId || rx.id, 8);
           }
 
-          atualizarInspecaoMolecular(rx.produtoId);
+          atualizarInspecaoMolecular(rx.produtoId || rx.id);
 
           catalogarFormulacaoNoBanco(
             rx.nomeComposto,
@@ -693,9 +733,9 @@
     }
   }
 
-  // ==========================================
-  // 9. CHAT DO PRECEPTOR (DELEGAÇÃO CENTRALIZADA)
-  // ==========================================
+  // =========================================================================
+  // 9. CHAT DO PRECEPTOR (QUÍMICO FARMACÊUTICO CONECTADO AO ENGINE)
+  // =========================================================================
   window.toggleLabChat = function() {
     const drawer = document.getElementById('labChatDrawer');
     if (drawer) {
@@ -724,13 +764,17 @@
     const chatBox = document.getElementById('labChatMessages');
     const badge = document.getElementById('preceptorStatusBadge');
 
-    chatBox.innerHTML += `<div class="lab-chat-msg msg-aluno">${msg}</div>`;
-    input.value = '';
-    chatBox.scrollTop = chatBox.scrollHeight;
+    if (chatBox) {
+      chatBox.innerHTML += `<div class="lab-chat-msg msg-aluno">${msg}</div>`;
+      input.value = '';
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
 
     const idTemp = 'lab_typing_' + Date.now();
-    chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor" id="${idTemp}">Consultando base farmacotécnica e parâmetros da vidraria...</div>`;
-    chatBox.scrollTop = chatBox.scrollHeight;
+    if (chatBox) {
+      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor" id="${idTemp}">Consultando base farmacotécnica e parâmetros da vidraria...</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
 
     if (badge) {
       badge.innerText = 'Processando...';
@@ -740,7 +784,7 @@
 
     try {
       if (typeof LabPreceptorEngine === 'undefined' || typeof LabPreceptorEngine.processarMensagem !== 'function') {
-        throw new Error('Módulo LabPreceptorEngine não encontrado ou incompleto.');
+        throw new Error('Módulo LabPreceptorEngine não encontrado no escopo global.');
       }
 
       const respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
@@ -749,7 +793,9 @@
       if (elTyping) elTyping.remove();
 
       const htmlFormatado = (respostaTexto || "").replace(/\n/g, '<br>');
-      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">${htmlFormatado}</div>`;
+      if (chatBox) {
+        chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">${htmlFormatado}</div>`;
+      }
 
       if (badge) {
         badge.innerText = 'Online';
@@ -761,12 +807,14 @@
       if (elTyping) elTyping.remove();
 
       console.error('[Preceptor Error]:', e);
-      chatBox.innerHTML += `
-        <div class="lab-chat-msg msg-preceptor" style="border-left-color: #ef4444;">
-          ⚠️ <strong>Falha na comunicação:</strong><br>
-          <code style="font-size: 0.72rem; color: #f87171;">${e.message || e}</code>
-        </div>
-      `;
+      if (chatBox) {
+        chatBox.innerHTML += `
+          <div class="lab-chat-msg msg-preceptor" style="border-left-color: #ef4444;">
+            ⚠️ <strong>Falha na comunicação:</strong><br>
+            <code style="font-size: 0.72rem; color: #f87171;">${e.message || e}</code>
+          </div>
+        `;
+      }
 
       if (badge) {
         badge.innerText = 'Erro';
@@ -775,10 +823,9 @@
       }
     }
 
-    chatBox.scrollTop = chatBox.scrollHeight;
+    if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
   };
 
-  // Alertas Proativos do Preceptor
   let alertaPressaoEmitido = false;
   let alertaSinteseQuasePronta = false;
 
@@ -811,9 +858,9 @@
     }
   }
 
-  // ==========================================
-  // 10. SISTEMA DE MISSÕES E ROTEIROS
-  // ==========================================
+  // =========================================================================
+  // 10. SISTEMA DE MISSÕES E ROTEIROS PRÁTICOS
+  // =========================================================================
   const missoes = [
     { titulo: "Missão 1: Neutralização Básica", desc: "Atinge um pH entre 7.0 e 7.5 usando ácido e base. (Volume > 20mL).", check: () => calcularpH() >= 7.0 && calcularpH() <= 7.5 && sys.vol >= 20 },
     { titulo: "Missão 2: Chuva de Ouro", desc: "Forma um precipitado amarelo intenso de Iodeto de Chumbo (PbI₂).", check: () => qtd('PbI2_s') > 0.1 },
@@ -870,9 +917,9 @@
     }
   }
 
-  // ==========================================
-  // 11. SEGURANÇA, RESET E VIDRARIA
-  // ==========================================
+  // =========================================================================
+  // 11. SEGURANÇA, RESET E CONTROLE DE VIDRARIA
+  // =========================================================================
   function dispararAlerta(titulo, msg) {
     if (window.pararAdicao) window.pararAdicao();
     window.setModoTermico('ambiente');
@@ -978,9 +1025,9 @@
     log(`Vidraria em uso: ${v.replace(/_/g,' ')} (${sys.maxVol} mL)`, 'log-info');
   }
 
-  // ==========================================
-  // 12. ANIMAÇÃO DE ADIÇÃO
-  // ==========================================
+  // =========================================================================
+  // 12. ANIMAÇÃO DE ADIÇÃO E DESPEJO
+  // =========================================================================
   function animarDespejo(modo) {
     const zone = document.getElementById('glasswareZone');
     if (!zone) return;
@@ -1055,9 +1102,9 @@
     pararAnimacaoJato();
   }
 
-  // ==========================================
-  // 13. CINÉTICA REACIONAL E DISSOLUÇÃO
-  // ==========================================
+  // =========================================================================
+  // 13. CINÉTICA REACIONAL, EQUILÍBRIO E FENÔMENOS DE BANCADA
+  // =========================================================================
   function processarCarga(reag, qtdAdd) {
     if (qtdAdd <= 0 || sys.shattered) return;
     reagentesAdicionados.add(reag);
@@ -1155,6 +1202,7 @@
       if (sNaHCO3 > 0) { const r = sNaHCO3 * txDissolucao; removerEspecie('NaHCO3_s', r); adicionarEspecie('Na+', r); adicionarEspecie('HCO3-', r); }
     }
 
+    // Neutralização H+ + OH- -> H2O
     const h = qtd('H+'), oh = qtd('OH-');
     if (h > 0 && oh > 0) {
       const r = Math.min(h, oh);
@@ -1164,6 +1212,7 @@
       sys.temp += r * 0.05;
     }
 
+    // Reações de Ácidos com Metais e Carbonatos
     const hNow = qtd('H+');
     if (hNow > 0) {
       const metais = ['Zn_s','Mg_s','Al_s','Na_s','Li_s','K_s','Ca_s','Fe_s','Ni_s','Cu_s','Sn_s','Pb_s'];
@@ -1221,6 +1270,7 @@
       }
     }
 
+    // Reatividade Violenta de Metais Alcalinos com Água
     const alcalinos = ['Na_s', 'Li_s', 'K_s'];
     for (const m of alcalinos) {
       const qm = qtd(m);
@@ -1238,6 +1288,7 @@
       }
     }
 
+    // Tabela de Precipitação Quimiométrica
     PRECIP_TABLE.forEach(p => {
       const cq = qtd(p.cat), aq = qtd(p.an);
       if (cq > 0 && aq > 0) {
@@ -1322,9 +1373,9 @@
     }
   }
 
-  // ==========================================
-  // 14. pH, RENDERIZAÇÃO DA BANCADA E HUD
-  // ==========================================
+  // =========================================================================
+  // 14. pH, RENDERIZAÇÃO DA BANCADA E HUD ANALÍTICO
+  // =========================================================================
   function calcularpH() {
     const volL = sys.vol / 1000;
     if (volL <= 0) return 7;
@@ -1486,9 +1537,9 @@
     log('Curva de titulação/pH resetada.');
   }
 
-  // ==========================================
+  // =========================================================================
   // 15. LOOP TÉRMICO E CONTROLES FÍSICOS
-  // ==========================================
+  // =========================================================================
   window.setVelocidade = function(v) {
     velocidadeTempo = v;
     document.querySelectorAll('.btn-time').forEach(b => b.classList.remove('active-btn'));
@@ -1571,9 +1622,9 @@
     verificarAlertasProativosPreceptor();
   }
 
-  // ==========================================
-  // 16. CATÁLOGO DE REAGENTES
-  // ==========================================
+  // =========================================================================
+  // 16. CATÁLOGO DE REAGENTES DINÂMICO
+  // =========================================================================
   function construirCatalogo() {
     const grupos = [
       ['💊 Precursores & Síntese Farmacêutica', [
@@ -1690,9 +1741,9 @@
     }
   }
 
-  // ==========================================
-  // 17. EXPORTAÇÃO GLOBAL E INICIALIZAÇÃO
-  // ==========================================
+  // =========================================================================
+  // 17. EXPORTAÇÕES GLOBAIS E CICLO DE INICIALIZAÇÃO
+  // =========================================================================
   window.proximaMissao = function() { missaoAtual++; resetarLaboratorio(); atualizarUI_Missao(); };
   window.abrirLivroMissoes = function() {
     let html = '<ul style="list-style:none; padding:0;">';
@@ -1733,6 +1784,7 @@
   window.consultarDadosPubChem = consultarDadosPubChem;
   window.catalogarFormulacaoNoBanco = catalogarFormulacaoNoBanco;
 
+  // Inicialização sequencial da bancada
   construirCatalogo();
   resetarLaboratorio();
   atualizarUI_Missao();
