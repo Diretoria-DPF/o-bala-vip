@@ -1,23 +1,22 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
  * Arquivo: studio/studio.js
- * Motor Quimiométrico, Pipeline 3Dmol.js/RDKit WASM, Virtualizador e BroadcastChannel
  */
 
 (function() {
   'use strict';
 
-  // Barramento BroadcastChannel protegido contra restrições de sandbox de iframe
   let labBroadcast = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
       labBroadcast = new BroadcastChannel('laift_molecular_bus');
     }
   } catch (e) {
-    console.warn('[Studio] BroadcastChannel restrito no contexto, usando postMessage/localStorage.');
+    console.warn('[Studio] BroadcastChannel em contingência.');
   }
 
   let studioViewer = null;
+  let modeloCarregadoAtivo = false;
   let compostosIndexados = [];
   let compostosFiltrados = [];
   let compostoSelecionado = null;
@@ -37,7 +36,7 @@
   let debounceBuscaTimer = null;
 
   // =========================================================================
-  // 1. INGESTÃO RESILIENTE DOS BANCOS DE DADOS
+  // 1. INGESTÃO DOS BANCOS DE DADOS
   // =========================================================================
   function obterFontesDeDados() {
     const labDb = window.LAB_DATABASE || 
@@ -59,7 +58,6 @@
     const mapaUnico = new Map();
     const { labDb, synthDb, expandidoDb } = obterFontesDeDados();
 
-    // 1. Ingestão da base principal da bancada
     if (labDb && labDb.species) {
       Object.entries(labDb.species).forEach(([chave, dados]) => {
         const id = chave.replace(/_s|_l|_aq|_g/g, '');
@@ -76,7 +74,6 @@
       });
     }
 
-    // 2. Ingestão das sínteses farmacêuticas
     if (synthDb && Array.isArray(synthDb)) {
       synthDb.forEach(synth => {
         if (!synth || !synth.nomeComposto) return;
@@ -97,7 +94,6 @@
       });
     }
 
-    // 3. Ingestão do catálogo expandido
     if (expandidoDb && Array.isArray(expandidoDb)) {
       expandidoDb.forEach(c => {
         if (!c || !c.nome) return;
@@ -117,7 +113,7 @@
       });
     }
 
-    // 4. Base Interna de Salvaguarda (Reserva offline e contingência de rede)
+    // Base de Salvaguarda
     const acervoReserva = [
       { id: "AAS", chaveOriginal: "AAS_s", nome: "Ácido Acetilsalicílico (Aspirina)", formula: "C9H8O4", molarMass: 180.16, smiles: "CC(=O)OC1=CC=CC=C1C(=O)O", categoria: "farmacos", pubchemQuery: "Aspirin" },
       { id: "Paracetamol", chaveOriginal: "Paracetamol_s", nome: "Paracetamol (Acetaminofeno)", formula: "C8H9NO2", molarMass: 151.16, smiles: "CC(=O)NC1=CC=C(O)C=C1", categoria: "farmacos", pubchemQuery: "Acetaminophen" },
@@ -132,6 +128,7 @@
       { id: "Acetona", chaveOriginal: "Acetona_l", nome: "Acetona Pura", formula: "C3H6O", molarMass: 58.08, smiles: "CC(=O)C", categoria: "solventes", pubchemQuery: "Acetone" },
       { id: "Hexano", chaveOriginal: "Hexano_l", nome: "Hexano", formula: "C6H14", molarMass: 86.18, smiles: "CCCCCC", categoria: "solventes", pubchemQuery: "Hexane" },
       { id: "Cloroformio", chaveOriginal: "Cloroformio_l", nome: "Clorofórmio", formula: "CHCl3", molarMass: 119.38, smiles: "ClC(Cl)Cl", categoria: "solventes", pubchemQuery: "Chloroform" },
+      { id: "Na", chaveOriginal: "Na_s", nome: "Sódio Metálico", formula: "Na", molarMass: 22.99, smiles: "[Na]", categoria: "reagentes", pubchemQuery: "Sodium" },
       { id: "Sarin", chaveOriginal: "C4H10FO2P_l", nome: "Sarin (GB)", formula: "C4H10FO2P", molarMass: 140.09, smiles: "CC(C)OP(=O)(C)F", categoria: "toxicos", pubchemQuery: "Sarin" },
       { id: "Estricnina", chaveOriginal: "C20H22N2O2_s", nome: "Estricnina", formula: "C20H22N2O2", molarMass: 334.41, smiles: "O=C1CC2OCC=C3CN4CCC56C4CC3C2C5=CC=CC61", categoria: "toxicos", pubchemQuery: "Strychnine" }
     ];
@@ -148,7 +145,7 @@
 
     const totalBadge = document.getElementById('studioTotalBadge');
     if (totalBadge) {
-      totalBadge.textContent = `${compostosIndexados.length} Espécies Indexadas`;
+      totalBadge.textContent = `${compostosIndexados.length} Espécies Prontas`;
     }
 
     atualizarContadorFiltrados();
@@ -158,7 +155,7 @@
     const txt = (chave + ' ' + (label || '')).toLowerCase();
     if (txt.includes('sarin') || txt.includes('vx') || txt.includes('estricnina') || txt.includes('toxina')) return 'toxicos';
     if (txt.includes('agua') || txt.includes('etanol') || txt.includes('metanol') || txt.includes('acetona') || txt.includes('hexano') || txt.includes('cloroformio')) return 'solventes';
-    if (txt.includes('acido') || txt.includes('hidroxido') || txt.includes('cloreto') || txt.includes('sulfato') || txt.includes('anidrido')) return 'reagentes';
+    if (txt.includes('acido') || txt.includes('hidroxido') || txt.includes('cloreto') || txt.includes('sulfato') || txt.includes('anidrido') || txt.includes('sodio')) return 'reagentes';
     return 'farmacos';
   }
 
@@ -256,7 +253,7 @@
   };
 
   // =========================================================================
-  // 3. MOTOR RDKIT WASM (COM TIMEOUT PROTETOR)
+  // 3. MOTOR RDKIT WASM (COM DESCRITORES FARMACOCINÉTICOS)
   // =========================================================================
   function carregarRDKitSobDemanda() {
     if (RDKitModuleInstance) return Promise.resolve(RDKitModuleInstance);
@@ -275,7 +272,6 @@
           resolve(null);
         }
       } catch (e) {
-        console.warn("[RDKit] Inicialização offline/fallback:", e.message || e);
         exibirStatusRDKit(false);
         resolve(null);
       }
@@ -359,23 +355,41 @@
   }
 
   // =========================================================================
-  // 4. RESOLUÇÃO DE CONFORMAÇÃO 3D (COM VALIDAÇÃO RÍGIDA DE SDF)
+  // 4. RESOLUÇÃO DE COORDENADAS 3D COM TRATAMENTO PARA MONOATÔMICOS
   // =========================================================================
   function validarConteudoSDF(sdfText) {
     if (!sdfText || typeof sdfText !== 'string') return false;
+    if (sdfText.includes('<!DOCTYPE') || sdfText.includes('<html')) return false;
     return sdfText.includes('$$$$') || sdfText.includes('M  END');
+  }
+
+  // Gera um arquivo SDF sintético mínimo para elementos monoatômicos que não possuem conformação na nuvem
+  function gerarSDFMonoatomico(simbolo) {
+    const s = simbolo.replace(/\[|\]|\+|\-/g, '').trim();
+    return `
+  LAIFT-ENGINE-3D
+
+  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 ${s.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0
+M  END
+$$$$
+`;
   }
 
   async function resolverCoordenadas3D(smiles, termoBusca) {
     if (!smiles && !termoBusca) return null;
 
-    // 1. IndexedDB Cache Local
+    // Tratamento para átomos e íons isolados monoatômicos (ex: [Na], [Li], [K])
+    if (smiles && smiles.startsWith('[') && smiles.endsWith(']') && smiles.length <= 5) {
+      return gerarSDFMonoatomico(smiles);
+    }
+
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
       const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
       if (cache && validarConteudoSDF(cache.sdf)) return cache.sdf;
     }
 
-    // 2. PubChem REST 3D Direto por SMILES
+    // 1. PubChem 3D por SMILES
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       try {
         exibirStatusRDKit(true, "Consultando PubChem 3D...");
@@ -392,7 +406,7 @@
       } catch (e) {}
     }
 
-    // 3. CACTUS NIH 3D por SMILES
+    // 2. CACTUS NIH por SMILES
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Gerando coordenadas (CACTUS NIH)...");
@@ -408,7 +422,7 @@
       } catch (e) {}
     }
 
-    // 4. RDKit WASM ETKDG (Conformação local in-browser)
+    // 3. RDKit WASM ETKDG (Conformação local)
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
@@ -433,7 +447,7 @@
       }
     }
 
-    // 5. PubChem por Query/Nome em Inglês
+    // 4. PubChem por Query
     if (termoBusca) {
       try {
         exibirStatusRDKit(true, "Consultando PubChem por nome...");
@@ -461,7 +475,7 @@
   }
 
   // =========================================================================
-  // 5. VIEWPORT 3D & PREVENÇÃO DO ERRO .length NO 3DMOL
+  // 5. VIEWPORT 3D BLINDADO (ZERO EXCEÇÕES)
   // =========================================================================
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
@@ -493,11 +507,13 @@
     if (sdf && validarConteudoSDF(sdf)) {
       construirCena3D(sdf);
     } else {
+      modeloCarregadoAtivo = false;
       const container3D = document.getElementById('studioViewer3D');
       if (container3D) {
         container3D.innerHTML = `
           <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f87171; font-size: 0.8rem; text-align: center; max-width: 80%;">
-            ⚠️ Coordenadas 3D não disponíveis. Projeção 2D vetorial pronta no botão "2D Vetorial".
+            ⚠️ Coordenadas 3D não disponíveis para esta espécie.<br>
+            A projeção 2D vetorial continua disponível no botão "2D Vetorial".
           </div>
         `;
       }
@@ -509,24 +525,26 @@
     if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
 
     try {
-      container.innerHTML = '';
       if (studioViewer) {
         try { studioViewer.stopAnimate(); } catch (e) {}
       }
+      container.innerHTML = '';
 
       studioViewer = $3Dmol.createViewer(container, { backgroundColor: '#020617' });
       const model = studioViewer.addModel(sdfText, 'sdf');
 
-      // Trava de segurança: impede chamadas de estilo se o modelo não gerou átomos
+      // Se o SDF não produziu átomos no modelo, encerra com segurança
       if (!model || typeof model.selectedAtoms !== 'function' || model.selectedAtoms({}).length === 0) {
+        modeloCarregadoAtivo = false;
         container.innerHTML = `
           <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f87171; font-size: 0.8rem; text-align: center;">
-            ⚠️ Arquivo de estrutura sem átomos válidos.
+            ⚠️ Arquivo estrutural sem átomos 3D válidos.
           </div>
         `;
         return;
       }
 
+      modeloCarregadoAtivo = true;
       aplicarEstiloVisual(modeloAtual);
 
       studioViewer.setClickable({}, true, function(atom) {
@@ -536,17 +554,12 @@
       studioViewer.zoomTo();
       studioViewer.render();
 
-      requestAnimationFrame(() => {
-        if (studioViewer) {
-          studioViewer.resize();
-          studioViewer.render();
-        }
-      });
-
       setTimeout(() => {
-        if (studioViewer) {
-          studioViewer.resize();
-          studioViewer.render();
+        if (studioViewer && modeloCarregadoAtivo) {
+          try {
+            studioViewer.resize();
+            studioViewer.render();
+          } catch(e) {}
         }
       }, 120);
 
@@ -554,12 +567,15 @@
         studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
       }
     } catch (errCena) {
-      console.warn('[Studio 3Dmol] Erro ao construir modelo:', errCena);
+      modeloCarregadoAtivo = false;
+      console.warn('[Studio 3Dmol] Erro contido na construção da cena:', errCena);
     }
   }
 
   function aplicarEstiloVisual(tipo) {
-    if (!studioViewer) return;
+    // Guarda de integridade: se não houver visualizador ou modelo com átomos, aborta
+    if (!studioViewer || !modeloCarregadoAtivo) return;
+
     try {
       studioViewer.removeAllSurfaces();
 
@@ -593,7 +609,7 @@
       }
       studioViewer.render();
     } catch (errEstilo) {
-      console.warn('[Studio 3Dmol] Erro ao aplicar estilo visual:', errEstilo);
+      console.warn('[Studio 3Dmol] Estilo ignorado para modelo nulo.');
     }
   }
 
@@ -644,7 +660,10 @@
     const botoes = { ballstick: 'btnModoBallStick', cpk: 'btnModoCPK', wireframe: 'btnModoWire', surface: 'btnModoSurface' };
     const target = document.getElementById(botoes[modo]);
     if (target) target.classList.add('active');
-    if (sdfCacheLocal && modoExibicaoAtual === '3D') aplicarEstiloVisual(modo);
+
+    if (modeloCarregadoAtivo && modoExibicaoAtual === '3D') {
+      aplicarEstiloVisual(modo);
+    }
   };
 
   window.setStudioModoVisual = function(modo) {
@@ -663,7 +682,10 @@
       if (v2D) v2D.style.display = 'none';
       if (v3D) {
         v3D.style.display = 'block';
-        if (studioViewer) { studioViewer.resize(); studioViewer.render(); }
+        if (studioViewer && modeloCarregadoAtivo) {
+          studioViewer.resize();
+          studioViewer.render();
+        }
       }
     } else {
       if (v3D) v3D.style.display = 'none';
@@ -682,7 +704,7 @@
   };
 
   function processarCliqueMedicao(atom) {
-    if (!studioViewer || !atom) return;
+    if (!studioViewer || !atom || !modeloCarregadoAtivo) return;
     atomosSelecionadosParaMedicao.push(atom);
     studioViewer.addSphere({ center: { x: atom.x, y: atom.y, z: atom.z }, radius: 0.35, color: '#e11d48' });
 
@@ -740,21 +762,25 @@
     atomosSelecionadosParaMedicao = [];
     const hudLabel = document.getElementById('studioLastMeasurement');
     if (hudLabel) hudLabel.textContent = 'Medições redefinidas.';
-    if (sdfCacheLocal && studioViewer) construirCena3D(sdfCacheLocal);
+    if (sdfCacheLocal && studioViewer && modeloCarregadoAtivo) {
+      construirCena3D(sdfCacheLocal);
+    }
   };
 
   window.toggleAutoRotacao3D = function() {
     autoRotacaoAtiva = !autoRotacaoAtiva;
     const btn = document.getElementById('btnAutoRotate');
     if (btn) btn.classList.toggle('active', autoRotacaoAtiva);
-    if (studioViewer) {
-      if (autoRotacaoAtiva) studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
-      else studioViewer.stopAnimate();
+    if (studioViewer && modeloCarregadoAtivo) {
+      try {
+        if (autoRotacaoAtiva) studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
+        else studioViewer.stopAnimate();
+      } catch(e) {}
     }
   };
 
   window.resetarCamera3D = function() {
-    if (studioViewer) {
+    if (studioViewer && modeloCarregadoAtivo) {
       studioViewer.zoomTo();
       studioViewer.render();
       studioViewer.resize();
@@ -763,7 +789,7 @@
 
   window.exportarImagemPNG = function() {
     const nomeBase = (compostoSelecionado?.nome || 'molecula').replace(/\s+/g, '_');
-    if (modoExibicaoAtual === '3D' && studioViewer) {
+    if (modoExibicaoAtual === '3D' && studioViewer && modeloCarregadoAtivo) {
       const link = document.createElement('a');
       link.download = `${nomeBase}_3D_LAIFT.png`;
       link.href = studioViewer.pngURI();
@@ -839,7 +865,7 @@
   };
 
   // =========================================================================
-  // 7. INICIALIZAÇÃO ASSÍNCRONA COM PROTEÇÃO DE FRAMEBUFFER
+  // 7. INICIALIZAÇÃO ASSÍNCRONA
   // =========================================================================
   async function inicializarStudioComPolling() {
     let tentativas = 0;
@@ -860,7 +886,7 @@
   }
 
   window.addEventListener('resize', () => {
-    if (studioViewer) {
+    if (studioViewer && modeloCarregadoAtivo) {
       studioViewer.resize();
       studioViewer.render();
     }
@@ -869,17 +895,11 @@
   window.addEventListener('message', (e) => {
     if (e.data && e.data.acao === 'studioAberto') {
       setTimeout(() => {
-        if (studioViewer) {
+        if (studioViewer && modeloCarregadoAtivo) {
           studioViewer.resize();
           studioViewer.render();
         }
-      }, 100);
-      setTimeout(() => {
-        if (studioViewer) {
-          studioViewer.resize();
-          studioViewer.render();
-        }
-      }, 300);
+      }, 120);
     }
   });
 
