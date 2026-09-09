@@ -1,6 +1,6 @@
 /**
  * LAIFT — GERENCIADOR DE BANCO DE DADOS LOCAL (IndexedDB) & MOTOR 3D (3Dmol.js)
- * Cobre cache offline, conformações 3D e aprendizado de máquina contínuo.
+ * Cobre cache offline, conformações 3D e persistência local resiliente.
  */
 
 const LabStorageEngine = {
@@ -11,32 +11,43 @@ const LabStorageEngine = {
   modoAtual: '2D', // '2D' ou '3D'
 
   /**
-   * Inicializa o banco IndexedDB no navegador do estudante
+   * Inicializa o banco IndexedDB de forma segura sem quebrar abas anônimas
    */
   async initDB() {
     if (this.dbInstance) return this.dbInstance;
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        // Tabela 1: Compostos Químicos (Identificadores, 3D SDF, Propriedades físicas)
-        if (!db.objectStoreNames.contains('compostos')) {
-          const compStore = db.createObjectStore('compostos', { keyPath: 'termoChave' });
-          compStore.createIndex('cid', 'cid', { unique: false });
+    return new Promise((resolve) => {
+      try {
+        if (!window.indexedDB) {
+          console.warn('[LabStorageEngine] IndexedDB não suportado neste navegador.');
+          return resolve(null);
         }
-        // Tabela 2: Sínteses Destiladas (Mecanismos, Passos curados pelo Groq 120B)
-        if (!db.objectStoreNames.contains('rotas_sintese')) {
-          db.createObjectStore('rotas_sintese', { keyPath: 'compostoAlvo' });
-        }
-      };
 
-      request.onsuccess = (e) => {
-        this.dbInstance = e.target.result;
-        resolve(this.dbInstance);
-      };
+        const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
 
-      request.onerror = (e) => reject(e);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('compostos')) {
+            const compStore = db.createObjectStore('compostos', { keyPath: 'termoChave' });
+            compStore.createIndex('cid', 'cid', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('rotas_sintese')) {
+            db.createObjectStore('rotas_sintese', { keyPath: 'compostoAlvo' });
+          }
+        };
+
+        request.onsuccess = (e) => {
+          this.dbInstance = e.target.result;
+          resolve(this.dbInstance);
+        };
+
+        request.onerror = (err) => {
+          console.warn('[LabStorageEngine] Erro ao abrir IndexedDB:', err);
+          resolve(null);
+        };
+      } catch (e) {
+        console.warn('[LabStorageEngine] Exceção crítica no IndexedDB:', e);
+        resolve(null);
+      }
     });
   },
 
@@ -44,14 +55,21 @@ const LabStorageEngine = {
    * Recupera composto armazenado localmente
    */
   async obterCompostoLocal(termo) {
+    if (!termo) return null;
     const db = await this.initDB();
-    const chave = termo.trim().toLowerCase();
+    if (!db) return null;
+
+    const chave = String(termo).trim().toLowerCase();
     return new Promise((resolve) => {
-      const tx = db.transaction('compostos', 'readonly');
-      const store = tx.objectStore('compostos');
-      const req = store.get(chave);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
+      try {
+        const tx = db.transaction('compostos', 'readonly');
+        const store = tx.objectStore('compostos');
+        const req = store.get(chave);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
     });
   },
 
@@ -59,47 +77,67 @@ const LabStorageEngine = {
    * Salva composto e suas propriedades físicas no banco local
    */
   async salvarCompostoLocal(termo, dados) {
+    if (!termo || !dados || typeof dados !== 'object') return false;
     const db = await this.initDB();
-    const chave = termo.trim().toLowerCase();
+    if (!db) return false;
+
+    const chave = String(termo).trim().toLowerCase();
     return new Promise((resolve) => {
-      const tx = db.transaction('compostos', 'readwrite');
-      const store = tx.objectStore('compostos');
-      dados.termoChave = chave;
-      dados.timestamp = Date.now();
-      store.put(dados);
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
+      try {
+        const tx = db.transaction('compostos', 'readwrite');
+        const store = tx.objectStore('compostos');
+        const registro = { ...dados, termoChave: chave, timestamp: Date.now() };
+        store.put(registro);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
     });
   },
 
   /**
-   * Armazena rotas geradas pelo Preceptor para não gastar novos tokens
+   * Armazena rotas geradas pelo Preceptor para economizar chamadas de rede
    */
   async obterRotaSinteseLocal(termo) {
+    if (!termo) return null;
     const db = await this.initDB();
-    const chave = termo.trim().toLowerCase();
+    if (!db) return null;
+
+    const chave = String(termo).trim().toLowerCase();
     return new Promise((resolve) => {
-      const tx = db.transaction('rotas_sintese', 'readonly');
-      const store = tx.objectStore('rotas_sintese');
-      const req = store.get(chave);
-      req.onsuccess = () => resolve(req.result ? req.result.conteudo : null);
-      req.onerror = () => resolve(null);
+      try {
+        const tx = db.transaction('rotas_sintese', 'readonly');
+        const store = tx.objectStore('rotas_sintese');
+        const req = store.get(chave);
+        req.onsuccess = () => resolve(req.result ? req.result.conteudo : null);
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
     });
   },
 
   async salvarRotaSinteseLocal(termo, textoResposta) {
+    if (!termo || !textoResposta) return false;
     const db = await this.initDB();
-    const chave = termo.trim().toLowerCase();
+    if (!db) return false;
+
+    const chave = String(termo).trim().toLowerCase();
     return new Promise((resolve) => {
-      const tx = db.transaction('rotas_sintese', 'readwrite');
-      const store = tx.objectStore('rotas_sintese');
-      store.put({
-        compostoAlvo: chave,
-        conteudo: textoResposta,
-        timestamp: Date.now()
-      });
-      tx.oncomplete = () => resolve(true);
-      tx.onerror = () => resolve(false);
+      try {
+        const tx = db.transaction('rotas_sintese', 'readwrite');
+        const store = tx.objectStore('rotas_sintese');
+        store.put({
+          compostoAlvo: chave,
+          conteudo: textoResposta,
+          timestamp: Date.now()
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
     });
   },
 
@@ -107,12 +145,13 @@ const LabStorageEngine = {
    * Baixa a estrutura tridimensional real (3D Conformer SDF) da PubChem
    */
   async baixarEstrutura3D_SDF(cidOuNome) {
+    if (!cidOuNome) return null;
     try {
       let url = "";
-      if (typeof cidOuNome === 'number' || /^\d+$/.test(cidOuNome)) {
+      if (typeof cidOuNome === 'number' || /^\d+$/.test(String(cidOuNome).trim())) {
         url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cidOuNome}/SDF?record_type=3d`;
       } else {
-        url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(cidOuNome)}/SDF?record_type=3d`;
+        url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(String(cidOuNome).trim())}/SDF?record_type=3d`;
       }
 
       const res = await fetch(url);
@@ -139,7 +178,6 @@ const LabStorageEngine = {
     this.viewer3DInstance = $3Dmol.createViewer(container, config);
     this.viewer3DInstance.addModel(sdfData, "sdf");
 
-    // Estilo Farmacêutico: Bastão e Esferas (Stick & Ball) com superfícies de Van der Waals suaves
     this.viewer3DInstance.setStyle({}, {
       stick: { radius: 0.14, colorscheme: 'Jmol' },
       sphere: { scale: 0.26, colorscheme: 'Jmol' }
@@ -151,7 +189,7 @@ const LabStorageEngine = {
   },
 
   /**
-   * Alterna a visualização entre Projeção 2D e Conformer 3D
+   * Alterna a visualização entre Projeção 2D e Conformer 3D sem sobrepor o renderizador híbrido
    */
   alternarModo(modo) {
     this.modoAtual = modo;
@@ -166,22 +204,33 @@ const LabStorageEngine = {
 
     if (modo === '2D') {
       if (div3D) div3D.style.display = 'none';
-      if (canvas2D) canvas2D.style.display = 'block';
+      if (img2D && img2D.getAttribute('data-active') === 'true') {
+        img2D.style.display = 'block';
+        if (canvas2D) canvas2D.style.display = 'none';
+      } else if (canvas2D) {
+        canvas2D.style.display = 'block';
+        if (img2D) img2D.style.display = 'none';
+      }
     } else {
       if (canvas2D) canvas2D.style.display = 'none';
       if (img2D) img2D.style.display = 'none';
-      if (div3D) div3D.style.display = 'block';
-      if (this.viewer3DInstance) {
-        this.viewer3DInstance.resize();
-        this.viewer3DInstance.render();
+      if (div3D) {
+        div3D.style.display = 'block';
+        if (this.viewer3DInstance) {
+          this.viewer3DInstance.resize();
+          this.viewer3DInstance.render();
+        }
       }
     }
   }
 };
 
-window.setModoVisualizacao = function(modo) {
-  LabStorageEngine.alternarModo(modo);
-};
+// Vincula a alternância global mantendo compatibilidade
+if (typeof window.setModoVisualizacao !== 'function') {
+  window.setModoVisualizacao = function(modo) {
+    LabStorageEngine.alternarModo(modo);
+  };
+}
 
 // Exportação global
 if (typeof window !== "undefined") {
