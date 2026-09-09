@@ -1,6 +1,7 @@
 /**
  * LAIFT — LABORATÓRIO VIRTUAL DE BANCADA & SÍNTESE FARMACÊUTICA
- * Motor Quimiométrico, Cinemática Reacional, Visualizador 2D Híbrido, Telemetria e Preceptor Híbrido.
+ * Motor Quimiométrico, Cinemática Reacional, Visualizador 2D/3D Híbrido (3Dmol.js),
+ * Cache Local IndexedDB com Aprendizado Contínuo e Preceptor Conectado ao Groq 120B.
  */
 (function() {
   'use strict';
@@ -66,52 +67,44 @@
   }
 
   // ==========================================
-  // 3. TABELAS FÍSICO-QUÍMICAS E CONSTANTES
+  // 3. TABELAS FÍSICO-QUÍMICAS E GATEWAYS
   // ==========================================
   const APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
   window.APPS_SCRIPT_GATEWAY = APPS_SCRIPT_GATEWAY;
 
+  // Dicionário de contingência rápida
   const DICIONARIO_MOLECULAR = {
-    'AcidoSalicilico_s': { label: 'Ácido Salicílico', formula: 'C7H6O3', molarMass: 138.12, smiles: 'O=C(O)C1=CC=CC=C1O', iupac: '2-hydroxybenzoic acid', pubchemQuery: 'Salicylic acid' },
-    'C7H6O3_s': { label: 'Ácido Salicílico', formula: 'C7H6O3', molarMass: 138.12, smiles: 'O=C(O)C1=CC=CC=C1O', iupac: '2-hydroxybenzoic acid', pubchemQuery: 'Salicylic acid' },
-    'AnidridoAcetico_l': { label: 'Anidrido Acético', formula: 'C4H6O3', molarMass: 102.09, smiles: 'CC(=O)OC(=O)C', iupac: 'acetic anhydride', pubchemQuery: 'Acetic anhydride' },
-    'pAminofenol_s': { label: '4-Aminofenol', formula: 'C6H7NO', molarMass: 109.13, smiles: 'NC1=CC=C(O)C=C1', iupac: '4-aminophenol', pubchemQuery: '4-Aminophenol' },
-    'AlcoolIsopentilico_l': { label: 'Álcool Isopentílico', formula: 'C5H12O', molarMass: 88.15, smiles: 'CC(C)CCO', iupac: '3-methylbutan-1-ol', pubchemQuery: 'Isoamyl alcohol' },
-    'Anilina_l': { label: 'Anilina', formula: 'C6H7N', molarMass: 93.13, smiles: 'Nc1ccccc1', iupac: 'aniline', pubchemQuery: 'Aniline' },
-    'C6H5NH2_l': { label: 'Anilina', formula: 'C6H7N', molarMass: 93.13, smiles: 'Nc1ccccc1', iupac: 'aniline', pubchemQuery: 'Aniline' },
-    'AcidoBenzoico_s': { label: 'Ácido Benzóico', formula: 'C7H6O2', molarMass: 122.12, smiles: 'O=C(O)c1ccccc1', iupac: 'benzoic acid', pubchemQuery: 'Benzoic acid' },
-    'Etanol_l': { label: 'Etanol Absoluto', formula: 'C2H6O', molarMass: 46.07, smiles: 'CCO', iupac: 'ethanol', pubchemQuery: 'Ethanol' },
-    'C2H5OH_l': { label: 'Etanol Absoluto', formula: 'C2H6O', molarMass: 46.07, smiles: 'CCO', iupac: 'ethanol', pubchemQuery: 'Ethanol' },
-    'Metanol_l': { label: 'Metanol', formula: 'CH4O', molarMass: 32.04, smiles: 'CO', iupac: 'methanol', pubchemQuery: 'Methanol' },
-    'CH3OH_l': { label: 'Metanol', formula: 'CH4O', molarMass: 32.04, smiles: 'CO', iupac: 'methanol', pubchemQuery: 'Methanol' },
-    'Acetona_l': { label: 'Acetona', formula: 'C3H6O', molarMass: 58.08, smiles: 'CC(=O)C', iupac: 'propan-2-one', pubchemQuery: 'Acetone' },
-    'CH3COCH3_l': { label: 'Acetona', formula: 'C3H6O', molarMass: 58.08, smiles: 'CC(=O)C', iupac: 'propan-2-one', pubchemQuery: 'Acetone' },
-    'Hexano_l': { label: 'Hexano', formula: 'C6H14', molarMass: 86.18, smiles: 'CCCCCC', iupac: 'hexane', pubchemQuery: 'Hexane' },
-    'C6H14_l': { label: 'Hexano', formula: 'C6H14', molarMass: 86.18, smiles: 'CCCCCC', iupac: 'hexane', pubchemQuery: 'Hexane' },
-    'Benzeno_l': { label: 'Benzeno', formula: 'C6H6', molarMass: 78.11, smiles: 'c1ccccc1', iupac: 'benzene', pubchemQuery: 'Benzene' },
-    'C6H6_l': { label: 'Benzeno', formula: 'C6H6', molarMass: 78.11, smiles: 'c1ccccc1', iupac: 'benzene', pubchemQuery: 'Benzene' },
-    'Tolueno_l': { label: 'Tolueno', formula: 'C7H8', molarMass: 92.14, smiles: 'Cc1ccccc1', iupac: 'methylbenzene', pubchemQuery: 'Toluene' },
-    'C7H8_l': { label: 'Tolueno', formula: 'C7H8', molarMass: 92.14, smiles: 'Cc1ccccc1', iupac: 'methylbenzene', pubchemQuery: 'Toluene' },
-    'Cloroformio_l': { label: 'Clorofórmio', formula: 'CHCl3', molarMass: 119.38, smiles: 'ClC(Cl)Cl', iupac: 'trichloromethane', pubchemQuery: 'Chloroform' },
-    'CHCl3_l': { label: 'Clorofórmio', formula: 'CHCl3', molarMass: 119.38, smiles: 'ClC(Cl)Cl', iupac: 'trichloromethane', pubchemQuery: 'Chloroform' },
-    'AcidoAcetico_aq': { label: 'Ácido Acético', formula: 'C2H4O2', molarMass: 60.05, smiles: 'CC(=O)O', iupac: 'acetic acid', pubchemQuery: 'Acetic acid' },
-    'CH3COOH_l': { label: 'Ácido Acético Glacial', formula: 'C2H4O2', molarMass: 60.05, smiles: 'CC(=O)O', iupac: 'acetic acid', pubchemQuery: 'Acetic acid' },
+    'AcidoSalicilico_s': { label: 'Ácido Salicílico', formula: 'C7H6O3', molarMass: 138.12, density: 1.44, bp: 211, fp: 159, smiles: 'O=C(O)C1=CC=CC=C1O', iupac: '2-hydroxybenzoic acid', pubchemQuery: 'Salicylic acid' },
+    'C7H6O3_s': { label: 'Ácido Salicílico', formula: 'C7H6O3', molarMass: 138.12, density: 1.44, bp: 211, fp: 159, smiles: 'O=C(O)C1=CC=CC=C1O', iupac: '2-hydroxybenzoic acid', pubchemQuery: 'Salicylic acid' },
+    'AnidridoAcetico_l': { label: 'Anidrido Acético', formula: 'C4H6O3', molarMass: 102.09, density: 1.08, bp: 139.8, fp: -73, smiles: 'CC(=O)OC(=O)C', iupac: 'acetic anhydride', pubchemQuery: 'Acetic anhydride' },
+    'pAminofenol_s': { label: '4-Aminofenol', formula: 'C6H7NO', molarMass: 109.13, density: 1.29, bp: 284, fp: 188, smiles: 'NC1=CC=C(O)C=C1', iupac: '4-aminophenol', pubchemQuery: '4-Aminophenol' },
+    'AlcoolIsopentilico_l': { label: 'Álcool Isopentílico', formula: 'C5H12O', molarMass: 88.15, density: 0.81, bp: 131.1, fp: -117, smiles: 'CC(C)CCO', iupac: '3-methylbutan-1-ol', pubchemQuery: 'Isoamyl alcohol' },
+    'Anilina_l': { label: 'Anilina', formula: 'C6H7N', molarMass: 93.13, density: 1.022, bp: 184, fp: -6.3, smiles: 'Nc1ccccc1', iupac: 'aniline', pubchemQuery: 'Aniline' },
+    'AcidoBenzoico_s': { label: 'Ácido Benzóico', formula: 'C7H6O2', molarMass: 122.12, density: 1.27, bp: 249, fp: 122, smiles: 'O=C(O)c1ccccc1', iupac: 'benzoic acid', pubchemQuery: 'Benzoic acid' },
+    'Etanol_l': { label: 'Etanol Absoluto', formula: 'C2H6O', molarMass: 46.07, density: 0.789, bp: 78.3, fp: -114.1, smiles: 'CCO', iupac: 'ethanol', pubchemQuery: 'Ethanol' },
+    'Metanol_l': { label: 'Metanol', formula: 'CH4O', molarMass: 32.04, density: 0.792, bp: 64.7, fp: -97.6, smiles: 'CO', iupac: 'methanol', pubchemQuery: 'Methanol' },
+    'Acetona_l': { label: 'Acetona Pura', formula: 'C3H6O', molarMass: 58.08, density: 0.784, bp: 56.1, fp: -94.7, smiles: 'CC(=O)C', iupac: 'propan-2-one', pubchemQuery: 'Acetone' },
+    'Hexano_l': { label: 'Hexano', formula: 'C6H14', molarMass: 86.18, density: 0.659, bp: 68.7, fp: -95.3, smiles: 'CCCCCC', iupac: 'hexane', pubchemQuery: 'Hexane' },
+    'Benzeno_l': { label: 'Benzeno', formula: 'C6H6', molarMass: 78.11, density: 0.879, bp: 80.1, fp: 5.5, smiles: 'c1ccccc1', iupac: 'benzene', pubchemQuery: 'Benzene' },
+    'Tolueno_l': { label: 'Tolueno', formula: 'C7H8', molarMass: 92.14, density: 0.867, bp: 110.6, fp: -95.0, smiles: 'Cc1ccccc1', iupac: 'methylbenzene', pubchemQuery: 'Toluene' },
+    'Cloroformio_l': { label: 'Clorofórmio', formula: 'CHCl3', molarMass: 119.38, density: 1.489, bp: 61.2, fp: -63.5, smiles: 'ClC(Cl)Cl', iupac: 'trichloromethane', pubchemQuery: 'Chloroform' },
+    'AcidoAcetico_aq': { label: 'Ácido Acético', formula: 'C2H4O2', molarMass: 60.05, density: 1.05, bp: 118, fp: 16.6, smiles: 'CC(=O)O', iupac: 'acetic acid', pubchemQuery: 'Acetic acid' },
     
     // Produtos Farmacêuticos
-    'AAS_s': { label: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', iupac: '2-acetyloxybenzoic acid', pubchemQuery: 'Aspirin' },
-    'C9H8O4_s': { label: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', iupac: '2-acetyloxybenzoic acid', pubchemQuery: 'Aspirin' },
-    'Paracetamol_s': { label: 'Paracetamol', formula: 'C8H9NO2', molarMass: 151.16, smiles: 'CC(=O)NC1=CC=C(O)C=C1', iupac: 'N-(4-hydroxyphenyl)acetamide', pubchemQuery: 'Acetaminophen' },
-    'C8H9NO2_s': { label: 'Paracetamol', formula: 'C8H9NO2', molarMass: 151.16, smiles: 'CC(=O)NC1=CC=C(O)C=C1', iupac: 'N-(4-hydroxyphenyl)acetamide', pubchemQuery: 'Acetaminophen' },
-    'Dipirona_s': { label: 'Dipirona Sódica (Metamizol)', formula: 'C13H16N3NaO4S', molarMass: 333.34, smiles: 'CN(CS(=O)(=O)[O-])C1=C(C)N(N1C)C2=CC=CC=C2.[Na+]', iupac: 'sodium;[(1,5-dimethyl-3-oxo-2-phenylpyrazol-4-yl)-methylamino]methanesulfonate', pubchemQuery: 'Metamizole sodium' },
-    'SalicilatoMetila_l': { label: 'Salicilato de Metila', formula: 'C8H8O3', molarMass: 152.15, smiles: 'COC(=O)C1=CC=CC=C1O', iupac: 'methyl 2-hydroxybenzoate', pubchemQuery: 'Methyl salicylate' },
-    'Acetanilida_s': { label: 'Acetanilida', formula: 'C8H9NO', molarMass: 135.17, smiles: 'CC(=O)Nc1ccccc1', iupac: 'N-phenylacetamide', pubchemQuery: 'Acetanilide' },
-    'AcetatoIsopentila_l': { label: 'Acetato de Isopentila', formula: 'C7H14O2', molarMass: 130.18, smiles: 'CC(=O)OCCC(C)C', iupac: '3-methylbutyl acetate', pubchemQuery: 'Isoamyl acetate' },
+    'AAS_s': { label: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, density: 1.4, bp: 140, fp: 135, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', iupac: '2-acetyloxybenzoic acid', pubchemQuery: 'Aspirin' },
+    'C9H8O4_s': { label: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, density: 1.4, bp: 140, fp: 135, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', iupac: '2-acetyloxybenzoic acid', pubchemQuery: 'Aspirin' },
+    'Paracetamol_s': { label: 'Paracetamol (Acetaminofeno)', formula: 'C8H9NO2', molarMass: 151.16, density: 1.29, bp: 420, fp: 169, smiles: 'CC(=O)NC1=CC=C(O)C=C1', iupac: 'N-(4-hydroxyphenyl)acetamide', pubchemQuery: 'Acetaminophen' },
+    'C8H9NO2_s': { label: 'Paracetamol (Acetaminofeno)', formula: 'C8H9NO2', molarMass: 151.16, density: 1.29, bp: 420, fp: 169, smiles: 'CC(=O)NC1=CC=C(O)C=C1', iupac: 'N-(4-hydroxyphenyl)acetamide', pubchemQuery: 'Acetaminophen' },
+    'Dipirona_s': { label: 'Dipirona Sódica (Metamizol)', formula: 'C13H16N3NaO4S', molarMass: 333.34, density: 1.35, bp: null, fp: 220, smiles: 'CN(CS(=O)(=O)[O-])C1=C(C)N(N1C)C2=CC=CC=C2.[Na+]', iupac: 'sodium;[(1,5-dimethyl-3-oxo-2-phenylpyrazol-4-yl)-methylamino]methanesulfonate', pubchemQuery: 'Metamizole sodium' },
+    'SalicilatoMetila_l': { label: 'Salicilato de Metila', formula: 'C8H8O3', molarMass: 152.15, density: 1.17, bp: 222, fp: -8.6, smiles: 'COC(=O)C1=CC=CC=C1O', iupac: 'methyl 2-hydroxybenzoate', pubchemQuery: 'Methyl salicylate' },
+    'Acetanilida_s': { label: 'Acetanilida', formula: 'C8H9NO', molarMass: 135.17, density: 1.21, bp: 304, fp: 114.3, smiles: 'CC(=O)Nc1ccccc1', iupac: 'N-phenylacetamide', pubchemQuery: 'Acetanilide' },
+    'AcetatoIsopentila_l': { label: 'Acetato de Isopentila', formula: 'C7H14O2', molarMass: 130.18, density: 0.876, bp: 142, fp: -78.5, smiles: 'CC(=O)OCCC(C)C', iupac: '3-methylbutyl acetate', pubchemQuery: 'Isoamyl acetate' },
 
-    // Inorganicos e Precipitados
-    'PbI2_s': { label: 'Iodeto de Chumbo II', formula: 'PbI2', molarMass: 461.01, smiles: 'I[Pb]I', iupac: 'lead(2+) diiodide', pubchemQuery: 'Lead(II) iodide' },
-    'AgCl_s': { label: 'Cloreto de Prata', formula: 'AgCl', molarMass: 143.32, smiles: '[Cl-].[Ag+]', iupac: 'silver(1+) chloride', pubchemQuery: 'Silver chloride' },
-    'BaSO4_s': { label: 'Sulfato de Bário', formula: 'BaSO4', molarMass: 233.39, smiles: '[Ba+2].[O-]S(=O)(=O)[O-]', iupac: 'barium sulfate', pubchemQuery: 'Barium sulfate' },
-    'CaCO3_s': { label: 'Carbonato de Cálcio', formula: 'CaCO3', molarMass: 100.09, smiles: '[Ca+2].[O-]C(=O)[O-]', iupac: 'calcium carbonate', pubchemQuery: 'Calcium carbonate' }
+    // Inorgânicos e Precipitados
+    'PbI2_s': { label: 'Iodeto de Chumbo II', formula: 'PbI2', molarMass: 461.01, density: 6.16, bp: 954, fp: 402, smiles: 'I[Pb]I', iupac: 'lead(2+) diiodide', pubchemQuery: 'Lead(II) iodide' },
+    'AgCl_s': { label: 'Cloreto de Prata', formula: 'AgCl', molarMass: 143.32, density: 5.56, bp: 1550, fp: 455, smiles: '[Cl-].[Ag+]', iupac: 'silver(1+) chloride', pubchemQuery: 'Silver chloride' },
+    'BaSO4_s': { label: 'Sulfato de Bário', formula: 'BaSO4', molarMass: 233.39, density: 4.5, bp: null, fp: 1580, smiles: '[Ba+2].[O-]S(=O)(=O)[O-]', iupac: 'barium sulfate', pubchemQuery: 'Barium sulfate' },
+    'CaCO3_s': { label: 'Carbonato de Cálcio', formula: 'CaCO3', molarMass: 100.09, density: 2.71, bp: 825, fp: 1339, smiles: '[Ca+2].[O-]C(=O)[O-]', iupac: 'calcium carbonate', pubchemQuery: 'Calcium carbonate' }
   };
 
   const MM = {
@@ -161,7 +154,52 @@
   ];
 
   // ==========================================
-  // 4. ESTADO GLOBAL DO LABORATÓRIO
+  // 4. MOTOR DE BANCO DE DADOS LOCAL (IndexedDB)
+  // ==========================================
+  const DB_CACHE = {
+    db: null,
+    async init() {
+      if (this.db) return this.db;
+      return new Promise((resolve) => {
+        const req = indexedDB.open('LAIFT_LocalChem_v2', 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains('moleculas')) db.createObjectStore('moleculas', { keyPath: 'chave' });
+          if (!db.objectStoreNames.contains('respostasIA')) db.createObjectStore('respostasIA', { keyPath: 'pergunta' });
+        };
+        req.onsuccess = (e) => { this.db = e.target.result; resolve(this.db); };
+        req.onerror = () => resolve(null);
+      });
+    },
+    async get(storeName, key) {
+      const db = await this.init();
+      if (!db) return null;
+      return new Promise((resolve) => {
+        try {
+          const tx = db.transaction(storeName, 'readonly');
+          const req = tx.objectStore(storeName).get(key.toLowerCase().trim());
+          req.onsuccess = () => resolve(req.result ? req.result.dados : null);
+          req.onerror = () => resolve(null);
+        } catch (e) { resolve(null); }
+      });
+    },
+    async set(storeName, key, dados) {
+      const db = await this.init();
+      if (!db) return;
+      try {
+        const tx = db.transaction(storeName, 'readwrite');
+        tx.objectStore(storeName).put({
+          chave: key.toLowerCase().trim(),
+          pergunta: key.toLowerCase().trim(),
+          dados: dados,
+          ts: Date.now()
+        });
+      } catch (e) {}
+    }
+  };
+
+  // ==========================================
+  // 5. ESTADO GLOBAL DO LABORATÓRIO
   // ==========================================
   const sys = {
     maxVol: 250,
@@ -190,6 +228,8 @@
   const reagentesAdicionados = new Set();
   const reacoesCatalogadas = new Set();
   let smilesDrawerInstance = null;
+  let viewer3D = null;
+  let modoVisualizacao = '2D';
   let compostoAtualParaDossie = null;
 
   const logEl = document.getElementById('logStream');
@@ -239,7 +279,7 @@
   }
 
   // ==========================================
-  // 5. VISUALIZADOR MOLECULAR 2D HÍBRIDO (PUBCHEM / CACTUS / SMILESDRAWER)
+  // 6. VISUALIZADOR 2D HÍBRIDO & 3D (3Dmol.js)
   // ==========================================
   function initSmilesDrawer() {
     try {
@@ -260,6 +300,39 @@
       console.warn('[SmilesDrawer] Falha na inicialização:', e);
     }
   }
+
+  window.setModoVisualizacao = function(modo) {
+    modoVisualizacao = modo;
+    const canvas2D = document.getElementById('moleculeCanvas');
+    const img2D = document.getElementById('moleculeImg');
+    const div3D = document.getElementById('viewer3D');
+    const btn2D = document.getElementById('btnModo2D');
+    const btn3D = document.getElementById('btnModo3D');
+
+    if (btn2D) btn2D.classList.toggle('active-btn', modo === '2D');
+    if (btn3D) btn3D.classList.toggle('active-btn', modo === '3D');
+
+    if (modo === '2D') {
+      if (div3D) div3D.style.display = 'none';
+      if (img2D && img2D.getAttribute('data-active') === 'true') {
+        img2D.style.display = 'block';
+        if (canvas2D) canvas2D.style.display = 'none';
+      } else if (canvas2D) {
+        canvas2D.style.display = 'block';
+        if (img2D) img2D.style.display = 'none';
+      }
+    } else {
+      if (canvas2D) canvas2D.style.display = 'none';
+      if (img2D) img2D.style.display = 'none';
+      if (div3D) {
+        div3D.style.display = 'block';
+        if (viewer3D) {
+          viewer3D.resize();
+          viewer3D.render();
+        }
+      }
+    }
+  };
 
   function desenharFallbackCartao(canvas, smiles, nomeExibicao, formula, peso) {
     if (!canvas) return;
@@ -298,15 +371,19 @@
     const termo = pubchemQuery || nomeExibicao || smiles;
 
     if (imgEl && canvas) {
-      canvas.style.display = 'none';
-      imgEl.style.display = 'block';
+      if (modoVisualizacao === '2D') {
+        canvas.style.display = 'none';
+        imgEl.style.display = 'block';
+      }
+      imgEl.setAttribute('data-active', 'true');
 
       const urlPubChem = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termo)}/PNG?image_size=280x150`;
 
       imgEl.onerror = function() {
         imgEl.onerror = function() {
           imgEl.style.display = 'none';
-          canvas.style.display = 'block';
+          imgEl.removeAttribute('data-active');
+          if (canvas && modoVisualizacao === '2D') canvas.style.display = 'block';
           desenharFallbackCartao(canvas, smiles, nomeExibicao, formula, peso);
         };
         imgEl.src = `https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/image?format=png&width=280&height=150`;
@@ -315,6 +392,42 @@
       imgEl.src = urlPubChem;
     } else if (canvas) {
       desenharFallbackCartao(canvas, smiles, nomeExibicao, formula, peso);
+    }
+  }
+
+  async function carregarConformacao3D(termo, smiles) {
+    const div3D = document.getElementById('viewer3D');
+    if (!div3D || !window.$3Dmol) return;
+
+    let sdf = await DB_CACHE.get('moleculas', termo);
+
+    if (!sdf) {
+      try {
+        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termo)}/SDF?record_type=3d`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const txt = await res.text();
+          if (txt && txt.includes('$$$$')) {
+            sdf = txt;
+            await DB_CACHE.set('moleculas', termo, sdf);
+          }
+        }
+      } catch (e) {
+        console.warn('[3D Conformer] Falha de download:', e);
+      }
+    }
+
+    if (sdf) {
+      div3D.innerHTML = '';
+      viewer3D = $3Dmol.createViewer(div3D, { backgroundColor: '#020617' });
+      viewer3D.addModel(sdf, "sdf");
+      viewer3D.setStyle({}, {
+        stick: { radius: 0.14, colorscheme: 'Jmol' },
+        sphere: { scale: 0.25, colorscheme: 'Jmol' }
+      });
+      viewer3D.zoomTo();
+      viewer3D.render();
+      viewer3D.animate({ loop: "backAndForth", step: 0.4 });
     }
   }
 
@@ -327,10 +440,13 @@
 
     if (!smiles || smiles === '--') {
       canvas.style.display = 'none';
-      if (imgEl) imgEl.style.display = 'none';
+      if (imgEl) {
+        imgEl.style.display = 'none';
+        imgEl.removeAttribute('data-active');
+      }
       if (placeholder) {
         placeholder.style.display = 'block';
-        placeholder.textContent = 'Selecione ou sintetize uma molécula para exibir sua estrutura 2D.';
+        placeholder.textContent = 'Selecione ou sintetize uma molécula para exibir sua estrutura.';
       }
       return;
     }
@@ -339,27 +455,35 @@
 
     let desenhouComSucesso = false;
 
-    // Tentativa 1: SmilesDrawer para compostos orgânicos contínuos (sem pontos de dissociação iônica)
+    // Tentativa 1: SmilesDrawer para compostos covalentes regulares
     if (typeof SmilesDrawer !== 'undefined' && !smiles.includes('.')) {
       try {
         initSmilesDrawer();
         SmilesDrawer.parse(smiles, function(tree) {
-          canvas.style.display = 'block';
-          if (imgEl) imgEl.style.display = 'none';
+          if (modoVisualizacao === '2D') {
+            canvas.style.display = 'block';
+            if (imgEl) {
+              imgEl.style.display = 'none';
+              imgEl.removeAttribute('data-active');
+            }
+          }
           smilesDrawerInstance.draw(tree, 'moleculeCanvas', 'dark', false);
           desenhouComSucesso = true;
         }, function() {
           carregarImagemExterna(smiles, nomeExibicao, pubchemQuery, formula, peso);
         });
-        return;
       } catch (err) {
         console.warn('[SmilesDrawer] Erro:', err);
       }
     }
 
+    // Tentativa 2: PubChem REST API ou Cactus
     if (!desenhouComSucesso) {
       carregarImagemExterna(smiles, nomeExibicao, pubchemQuery, formula, peso);
     }
+
+    // Carrega a conformação 3D WebGL em paralelo
+    carregarConformacao3D(pubchemQuery || nomeExibicao || smiles, smiles);
   }
 
   window.desenharEstruturaSmiles = desenharEstruturaSmiles;
@@ -387,6 +511,8 @@
     const elIupac = document.getElementById('molIupac');
     const elFormula = document.getElementById('molFormula');
     const elWeight = document.getElementById('molWeight');
+    const elDensity = document.getElementById('molDensity');
+    const elThermic = document.getElementById('molThermic');
     const btnDossie = document.getElementById('btnDossieLab');
 
     if (!alvoId) {
@@ -394,6 +520,8 @@
       if (elIupac) elIupac.textContent = '--';
       if (elFormula) elFormula.textContent = '--';
       if (elWeight) elWeight.textContent = '-- g/mol';
+      if (elDensity) elDensity.textContent = '--';
+      if (elThermic) elThermic.textContent = '--';
       if (btnDossie) btnDossie.style.display = 'none';
       desenharEstruturaSmiles('');
       return;
@@ -408,6 +536,8 @@
     const iupac = info?.iupac || '--';
     const formula = info?.formula || '--';
     const molarMass = info?.molarMass || '--';
+    const density = info?.density ? `${info.density} g/cm³` : '--';
+    const bpFp = (info?.bp !== null || info?.fp !== null) ? `PE: ${info?.bp ?? '--'}°C / PF: ${info?.fp ?? '--'}°C` : '--';
     const pubchemQuery = info?.pubchemQuery || nomeDisplay;
 
     compostoAtualParaDossie = pubchemQuery;
@@ -416,6 +546,9 @@
     if (elIupac) elIupac.textContent = iupac;
     if (elFormula) elFormula.textContent = formula;
     if (elWeight) elWeight.textContent = molarMass !== '--' ? `${molarMass} g/mol` : '--';
+    if (elDensity) elDensity.textContent = density;
+    if (elThermic) elThermic.textContent = bpFp;
+
     if (btnDossie) {
       btnDossie.style.display = 'block';
       btnDossie.setAttribute('data-composto', pubchemQuery);
@@ -427,7 +560,7 @@
   window.atualizarInspecaoMolecular = atualizarInspecaoMolecular;
 
   // ==========================================
-  // 6. DOSSIÊ TÉCNICO MULTIBASES (PUBCHEM / CHEBI / WIKIDATA)
+  // 7. DOSSIÊ TÉCNICO MULTIBASES (PUBCHEM / CHEBI / WIKIDATA)
   // ==========================================
   window.abrirDossieCompostoAtual = async function() {
     const btn = document.getElementById('btnDossieLab');
@@ -437,7 +570,7 @@
     if (!modal || !container) return;
 
     modal.style.display = 'flex';
-    container.innerHTML = `<div style="text-align: center; padding: 20px;">Consultando PubChem, ChEBI e Wikidata para <strong>${nome || 'o composto'}</strong>...</div>`;
+    container.innerHTML = `<div style="text-align: center; padding: 20px;">Consultando bases científicas para <strong>${nome || 'o composto'}</strong>...</div>`;
 
     if (!nome) {
       container.innerHTML = '<p>Nenhum produto em foco no momento.</p>';
@@ -526,7 +659,7 @@
   }
 
   // ==========================================
-  // 7. VERIFICAÇÃO DE SÍNTESE E REAÇÕES
+  // 8. VERIFICAÇÃO DE SÍNTESE E REAÇÕES
   // ==========================================
   async function verificarSinteseFarmaceutica() {
     if (typeof LAB_DATABASE === 'undefined' || !LAB_DATABASE.reactions) return;
@@ -565,7 +698,7 @@
   }
 
   // ==========================================
-  // 8. CHAT DO PRECEPTOR (BASE ESPECIALISTA + GROQ 120B)
+  // 9. CHAT DO PRECEPTOR COM APRENDIZADO DE MÁQUINA (IndexedDB + Groq 120B)
   // ==========================================
   window.toggleLabChat = function() {
     const drawer = document.getElementById('labChatDrawer');
@@ -631,18 +764,24 @@
       let respostaTexto = "";
       const textoNorm = msg.toLowerCase().trim();
 
-      // 1. Verificação de rotas locais ou diagnósticos estruturados
-      if (typeof LabPreceptorEngine !== 'undefined') {
+      // NÍVEL 1: Memória Local Aprendida (IndexedDB — 0 tokens / 0 ms)
+      const cachedResp = await DB_CACHE.get('respostasIA', textoNorm);
+      if (cachedResp) {
+        respostaTexto = cachedResp;
+      }
+
+      // NÍVEL 2: Base Especialista Estruturada Local
+      if (!respostaTexto && typeof LabPreceptorEngine !== 'undefined') {
         const ehRotaLocal = Object.keys(LabPreceptorEngine.ROTAS_SINTESE || {}).some(k => textoNorm.includes(k));
-        const ehDiagnostico = textoNorm.includes("o que tem") || textoNorm.includes("acontecendo") || textoNorm.includes("analis") || textoNorm.includes("diagnostico") || textoNorm.includes("status");
+        const ehDiag = textoNorm.includes("o que tem") || textoNorm.includes("acontecendo") || textoNorm.includes("analis") || textoNorm.includes("diagnostico") || textoNorm.includes("status");
         const ehAjuda = textoNorm.includes("como usar") || textoNorm.includes("opcoes") || textoNorm.includes("o que posso criar") || textoNorm.includes("combinac") || textoNorm.includes("ajuda");
 
-        if (ehRotaLocal || ehDiagnostico || ehAjuda) {
+        if (ehRotaLocal || ehDiag || ehAjuda) {
           respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
         }
       }
 
-      // 2. Encaminhamento para o Cluster Groq 120B via Apps Script para dúvidas livres ou outras sínteses
+      // NÍVEL 3: Roteamento para o Cluster Groq 120B (Apps Script Gateway)
       if (!respostaTexto && APPS_SCRIPT_GATEWAY) {
         const especiesLista = Array.from(sys.especies.entries())
           .filter(([_, q]) => q > 0.05)
@@ -665,11 +804,27 @@
           const data = await res.json();
           if (data && data.resposta) {
             respostaTexto = data.resposta;
+            // Destilação do aprendizado: salva no banco local IndexedDB para consultas futuras
+            await DB_CACHE.set('respostasIA', textoNorm, respostaTexto);
+
+            // Sincroniza o cache global compartilhado na planilha
+            fetch(APPS_SCRIPT_GATEWAY, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                acao: 'salvarCacheGlobal',
+                termo: textoNorm,
+                dados: {
+                  nome: textoNorm.toUpperCase(),
+                  sintese: { respostaFormatada: respostaTexto }
+                }
+              })
+            }).catch(() => {});
           }
         }
       }
 
-      // 3. Fallback de contingência local
+      // NÍVEL 4: Fallback Local
       if (!respostaTexto && typeof LabPreceptorEngine !== 'undefined') {
         respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
       }
@@ -695,7 +850,7 @@
     chatBox.scrollTop = chatBox.scrollHeight;
   };
 
-  // Alertas Proativos no Chat
+  // Alertas Proativos do Preceptor
   let alertaPressaoEmitido = false;
   let alertaSinteseQuasePronta = false;
 
@@ -729,7 +884,7 @@
   }
 
   // ==========================================
-  // 9. SISTEMA DE MISSÕES E ROTEIROS PRÁTICOS
+  // 10. SISTEMA DE MISSÕES E ROTEIROS
   // ==========================================
   const missoes = [
     { titulo: "Missão 1: Neutralização Básica", desc: "Atinge um pH entre 7.0 e 7.5 usando ácido e base. (Volume > 20mL).", check: () => calcularpH() >= 7.0 && calcularpH() <= 7.5 && sys.vol >= 20 },
@@ -788,7 +943,7 @@
   }
 
   // ==========================================
-  // 10. SEGURANÇA, RESET E TROCA DE VIDRARIA
+  // 11. SEGURANÇA, RESET E VIDRARIA
   // ==========================================
   function dispararAlerta(titulo, msg) {
     if (window.pararAdicao) window.pararAdicao();
@@ -896,7 +1051,7 @@
   }
 
   // ==========================================
-  // 11. ANIMAÇÃO DE FLUIDOS E ADIÇÃO
+  // 12. ANIMAÇÃO DE ADIÇÃO
   // ==========================================
   function animarDespejo(modo) {
     const zone = document.getElementById('glasswareZone');
@@ -973,7 +1128,7 @@
   }
 
   // ==========================================
-  // 12. CINÉTICA REACIONAL E DISSOLUÇÃO
+  // 13. CINÉTICA REACIONAL E DISSOLUÇÃO
   // ==========================================
   function processarCarga(reag, qtdAdd) {
     if (qtdAdd <= 0 || sys.shattered) return;
@@ -1045,7 +1200,7 @@
     }
 
     if (sys.vol > sys.maxVol) {
-      dispararAlerta('Transbordamento de Reação', 'O volume da solução excedeu a capacidade física da vidraria.');
+      dispararAlerta('Transbordamento de Reação', 'O volume da solução excedeu a capacidade da vidraria.');
       sys.vol = sys.maxVol;
     }
 
@@ -1072,7 +1227,6 @@
       if (sNaHCO3 > 0) { const r = sNaHCO3 * txDissolucao; removerEspecie('NaHCO3_s', r); adicionarEspecie('Na+', r); adicionarEspecie('HCO3-', r); }
     }
 
-    // Neutralização Ácido-Base
     const h = qtd('H+'), oh = qtd('OH-');
     if (h > 0 && oh > 0) {
       const r = Math.min(h, oh);
@@ -1082,7 +1236,6 @@
       sys.temp += r * 0.05;
     }
 
-    // Ataque Ácido a Metais
     const hNow = qtd('H+');
     if (hNow > 0) {
       const metais = ['Zn_s','Mg_s','Al_s','Na_s','Li_s','K_s','Ca_s','Fe_s','Ni_s','Cu_s','Sn_s','Pb_s'];
@@ -1140,7 +1293,6 @@
       }
     }
 
-    // Reações Alcalinas com Água
     const alcalinos = ['Na_s', 'Li_s', 'K_s'];
     for (const m of alcalinos) {
       const qm = qtd(m);
@@ -1158,7 +1310,6 @@
       }
     }
 
-    // Precipitados Insolúveis
     PRECIP_TABLE.forEach(p => {
       const cq = qtd(p.cat), aq = qtd(p.an);
       if (cq > 0 && aq > 0) {
@@ -1181,7 +1332,6 @@
     if (sys.shattered) return;
     let congelando = false;
 
-    // Evaporação dinâmica baseada no LAB_DATABASE ou tabela BP
     for (const [solv, q] of sys.especies) {
       if (q <= 0) continue;
       const info = (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) ? LAB_DATABASE.species[solv] : null;
@@ -1245,7 +1395,7 @@
   }
 
   // ==========================================
-  // 13. pH, RENDERIZAÇÃO DA BANCADA E HUD
+  // 14. pH, RENDERIZAÇÃO DA BANCADA E HUD
   // ==========================================
   function calcularpH() {
     const volL = sys.vol / 1000;
@@ -1294,7 +1444,7 @@
       if (q > 0.05) { pptH += 4; if (q > best.q) best = { q: q, c: p.cor }; }
     });
 
-    const precipitadosSolidos = ['Al_s','Zn_s','Mg_s','Ca_s','S_s','I2_s','Fe_s','Ni_s','Cu_s','Sn_s','Pb_s','AcidoSalicilico_s','pAminofenol_s','AAS_s','Paracetamol_s','PbI2_s','AgCl_s','BaSO4_s','CaCO3_s'];
+    const precipitadosSolidos = ['Al_s','Zn_s','Mg_s','Ca_s','S_s','I2_s','Fe_s','Ni_s','Cu_s','Sn_s','Pb_s','AcidoSalicilico_s','pAminofenol_s','AAS_s','Paracetamol_s','PbI2_s','AgCl_s','BaSO4_s','CaCO3_s','Dipirona_s'];
     if (precipitadosSolidos.some(sp => qtd(sp) > 0)) {
       pptH += 4;
       if (best.q === 0) best.c = '#b0bec5';
@@ -1409,7 +1559,7 @@
   }
 
   // ==========================================
-  // 14. LOOP TÉRMICO E CONTROLES FÍSICOS
+  // 15. LOOP TÉRMICO E CONTROLES FÍSICOS
   // ==========================================
   window.setVelocidade = function(v) {
     velocidadeTempo = v;
@@ -1494,7 +1644,7 @@
   }
 
   // ==========================================
-  // 15. CATÁLOGO EXPANDIDO DE REAGENTES
+  // 16. CATÁLOGO DE REAGENTES
   // ==========================================
   function construirCatalogo() {
     const grupos = [
@@ -1613,7 +1763,7 @@
   }
 
   // ==========================================
-  // 16. EXPORTAÇÃO GLOBAL E INICIALIZAÇÃO
+  // 17. EXPORTAÇÃO GLOBAL E INICIALIZAÇÃO
   // ==========================================
   window.proximaMissao = function() { missaoAtual++; resetarLaboratorio(); atualizarUI_Missao(); };
   window.abrirLivroMissoes = function() {
