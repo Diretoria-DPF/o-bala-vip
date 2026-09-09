@@ -72,7 +72,6 @@
   const APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
   window.APPS_SCRIPT_GATEWAY = APPS_SCRIPT_GATEWAY;
 
-  // Dicionário de contingência rápida
   const DICIONARIO_MOLECULAR = {
     'AcidoSalicilico_s': { label: 'Ácido Salicílico', formula: 'C7H6O3', molarMass: 138.12, density: 1.44, bp: 211, fp: 159, smiles: 'O=C(O)C1=CC=CC=C1O', iupac: '2-hydroxybenzoic acid', pubchemQuery: 'Salicylic acid' },
     'C7H6O3_s': { label: 'Ácido Salicílico', formula: 'C7H6O3', molarMass: 138.12, density: 1.44, bp: 211, fp: 159, smiles: 'O=C(O)C1=CC=CC=C1O', iupac: '2-hydroxybenzoic acid', pubchemQuery: 'Salicylic acid' },
@@ -455,7 +454,6 @@
 
     let desenhouComSucesso = false;
 
-    // Tentativa 1: SmilesDrawer para compostos covalentes regulares
     if (typeof SmilesDrawer !== 'undefined' && !smiles.includes('.')) {
       try {
         initSmilesDrawer();
@@ -477,12 +475,10 @@
       }
     }
 
-    // Tentativa 2: PubChem REST API ou Cactus
     if (!desenhouComSucesso) {
       carregarImagemExterna(smiles, nomeExibicao, pubchemQuery, formula, peso);
     }
 
-    // Carrega a conformação 3D WebGL em paralelo
     carregarConformacao3D(pubchemQuery || nomeExibicao || smiles, smiles);
   }
 
@@ -698,7 +694,7 @@
   }
 
   // ==========================================
-  // 9. CHAT DO PRECEPTOR COM APRENDIZADO DE MÁQUINA (IndexedDB + Groq 120B)
+  // 9. CHAT DO PRECEPTOR (DELEGAÇÃO CENTRALIZADA)
   // ==========================================
   window.toggleLabChat = function() {
     const drawer = document.getElementById('labChatDrawer');
@@ -710,24 +706,6 @@
         if (input) setTimeout(() => input.focus(), 100);
       }
     }
-  };
-
-  window.limparChatPreceptor = function() {
-    const chatBox = document.getElementById('labChatMessages');
-    if (!chatBox) return;
-
-    chatBox.innerHTML = `
-      <div class="lab-chat-msg msg-preceptor">
-        Conversa reiniciada. Sou o <strong>Preceptor Virtual LAIFT</strong> (conectado ao cluster Groq 120B). O que deseja formular ou sintetizar?
-        <div class="chip-container">
-          <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Dipirona?')">💊 Síntese de Dipirona</button>
-          <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Aspirina?')">🧪 Rota da Aspirina</button>
-          <button class="chat-chip" onclick="enviarDuvidaRapida('Como fazer Paracetamol?')">🔬 Rota do Paracetamol</button>
-          <button class="chat-chip" onclick="enviarDuvidaRapida('O que tem no meu vaso?')">🌡️ Diagnóstico do Vaso</button>
-        </div>
-      </div>
-    `;
-    chatBox.scrollTop = 0;
   };
 
   window.enviarDuvidaRapida = function(pergunta) {
@@ -755,96 +733,46 @@
     chatBox.scrollTop = chatBox.scrollHeight;
 
     if (badge) {
-      badge.innerText = 'Consultando...';
+      badge.innerText = 'Processando...';
       badge.style.borderColor = '#38bdf8';
       badge.style.color = '#38bdf8';
     }
 
     try {
-      let respostaTexto = "";
-      const textoNorm = msg.toLowerCase().trim();
-
-      // NÍVEL 1: Memória Local Aprendida (IndexedDB — 0 tokens / 0 ms)
-      const cachedResp = await DB_CACHE.get('respostasIA', textoNorm);
-      if (cachedResp) {
-        respostaTexto = cachedResp;
+      if (typeof LabPreceptorEngine === 'undefined' || typeof LabPreceptorEngine.processarMensagem !== 'function') {
+        throw new Error('Módulo LabPreceptorEngine não encontrado ou incompleto.');
       }
 
-      // NÍVEL 2: Base Especialista Estruturada Local
-      if (!respostaTexto && typeof LabPreceptorEngine !== 'undefined') {
-        const ehRotaLocal = Object.keys(LabPreceptorEngine.ROTAS_SINTESE || {}).some(k => textoNorm.includes(k));
-        const ehDiag = textoNorm.includes("o que tem") || textoNorm.includes("acontecendo") || textoNorm.includes("analis") || textoNorm.includes("diagnostico") || textoNorm.includes("status");
-        const ehAjuda = textoNorm.includes("como usar") || textoNorm.includes("opcoes") || textoNorm.includes("o que posso criar") || textoNorm.includes("combinac") || textoNorm.includes("ajuda");
-
-        if (ehRotaLocal || ehDiag || ehAjuda) {
-          respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
-        }
-      }
-
-      // NÍVEL 3: Roteamento para o Cluster Groq 120B (Apps Script Gateway)
-      if (!respostaTexto && APPS_SCRIPT_GATEWAY) {
-        const especiesLista = Array.from(sys.especies.entries())
-          .filter(([_, q]) => q > 0.05)
-          .map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`)
-          .join(', ') || 'Vaso vazio';
-
-        const contextoBancada = `T:${sys.temp.toFixed(1)}°C, pH:${calcularpH().toFixed(2)}, Vol:${sys.vol.toFixed(1)}mL, Vidraria:${sys.isClosed ? 'Fechada' : 'Aberta'}, Agitador:${agitadorAtivo ? 'Ligado' : 'Parado'}, Especies:[${especiesLista}]`;
-
-        const res = await fetch(APPS_SCRIPT_GATEWAY, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({
-            acao: 'consultarPreceptorIA',
-            duvida: msg,
-            contexto: contextoBancada
-          })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.resposta) {
-            respostaTexto = data.resposta;
-            // Destilação do aprendizado: salva no banco local IndexedDB para consultas futuras
-            await DB_CACHE.set('respostasIA', textoNorm, respostaTexto);
-
-            // Sincroniza o cache global compartilhado na planilha
-            fetch(APPS_SCRIPT_GATEWAY, {
-              method: 'POST',
-              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-              body: JSON.stringify({
-                acao: 'salvarCacheGlobal',
-                termo: textoNorm,
-                dados: {
-                  nome: textoNorm.toUpperCase(),
-                  sintese: { respostaFormatada: respostaTexto }
-                }
-              })
-            }).catch(() => {});
-          }
-        }
-      }
-
-      // NÍVEL 4: Fallback Local
-      if (!respostaTexto && typeof LabPreceptorEngine !== 'undefined') {
-        respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
-      }
+      const respostaTexto = await LabPreceptorEngine.processarMensagem(msg, sys, calcularpH, agitadorAtivo);
 
       const elTyping = document.getElementById(idTemp);
       if (elTyping) elTyping.remove();
 
-      const htmlFormatado = (respostaTexto || "Orientação de Bancada: Verifique os parâmetros térmicos e espécies ativas no painel superior.").replace(/\n/g, '<br>');
+      const htmlFormatado = (respostaTexto || "").replace(/\n/g, '<br>');
       chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">${htmlFormatado}</div>`;
 
+      if (badge) {
+        badge.innerText = 'Online';
+        badge.style.borderColor = '#00ff88';
+        badge.style.color = '#4ade80';
+      }
     } catch (e) {
       const elTyping = document.getElementById(idTemp);
       if (elTyping) elTyping.remove();
-      chatBox.innerHTML += `<div class="lab-chat-msg msg-preceptor">Orientação de Bancada: Sistema operando a <strong>${sys.temp.toFixed(1)}°C</strong> com pH <strong>${calcularpH().toFixed(2)}</strong>.</div>`;
-    }
 
-    if (badge) {
-      badge.innerText = 'Online';
-      badge.style.borderColor = '#00ff88';
-      badge.style.color = '#4ade80';
+      console.error('[Preceptor Error]:', e);
+      chatBox.innerHTML += `
+        <div class="lab-chat-msg msg-preceptor" style="border-left-color: #ef4444;">
+          ⚠️ <strong>Falha na comunicação:</strong><br>
+          <code style="font-size: 0.72rem; color: #f87171;">${e.message || e}</code>
+        </div>
+      `;
+
+      if (badge) {
+        badge.innerText = 'Erro';
+        badge.style.borderColor = '#ef4444';
+        badge.style.color = '#f87171';
+      }
     }
 
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -1200,7 +1128,7 @@
     }
 
     if (sys.vol > sys.maxVol) {
-      dispararAlerta('Transbordamento de Reação', 'O volume da solução excedeu a capacidade da vidraria.');
+      dispararAlerta('Transbordamento de Reação', 'O volume da solução excedeu a capacidade física da vidraria.');
       sys.vol = sys.maxVol;
     }
 
