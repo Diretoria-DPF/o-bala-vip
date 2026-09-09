@@ -1,6 +1,6 @@
 /**
  * LAIFT — MOTOR COGNITIVO DO PRECEPTOR VIRTUAL DE BANCADA
- * Arquitetura Híbrida: Sistema Especialista Local + Cache Quimiométrico + Enriquecimento por APIs
+ * Arquitetura Híbrida: Sistema Especialista Local + Sugestões Interativas + Cache Quimiométrico
  */
 
 const LabPreceptorEngine = {
@@ -24,107 +24,101 @@ const LabPreceptorEngine = {
     }
   },
 
-  // 2. BASE LOCAL EXPANDIDA DE ROTAS DE SÍNTESE E PROTOCOLOS
+  // 2. BASE LOCAL EXPANDIDA DE ROTAS DE SÍNTESE
   ROTAS_SINTESE: {
     "aspirina": {
       nome: "Ácido Acetilsalicílico (Aspirina)",
       reagentes: ["AcidoSalicilico_s", "AnidridoAcetico_l"],
-      catalisador: "H2SO4_aq",
-      vidraria: "becker_250 ou erlen_250",
-      tempIdeal: "60°C a 70°C",
-      agitacao: true,
+      catalisador: "H2SO4_aq (gotas)",
+      vidraria: "Béquer ou Erlenmeyer (250 mL)",
+      tempIdeal: "60°C a 70°C (Banho-maria sob agitação)",
       passos: [
-        "Adicione Ácido Salicílico sólido (aprox. 10 g) ao béquer ou erlenmeyer.",
-        "Adicione Anidrido Acético líquido (10 a 15 mL) para solubilizar o precursor.",
-        "Adicione gotas de Ácido Sulfúrico Concentrado (H₂SO₄) para atuar como catalisador ácido.",
-        "Ligue o aquecimento até atingir entre 60°C e 70°C e mantenha o agitador magnético ativo.",
-        "Aguarde a acetilação da hidroxila fenólica. O produto cristalizará na forma de precipitado branco."
+        "Carregue 10 g de Ácido Salicílico sólido no béquer.",
+        "Adicione 15 mL de Anidrido Acético líquido.",
+        "Adicione 3 a 5 gotas de Ácido Sulfúrico (H₂SO₄) como catalisador.",
+        "Ligue o aquecimento entre 60°C e 70°C e mantenha o agitador magnético ativo.",
+        "Aguarde a acetilação da hidroxila fenólica. O produto cristaliza como precipitado branco."
       ],
-      perigos: "Vapores de anidrido acético são irritantes e lacrimogêneos. O ácido sulfúrico é altamente corrosivo.",
-      mecanismo: "Ataque nucleofílico do oxigênio fenólico do ácido salicílico à carbonila ativada do anidrido acético."
+      perigos: "Vapores de anidrido acético são lacrimogêneos e o ácido sulfúrico é cáustico.",
+      mecanismo: "Ataque nucleofílico do oxigênio fenólico à carbonila do anidrido ativada por prótons."
     },
     "paracetamol": {
       nome: "Paracetamol (Acetaminofeno)",
       reagentes: ["pAminofenol_s", "AnidridoAcetico_l"],
-      catalisador: "Não obrigatório (autocatalítico)",
-      vidraria: "becker_250",
+      catalisador: "Autocatalítico",
+      vidraria: "Béquer (250 mL)",
       tempIdeal: "55°C a 65°C",
-      agitacao: true,
       passos: [
-        "Carregue o 4-Aminofenol sólido no vaso de reação.",
+        "Adicione 4-Aminofenol sólido no vaso reacional.",
         "Adicione Anidrido Acético líquido sob agitação contínua.",
         "Aqueça suavemente entre 55°C e 65°C.",
-        "A amina aromática, mais nucleofílica que o fenol, reage preferencialmente formando o Paracetamol cristalino."
+        "A amina reage seletivamente formando o Paracetamol cristalino."
       ],
-      perigos: "O 4-aminofenol pode causar oxidação e irritação dérmica. Controle o aquecimento para evitar decomposição.",
-      mecanismo: "Acilação seletiva da amina primária formando ligação amídica estável."
+      perigos: "4-aminofenol pode oxidar em contato prolongado com o ar.",
+      mecanismo: "Acilação quimiosseletiva do grupo amino primário aromático."
     },
     "salicilato de metila": {
       nome: "Salicilato de Metila (Óleo de Wintergreen)",
       reagentes: ["AcidoSalicilico_s", "Metanol_l"],
       catalisador: "H2SO4_aq",
-      vidraria: "erlen_250",
+      vidraria: "Erlenmeyer com rolha (250 mL)",
       tempIdeal: "65°C a 75°C",
-      agitacao: false,
       passos: [
         "Misture Ácido Salicílico sólido com Metanol líquido.",
         "Adicione Ácido Sulfúrico concentrado como catalisador desidratante.",
-        "Aqueça entre 65°C e 75°C. Recomenda-se sistema fechado para condensação de vapores.",
-        "Formação de camada oleosa com aroma característico canforado/mentolado."
+        "Aqueça entre 65°C e 75°C mantendo o sistema preferencialmente fechado.",
+        "Separação de fase oleosa com aroma canforado característico."
       ],
-      perigos: "Metanol é altamente inflamável e tóxico por inalação. Mantenha em sistema controlado.",
-      mecanismo: "Esterificação de Fischer (condensação entre ácido carboxílico e álcool primário)."
+      perigos: "Metanol é volátil, inflamável e tóxico.",
+      mecanismo: "Esterificação clássica de Fischer com desidratação intermolecular."
     },
     "acetanilida": {
       nome: "Acetanilida",
       reagentes: ["Anilina_l", "AnidridoAcetico_l"],
-      catalisador: "Não obrigatório",
-      vidraria: "becker_250",
-      tempIdeal: "Ambiente (20°C a 25°C)",
-      agitacao: true,
+      catalisador: "Não requer",
+      vidraria: "Béquer (250 mL)",
+      tempIdeal: "Temperatura ambiente (20°C a 25°C)",
       passos: [
         "Adicione Anilina pura na vidraria sob agitação.",
-        "Adicione Anidrido Acético gota a gota devido ao caráter exotérmico da reação.",
-        "A reação ocorre à temperatura ambiente, formando cristais perolados de acetanilida."
+        "Adicione Anidrido Acético gota a gota devido à liberação de calor.",
+        "Precipitação imediata de escamas peroladas de acetanilida."
       ],
-      perigos: "Anilina é tóxica e meta-hemoglobinizante. Manipule com máxima cautela.",
-      mecanismo: "Acetilação nucleofílica de amina aromática."
+      perigos: "Anilina é tóxica dérmica e meta-hemoglobinizante.",
+      mecanismo: "Amidação nucleofílica exotérmica espontânea."
     },
     "acetato de isopentila": {
       nome: "Acetato de Isopentila (Aroma de Banana)",
       reagentes: ["AcidoAcetico_aq", "AlcoolIsopentilico_l"],
       catalisador: "H2SO4_aq",
-      vidraria: "erlen_250",
+      vidraria: "Erlenmeyer (250 mL)",
       tempIdeal: "70°C a 80°C",
-      agitacao: false,
       passos: [
         "Misture Ácido Acético com Álcool Isopentílico na proporção 1:1.",
-        "Adicione gotas de Ácido Sulfúrico.",
+        "Adicione gotas de Ácido Sulfúrico concentrado.",
         "Aqueça acima de 70°C.",
-        "Separação de fase orgânica com odor frutal intenso."
+        "Separação de camada éster com odor frutal marcante."
       ],
-      perigos: "Vapores inflamáveis de álcool e ácido acético volátil.",
-      mecanismo: "Esterificação clássica com deslocamento de equilíbrio por calor."
+      perigos: "Vapores inflamáveis de álcool.",
+      mecanismo: "Esterificação catalisada por ácido de Brønsted."
     },
     "chuva de ouro": {
-      nome: "Iodeto de Chumbo II (Precipitado Dourado)",
+      nome: "Iodeto de Chumbo II (Precipitado Cristalino Dourado)",
       reagentes: ["PbNO3_aq", "KI_aq"],
       catalisador: "Não requer",
-      vidraria: "tubo_20 ou becker_250",
-      tempIdeal: "Ambiente (ou aquecimento para recristalização)",
-      agitacao: false,
+      vidraria: "Tubo de ensaio ou Béquer",
+      tempIdeal: "Ambiente (aquecer e resfriar para lâminas douradas)",
       passos: [
-        "Adicione Nitrato de Chumbo II em solução (incolor).",
-        "Adicione Iodeto de Potássio em solução (incolor).",
-        "Precipitação imediata de cristais amarelos intensos de PbI₂.",
-        "Se aquecido e resfriado lentamente, os cristais assumem aspecto de lâminas douradas cintilantes."
+        "Adicione solução incolor de Nitrato de Chumbo II.",
+        "Adicione solução incolor de Iodeto de Potássio.",
+        "Formação instantânea de cristais amarelos intensos de PbI₂.",
+        "Aquecer até dissolver e resfriar lentamente gera cristais cintilantes."
       ],
-      perigos: "Compostos de chumbo são cumulativos e neurotóxicos.",
-      mecanismo: "Reação de dupla troca com produto de solubilidade extremamente baixo (Ksp = 9.8 × 10⁻⁹)."
+      perigos: "Compostos solúveis de chumbo são neurotóxicos cumulativos.",
+      mecanismo: "Dupla troca com insolubilização regida por Ksp (9.8 × 10⁻⁹)."
     }
   },
 
-  // 3. ANALISADOR DE ESTADO ATUAL DO VASO REACIONAL
+  // 3. ANALISADOR DO ESTADO FÍSICO DO VASO
   gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo) {
     const ph = calcularpH();
     const temp = sys.temp;
@@ -134,51 +128,73 @@ const LabPreceptorEngine = {
     if (vol === 0 && especies.length === 0) {
       return {
         estado: "Vazio",
-        resumo: "A vidraria está limpa e vazia. Escolha um solvente (como Água Destilada ou Etanol) ou precursores no catálogo à esquerda para iniciar.",
-        alerta: "Nenhum risco no momento."
+        resumo: "A vidraria está limpa e vazia no momento.",
+        detalhes: "Escolha um precursor no catálogo à esquerda e adicione ao béquer para iniciar.",
+        alerta: "Nenhum risco físico ou químico registrado."
       };
     }
 
-    let caracteristicaPH = ph < 3 ? "Altamente Ácida (Corrosiva)" : ph < 6.5 ? "Levemente Ácida" : ph <= 7.5 ? "Neutra" : ph < 11 ? "Moderadamente Básica" : "Fortemente Alcalina (Cáustica)";
-    let estadoTermico = temp < 10 ? "Resfriada / Próxima ao congelamento" : temp <= 35 ? "Temperatura Ambiente" : temp < 70 ? "Aquecimento Moderado" : "Alta Temperatura / Sob Refluxo";
+    let caracteristicaPH = ph < 3 ? "Fortemente Ácida (Corrosiva)" : ph < 6.5 ? "Levemente Ácida" : ph <= 7.5 ? "Neutra" : ph < 11 ? "Levemente Básica" : "Fortemente Alcalina (Cáustica)";
+    let estadoTermico = temp < 10 ? "Resfriada (Banho de Gelo)" : temp <= 35 ? "Temperatura Ambiente" : temp < 70 ? "Aquecimento Moderado" : "Alta Temperatura";
 
     let especiesNomes = especies.map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`).join(', ');
 
     return {
       estado: "Em Operação",
-      resumo: `O sistema contém **${vol.toFixed(1)} mL** a **${temp.toFixed(1)}°C** (${estadoTermico}). Solução **${caracteristicaPH}** (pH ${ph.toFixed(2)}).`,
-      detalhes: `**Espécies detectadas:** ${especiesNomes || "Apenas solvente base"}. Agitador: **${agitadorAtivo ? "Ativo" : "Parado"}**. Vidraria: **${sys.isClosed ? "Fechada (Pressão monitorada)" : "Aberta"}**.`,
-      alerta: sys.pressao > 2.0 ? `Pressão elevada (${sys.pressao.toFixed(2)} atm). Risco de rompimento da vidraria!` : (temp > 90 ? "Atenção à evaporação acelerada de solventes voláteis." : "Parâmetros físicos sob controle seguro.")
+      resumo: `O vaso contém **${vol.toFixed(1)} mL** a **${temp.toFixed(1)}°C** (${estadoTermico}). Solução **${caracteristicaPH}** (pH ${ph.toFixed(2)}).`,
+      detalhes: `**Espécies ativas:** ${especiesNomes || "Apenas solvente base"}. Agitador: **${agitadorAtivo ? "Ligado" : "Desligado"}**. Sistema: **${sys.isClosed ? "Fechado com Rolha" : "Aberto"}**.`,
+      alerta: sys.pressao > 2.0 ? `⚠️ **Alerta:** Pressão interna elevada (${sys.pressao.toFixed(2)} atm)!` : (temp > 85 ? "Atenção à evaporação rápida de solventes voláteis." : "Parâmetros de bancada sob controle seguro.")
     };
   },
 
-  // 4. PREDIÇÃO DE MISTURA ("O que acontece se misturar X?")
+  // 4. PREDIÇÃO DE MISTURAS E RISCOS
   predizerMistura(reagenteAlvo, sys) {
-    const temAcido = sys.especies.get('H+') > 0.1 || sys.especies.get('HCl_aq') > 0 || sys.especies.get('H2SO4_aq') > 0;
+    const temAcido = (sys.especies.get('H+') || 0) > 0.1 || (sys.especies.get('HCl_aq') || 0) > 0 || (sys.especies.get('H2SO4_aq') || 0) > 0;
     const temAgua = (sys.especies.get('H2O_l') || 0) > 0;
 
-    if (['Na_s', 'Li_s', 'K_s'].includes(reagenteAlvo)) {
-      if (temAgua) {
-        return "⚠️ **PERIGO EXTREMO:** Os metais alcalinos reagem violentamente com a água presente no vaso, gerando hidróxido, gás hidrogênio altamente inflamável (H₂) e calor excessivo que pode provocar explosão imediata.";
-      }
+    if (['Na_s', 'Li_s', 'K_s'].includes(reagenteAlvo) && temAgua) {
+      return "⚠️ **PERIGO EXTREMO:** Metais alcalinos reagem violentamente com água, gerando hidróxido cáustico, gás hidrogênio altamente inflamável (H₂) e calor suficiente para provocar ignição ou explosão imediata.";
     }
 
-    if (reagenteAlvo === 'NaClO_aq' && sys.especies.get('Cl-') > 0 && temAcido) {
-      return "⚠️ **ALERTA TOXICOLÓGICO:** A combinação de hipoclorito, íons cloreto e meio ácido causará desproporcionamento com liberação violenta de **Gás Cloro (Cl₂)**, altamente tóxico e sufocante.";
+    if (reagenteAlvo === 'NaClO_aq' && temAcido) {
+      return "⚠️ **ALERTA TOXICOLÓGICO:** A acidificação de hipoclorito de sódio causa desproporcionamento com liberação de **Gás Cloro (Cl₂)**, altamente tóxico e sufocante.";
     }
 
     if (['CaCO3_s', 'NaHCO3_s', 'NaHCO3_aq', 'Na2CO3_aq'].includes(reagenteAlvo) && temAcido) {
-      return "🧪 **Efervescência Química:** O carbonato será protonado pelo ácido presente no vaso, liberando dióxido de carbono (**CO₂**) e água. Se a vidraria estiver fechada, a pressão subirá rapidamente.";
+      return "🧪 **Efervescência Química:** Ocorre protonação do carbonato liberando **Dióxido de Carbono (CO₂)**. Se o sistema estiver fechado com rolha, a pressão interna subirá velozmente.";
     }
 
-    return "A adição alterará a concentração iônica e o volume da solução. Monitore o pH e a curva gráfica após a inserção.";
+    return "A adição alterará a concentração de espécies e o pH. Monitore a curva gráfica e o HUD após o despejo.";
   },
 
   // 5. MOTOR PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
   async processarMensagem(msgUsuario, sys, calcularpH, agitadorAtivo) {
     const texto = msgUsuario.toLowerCase().trim();
 
-    // A: Pergunta de Síntese ("como fazer / sintetizar X")
+    // A: Pedido de Guia Geral, Opções de Criação ou Combinações
+    if (texto.includes("como usar") || texto.includes("opcoes") || texto.includes("o que posso criar") || texto.includes("combinac") || texto.includes("o que fazer") || texto.includes("ajuda") || texto.includes("comecar")) {
+      return `
+**👨‍🏫 Guia de Operações da Bancada LAIFT:**
+
+Você pode simular reações orgânicas, inorgânicas e fenômenos físico-químicos:
+
+**1. Sínteses Farmacêuticas Disponíveis:**
+* **Aspirina (AAS):** Ácido Salicílico + Anidrido Acético + gotas de H₂SO₄ (60°C a 70°C).
+* **Paracetamol:** 4-Aminofenol + Anidrido Acético (55°C a 65°C).
+* **Salicilato de Metila:** Ácido Salicílico + Metanol + H₂SO₄ (65°C a 75°C).
+* **Acetanilida:** Anilina + Anidrido Acético (ambiente, 25°C).
+* **Acetato de Isopentila (Banana):** Ácido Acético + Álcool Isopentílico + H₂SO₄ (> 70°C).
+
+**2. Fenômenos Inorgânicos:**
+* **Chuva de Ouro:** Nitrato de Chumbo II + Iodeto de Potássio (precipitado amarelo cintilante).
+* **Neutralizações:** HCl + NaOH (mudança de pH e curva de titulação na aba 📈 Curva pH).
+* **Efervescência:** Carbonatos (NaHCO₃ ou CaCO₃) + Ácido (liberação de CO₂).
+
+*Dica: Clique na aba **🔬 Molécula** no painel direito para ver a projeção estrutural 2D e o dossiê da molécula em foco!*
+      `.trim();
+    }
+
+    // B: Rota de Síntese Específica
     for (const [chave, rota] of Object.entries(this.ROTAS_SINTESE)) {
       if (texto.includes(chave) || (chave === "aspirina" && (texto.includes("aas") || texto.includes("acetilsalicilico")))) {
         return `
@@ -187,100 +203,118 @@ const LabPreceptorEngine = {
 **1. Parâmetros Ideais:**
 * **Precursores:** ${rota.reagentes.join(' + ')}
 * **Catalisador:** ${rota.catalisador}
-* **Faixa Térmica:** ${rota.tempIdeal} (Agitador: ${rota.agitacao ? 'Ligado' : 'Opcional'})
+* **Faixa Térmica:** ${rota.tempIdeal}
 * **Vidraria Indicada:** ${rota.vidraria}
 
-**2. Procedimento Operacional:**
+**2. Modo Operacional:**
 ${rota.passos.map((p, idx) => `* **Passo ${idx + 1}:** ${p}`).join('\n')}
 
-**3. Biossegurança e Mecanismo:**
+**3. Mecanismo & Biossegurança:**
 * **Mecanismo:** ${rota.mecanismo}
 * **⚠️ Risco:** ${rota.perigos}
         `.trim();
       }
     }
 
-    // B: Diagnóstico do Vaso Atual ("o que tem / o que está acontecendo / analise")
+    // C: Diagnóstico do Vaso Atual
     if (texto.includes("o que tem") || texto.includes("acontecendo") || texto.includes("analis") || texto.includes("diagnostico") || texto.includes("status")) {
       const diag = this.gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo);
       return `
-**🔬 Diagnóstico Atual da Bancada:**
+**🔬 Diagnóstico da Vidraria Atual:**
 ${diag.resumo}
 
 ${diag.detalhes}
 
-**⚠️ Avaliação de Risco:** ${diag.alerta}
+**⚠️ Avaliação:** ${diag.alerta}
       `.trim();
     }
 
-    // C: Predição de Mistura ("o que acontece se / se eu colocar")
-    if (texto.includes("acontece se") || texto.includes("misturar") || texto.includes("posso colocar") || texto.includes("adicionar")) {
-      for (const [reag, info] of Object.entries(LAB_DATABASE.species || {})) {
-        if (texto.includes(reag.toLowerCase()) || texto.includes(info.label.toLowerCase())) {
-          return this.predizerMistura(reag, sys);
-        }
-      }
-    }
-
-    // D: Consulta de Fármaco Arbitrário (Pesquisa com Cache Local + APIs Externas)
-    const palavras = texto.replace(/[?.,!]/g, '').split(' ');
-    for (const termo of palavras) {
-      if (termo.length > 3) {
-        // Tenta buscar no cache do navegador primeiro (Zero Tokens / Zero Latência)
-        const emCache = this.obterDoCache(termo);
-        if (emCache) {
-          return `
-**📋 Ficha Técnica (Acervo Local): ${emCache.nome}**
-* **IUPAC:** ${emCache.iupac}
-* **Fórmula / Massa:** ${emCache.formula} (${emCache.molarMass} g/mol)
-* **Número CAS:** ${emCache.cas} • **ChEBI:** ${emCache.chebiId}
-* **Papel Farmacológico:** ${emCache.papelBiologico}
-          `.trim();
-        }
-
-        // Se não tiver no cache, busca dinamicamente nas APIs públicas (PubChem / ChEBI / Wikidata)
-        if (typeof ChemicalAPIEngine !== 'undefined') {
-          const comp = await ChemicalAPIEngine.resolveCompleteCompound(termo);
-          if (comp && comp.smiles) {
-            const card = {
-              nome: termo.toUpperCase(),
-              iupac: comp.iupac || '--',
-              formula: comp.formula || '--',
-              molarMass: comp.molarMass || comp.pesoMolecular || '--',
-              cas: comp.cas || '--',
-              chebiId: comp.chebiId || '--',
-              papelBiologico: comp.papelBiologico || 'Composto farmacologicamente caracterizado.'
-            };
-            this.salvarNoCache(termo, card);
-
-            return `
-**🌐 Identificação Quimiométrica (PubChem / ChEBI): ${card.nome}**
-* **IUPAC:** ${card.iupac}
-* **Fórmula / Massa:** ${card.formula} (${card.molarMass} g/mol)
-* **Número CAS:** ${card.cas} • **ChEBI:** ${card.chebiId}
-* **Papel Clínico:** ${card.papelBiologico}
-            `.trim();
+    // D: Predição de Misturas e Incompatibilidades
+    if (texto.includes("acontece se") || texto.includes("misturar") || texto.includes("adicionar") || texto.includes("colocar")) {
+      if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
+        for (const [reag, info] of Object.entries(LAB_DATABASE.species)) {
+          if (texto.includes(reag.toLowerCase()) || texto.includes(info.label.toLowerCase())) {
+            return this.predizerMistura(reag, sys);
           }
         }
       }
     }
 
-    // E: Resposta Pedagógica Padrão Integrada ao Contexto Físico
-    const phAtual = calcularpH().toFixed(2);
-    const tempAtual = sys.temp.toFixed(1);
-    return `
-**👨‍🏫 Orientação do Preceptor LAIFT:**
-Sua bancada está operando a **${tempAtual}°C** com **pH ${phAtual}** e volume de **${sys.vol.toFixed(1)} mL**.
+    // E: Dúvida Livre / Farmacológica -> Envia ao Apps Script (Groq 120B) se configurado
+    const gateway = window.APPS_SCRIPT_GATEWAY || (typeof LAIFT_CONFIG !== 'undefined' ? LAIFT_CONFIG.GATEWAY_URL : null);
+    if (gateway) {
+      try {
+        const especiesVaso = Array.from(sys.especies.entries())
+          .filter(([_, q]) => q > 0.05)
+          .map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`)
+          .join(', ') || 'Vaso vazio';
 
-Para orientar seu experimento com exatidão, você pode me perguntar:
-* *"Como sintetizar Aspirina?"* (ou Paracetamol, Salicilato de Metila, Acetanilida)
-* *"O que tem no meu vaso agora?"* para uma leitura analítica completa das espécies em equilíbrio.
-* *"O que acontece se eu misturar Sódio Metálico?"* para checagem prévia de risco e estequiometria.
+        const contextoBancada = `T:${sys.temp.toFixed(1)}C; Pressao:${sys.pressao.toFixed(2)}atm; pH:${calcularpH().toFixed(2)}; Vol:${sys.vol.toFixed(1)}mL; Vidraria:${sys.isClosed ? 'Fechada' : 'Aberta'}; Agitador:${agitadorAtivo ? 'Ligado' : 'Parado'}; Especies:${especiesVaso}.`;
+
+        const res = await fetch(gateway, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            acao: 'consultarPreceptorIA',
+            duvida: msgUsuario,
+            contexto: contextoBancada
+          })
+        });
+
+        const data = await res.json();
+        if (data && data.resposta) {
+          return data.resposta;
+        }
+      } catch (e) {
+        console.warn('[Preceptor] Falha no gateway remoto, mantendo modo local:', e);
+      }
+    }
+
+    // Fallback Pedagógico Informativo Local
+    return `
+**👨‍🏫 Orientação do Preceptor:**
+Sua vidraria está a **${sys.temp.toFixed(1)}°C** com **pH ${calcularpH().toFixed(2)}** e volume de **${sys.vol.toFixed(1)} mL**.
+
+Você pode me perguntar:
+* *"Como sintetizar Aspirina?"* ou *"Como fazer Paracetamol?"*
+* *"O que posso criar aqui?"* para ver a lista de rotas de bancada.
+* *"O que tem no meu vaso?"* para uma leitura analítica completa.
     `.trim();
   }
 };
 
-// Exportação global
-if (typeof window !== "undefined") {
-  window.LabPreceptorEngine = LabPreceptorEngine;
+// Funções Utilitárias Globais do Chat
+window.limparChatPreceptor = function() {
+  const chatBox = document.getElementById('labChatMessages');
+  if (!chatBox) return;
+
+  chatBox.innerHTML = `
+    <div class="lab-chat-msg msg-preceptor">
+      Conversa reiniciada. Sou o <strong>Preceptor Virtual LAIFT</strong>. Como posso orientar sua bancada agora?
+      <div class="chip-container">
+        <button class="chat-chip" onclick="enviarDuvidaRapida('O que posso criar aqui?')">🧪 O que posso criar aqui?</button>
+        <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Aspirina?')">💊 Rota da Aspirina</button>
+        <button class="chat-chip" onclick="enviarDuvidaRapida('Como fazer Paracetamol?')">🔬 Rota do Paracetamol</button>
+        <button class="chat-chip" onclick="enviarDuvidaRapida('O que tem no meu vaso?')">🌡️ Diagnóstico do Vaso</button>
+      </div>
+    </div>
+  `;
+  chatBox.scrollTop = 0;
+};
+
+window.enviarDuvidaRapida = function(pergunta) {
+  const input = document.getElementById('labChatInput');
+  if (input) {
+    input.value = pergunta;
+    if (typeof window.enviarDuvidaLab === 'function') {
+      window.enviarDuvidaLab();
+    }
+  }
+};
+
+// Inicializa o chat ao carregar a página
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    window.limparChatPreceptor();
+  });
 }
