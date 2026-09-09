@@ -5,7 +5,7 @@
  * Escopo: Química, Farmácia, Física, Biologia, Bioquímica, Toxicologia e Bancada.
  */
 
-window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
+window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbyXvBYrHBIXNjHYItuq2LXKt1vkmh2m_CME-5aZqkxUJhl7ktJjemuasbvdEweH95k/exec';
 
 const LabPreceptorEngine = {
   // Histórico de conversação contínuo (memória recente para réplicas e tréplicas)
@@ -319,17 +319,26 @@ const LabPreceptorEngine = {
       throw new Error('Endpoint do Apps Script não configurado em window.APPS_SCRIPT_GATEWAY.');
     }
 
-    const especiesVaso = Array.from(sys.especies.entries())
-      .filter(([_, q]) => q > 0.01)
-      .map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`)
-      .join(', ') || 'Vidraria limpa / solvente puro';
+    const especiesVaso = (sys && sys.especies)
+      ? Array.from(sys.especies.entries())
+          .filter(([_, q]) => q > 0.01)
+          .map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`)
+          .join(', ') || 'Vidraria limpa / solvente puro'
+      : 'Bancada em repouso';
+
+    const phMedido = typeof calcularpH === 'function' ? calcularpH().toFixed(2) : '7.00';
+    const tempAtual = sys && typeof sys.temp === 'number' ? sys.temp.toFixed(1) : '25.0';
+    const pressaoAtual = sys && typeof sys.pressao === 'number' ? sys.pressao.toFixed(2) : '1.00';
+    const volAtual = sys && typeof sys.vol === 'number' ? sys.vol.toFixed(1) : '0.0';
+    const maxVol = sys && sys.maxVol ? sys.maxVol : 250;
+    const isClosed = sys ? Boolean(sys.isClosed) : false;
 
     const contextoBancada = `
-- Temperatura: ${sys.temp.toFixed(1)} °C
-- Pressão: ${sys.pressao.toFixed(2)} atm
-- pH Atual: ${calcularpH().toFixed(2)}
-- Volume: ${sys.vol.toFixed(1)} mL (Capacidade máxima: ${sys.maxVol} mL)
-- Sistema Físico: ${sys.isClosed ? 'Fechado com rolha' : 'Aberto à atmosfera'}
+- Temperatura: ${tempAtual} °C
+- Pressão: ${pressaoAtual} atm
+- pH Atual: ${phMedido}
+- Volume: ${volAtual} mL (Capacidade máxima: ${maxVol} mL)
+- Sistema Físico: ${isClosed ? 'Fechado com rolha' : 'Aberto à atmosfera'}
 - Agitador Magnético: ${agitadorAtivo ? 'Ativo' : 'Desligado'}
 - Espécies presentes no vaso: [${especiesVaso}]
 `.trim();
@@ -356,10 +365,13 @@ const LabPreceptorEngine = {
     }
 
     const data = await res.json();
-    const textoResposta = data.resposta || data.conteudo || data.falaPaciente || data.mensagem;
+    if (!data.sucesso && data.erro) {
+      throw new Error(data.erro);
+    }
 
+    const textoResposta = data.resposta || data.conteudo || data.falaPaciente || data.mensagem;
     if (!textoResposta) {
-      throw new Error(data.erro || 'O backend retornou uma resposta sem conteúdo textual.');
+      throw new Error('O backend retornou uma resposta sem conteúdo textual legível.');
     }
 
     // Registra a fala do preceptor no histórico para contexto imediato da próxima pergunta
@@ -400,6 +412,9 @@ ${diag.detalhes}
       }
     }
 
+    // Identifica se a dúvida é expressamente sobre síntese / rota de preparo
+    const ehPedidoSintese = /sintese|sintetizar|preparo|preparar|fabricar|produzir|rota|como fazer/i.test(textoNorm);
+
     // 3. Extração limpa para busca em acervo de síntese
     const termoComposto = textoNorm
       .replace(/como sintetizar|como fazer|rota de sintese de|sintese de|sintetizar|como preparar|preparo de|reacao de|fazer/gi, '')
@@ -407,12 +422,17 @@ ${diag.detalhes}
       .trim();
 
     // --- CAMADA 1: Acervo Local Curado (0 ms / 0 tokens) ---
-    for (const [chave, rota] of Object.entries(this.ROTAS_SINTESE)) {
-      const chaveNorm = chave.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const nomeNorm = rota.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Só intercepta se o usuário estiver explicitamente perguntando como sintetizar/preparar
+    if (ehPedidoSintese) {
+      for (const [chave, rota] of Object.entries(this.ROTAS_SINTESE)) {
+        const chaveNorm = chave.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const nomeNorm = rota.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-      if (textoNorm.includes(chaveNorm) || nomeNorm.includes(termoComposto) || (termoComposto && termoComposto.includes(chaveNorm))) {
-        return `
+        const matchDireto = textoNorm.includes(chaveNorm);
+        const matchTermo = termoComposto.length >= 3 && (nomeNorm.includes(termoComposto) || termoComposto.includes(chaveNorm));
+
+        if (matchDireto || matchTermo) {
+          return `
 **🧪 Rota Farmacotécnica Oficial: ${rota.nome}**
 
 **1. Parâmetros de Bancada:**
@@ -430,13 +450,14 @@ ${diag.detalhes}
 * **⚠️ Alerta Operacional:** ${rota.perigos}
 
 *(⚡ Rota consultada instantaneamente do acervo do Químico Farmacêutico)*
-        `.trim();
+          `.trim();
+        }
       }
     }
 
     // --- CAMADA 2: Cache Global Compartilhado na Planilha (0 tokens) ---
     const gateway = window.APPS_SCRIPT_GATEWAY;
-    if (gateway && termoComposto.length >= 3) {
+    if (ehPedidoSintese && gateway && termoComposto.length >= 3) {
       try {
         const resGlobal = await fetch(gateway, {
           method: 'POST',
@@ -456,12 +477,12 @@ ${diag.detalhes}
     }
 
     // --- CAMADA 3: Disparo Cognitivo Aberto via Cluster Groq ---
-    // Envia qualquer dúvida sobre química, farmácia, física, biologia, bancada ou cálculo analítico
+    // Encaminha livremente dúvidas sobre química, farmácia, física, biologia, bancada, etc.
     try {
       const respostaIA = await this.consultarGroqRemoto(msgUsuario, sys, calcularpH, agitadorAtivo);
 
-      // Persistência em segundo plano na planilha para alimentar o aprendizado coletivo
-      if (termoComposto.length >= 3 && gateway) {
+      // Persistência em segundo plano para pedidos de síntese
+      if (ehPedidoSintese && termoComposto.length >= 3 && gateway) {
         fetch(gateway, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -486,19 +507,19 @@ ${diag.detalhes}
 *Detalhe técnico:* \`${erroGroq.message || erroGroq}\`
 
 **Parâmetros Atuais da Bancada:**
-* **Temperatura:** ${sys.temp.toFixed(1)} °C | **pH:** ${calcularpH().toFixed(2)} | **Volume:** ${sys.vol.toFixed(1)} mL
-* **Agitador:** ${agitadorAtivo ? 'Ligado' : 'Desligado'} | **Sistema:** ${sys.isClosed ? 'Fechado com rolha' : 'Aberto'}
+* **Temperatura:** ${sys ? sys.temp.toFixed(1) : '25.0'} °C | **pH:** ${typeof calcularpH === 'function' ? calcularpH().toFixed(2) : '7.00'} | **Volume:** ${sys ? sys.vol.toFixed(1) : '0.0'} mL
+* **Agitador:** ${agitadorAtivo ? 'Ligado' : 'Desligado'} | **Sistema:** ${sys && sys.isClosed ? 'Fechado com rolha' : 'Aberto'}
 
-*Sugestão:* A base local contínua pronta para responder sobre: **Dipirona**, **Aspirina**, **Paracetamol**, **Ibuprofeno**, **Diclofenaco**, **Captopril**, **Losartana**, **Amoxicilina** ou **Omeprazol**.
+*Sugestão:* A base local está disponível para consultas diretas de rotas: **Dipirona**, **Aspirina**, **Paracetamol**, **Ibuprofeno**, **Diclofenaco**, **Captopril**, **Losartana**, **Amoxicilina** ou **Omeprazol**.
       `.trim();
     }
   },
 
   gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo) {
-    const ph = calcularpH();
-    const temp = sys.temp;
-    const vol = sys.vol;
-    const especies = Array.from(sys.especies.entries()).filter(([_, q]) => q > 0.05);
+    const ph = typeof calcularpH === 'function' ? calcularpH() : 7.0;
+    const temp = sys && typeof sys.temp === 'number' ? sys.temp : 25.0;
+    const vol = sys && typeof sys.vol === 'number' ? sys.vol : 0.0;
+    const especies = (sys && sys.especies) ? Array.from(sys.especies.entries()).filter(([_, q]) => q > 0.05) : [];
 
     if (vol === 0 && especies.length === 0) {
       return {
@@ -515,11 +536,13 @@ ${diag.detalhes}
     return {
       resumo: `Vaso reacional contendo **${vol.toFixed(1)} mL** a **${temp.toFixed(1)}°C** (${estadoTermico}). Meio **${caracteristicaPH}** (pH ${ph.toFixed(2)}).`,
       detalhes: `**Espécies em solução:** ${especiesNomes || "Apenas solvente base"}. Agitador magnético: **${agitadorAtivo ? "Ativo" : "Parado"}**.`,
-      alerta: sys.pressao > 2.0 ? `⚠️ Pressão interna elevada (${sys.pressao.toFixed(2)} atm)! Risco de sobrepressão na vidraria.` : "Parâmetros físico-químicos sob controle analítico."
+      alerta: (sys && sys.pressao > 2.0) ? `⚠️ Pressão interna elevada (${sys.pressao.toFixed(2)} atm)! Risco de sobrepressão na vidraria.` : "Parâmetros físico-químicos sob controle analítico."
     };
   },
 
   predizerMistura(reagenteAlvo, sys) {
+    if (!sys || !sys.especies) return "Aguardando inicialização da vidraria.";
+
     const temAcido = (sys.especies.get('H+') || 0) > 0.1 || (sys.especies.get('HCl_aq') || 0) > 0 || (sys.especies.get('H2SO4_aq') || 0) > 0;
     const temAgua = (sys.especies.get('H2O_l') || 0) > 0;
 
@@ -558,7 +581,6 @@ window.limparChatPreceptor = function() {
   const chatBox = document.getElementById('labChatMessages');
   if (!chatBox) return;
 
-  // Reseta o histórico de conversas do Preceptor
   if (window.LabPreceptorEngine) {
     window.LabPreceptorEngine.historicoChatLab = [];
   }
