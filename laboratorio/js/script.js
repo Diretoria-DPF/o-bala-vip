@@ -154,7 +154,7 @@
     { cat:'Zn2+', an:'S_2-', cC:1, cA:1, prod:'ZnS_s', cor:'#e8eaf6', nomePubChem:'Zinc sulfide' },
     { cat:'Sb3+', an:'S_2-', cC:2, cA:3, prod:'Sb2S3_s', cor:'#ff7043', nomePubChem:'Antimony trisulfide' },
     { cat:'Ca2+', an:'SO4_2-', cC:1, cA:1, prod:'CaSO4_s', cor:'#f5f5f5', nomePubChem:'Calcium sulfate' },
-    { cat:'Ba2+', an:'SO4_2-', cC:1, cA:1, prod:'BaSO4_s', cor:'#ffffff', nomePubChem:'Barium sulfate' },
+    { cat:'Ba2+', an:'SO4_2-', cC:1, cA:1, prod:'BaCO4_s', cor:'#ffffff', nomePubChem:'Barium sulfate' },
     { cat:'Pb2+', an:'SO4_2-', cC:1, cA:1, prod:'PbSO4_s', cor:'#eceff1', nomePubChem:'Lead(II) sulfate' }
   ];
 
@@ -243,7 +243,7 @@
   let viewer3D = null;
   let modoVisualizacao = '2D';
   let compostoAtualParaDossie = null;
-  let sdfCachePendente = null; // Buffer para conformação 3D enquanto no modo 2D
+  let sdfCachePendente = null;
 
   const logEl = document.getElementById('logStream');
   const phCanvas = document.getElementById('phCanvas');
@@ -292,7 +292,7 @@
   }
 
   // =========================================================================
-  // 6. VISUALIZADOR 2D HÍBRIDO & 3D (3Dmol.js com proteção de Framebuffer 0x0)
+  // 6. VISUALIZADOR 2D HÍBRIDO & 3D (BLINDADO CONTRA ERRO NO 3DMOL)
   // =========================================================================
   function initSmilesDrawer() {
     try {
@@ -314,24 +314,39 @@
     }
   }
 
+  function validarConteudoSDF(sdfText) {
+    if (!sdfText || typeof sdfText !== 'string') return false;
+    return sdfText.includes('$$$$') || sdfText.includes('M  END');
+  }
+
   function renderizarCena3DBancada(sdfText) {
     const div3D = document.getElementById('viewer3D');
-    if (!div3D || !window.$3Dmol || !sdfText) return;
+    if (!div3D || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
 
-    // Proteção absoluta contra erro WebGL: Framebuffer has zero size
     if (div3D.offsetWidth === 0 || div3D.offsetHeight === 0) return;
 
-    div3D.innerHTML = '';
-    viewer3D = $3Dmol.createViewer(div3D, { backgroundColor: '#020617' });
-    viewer3D.addModel(sdfText, "sdf");
-    viewer3D.setStyle({}, {
-      stick: { radius: 0.14, colorscheme: 'Jmol' },
-      sphere: { scale: 0.25, colorscheme: 'Jmol' }
-    });
-    viewer3D.zoomTo();
-    viewer3D.render();
-    viewer3D.resize();
-    viewer3D.animate({ loop: "backAndForth", step: 0.4 });
+    try {
+      div3D.innerHTML = '';
+      if (viewer3D) {
+        try { viewer3D.stopAnimate(); } catch(e) {}
+      }
+
+      viewer3D = $3Dmol.createViewer(div3D, { backgroundColor: '#020617' });
+      const model = viewer3D.addModel(sdfText, "sdf");
+
+      if (model && typeof model.selectedAtoms === 'function') {
+        viewer3D.setStyle({}, {
+          stick: { radius: 0.14, colorscheme: 'Jmol' },
+          sphere: { scale: 0.25, colorscheme: 'Jmol' }
+        });
+        viewer3D.zoomTo();
+        viewer3D.render();
+        viewer3D.resize();
+        viewer3D.animate({ loop: "backAndForth", step: 0.4 });
+      }
+    } catch (err3D) {
+      console.warn('[3Dmol Bancada] Erro ao renderizar modelo:', err3D);
+    }
   }
 
   window.setModoVisualizacao = function(modo) {
@@ -347,7 +362,9 @@
 
     if (modo === '2D') {
       if (div3D) div3D.style.display = 'none';
-      if (viewer3D) viewer3D.stopAnimate();
+      if (viewer3D) {
+        try { viewer3D.stopAnimate(); } catch(e) {}
+      }
 
       if (img2D && img2D.getAttribute('data-active') === 'true') {
         img2D.style.display = 'block';
@@ -363,7 +380,7 @@
         div3D.style.display = 'block';
         setTimeout(() => {
           if (div3D.offsetWidth > 0 && div3D.offsetHeight > 0) {
-            if (!viewer3D && sdfCachePendente) {
+            if (sdfCachePendente) {
               renderizarCena3DBancada(sdfCachePendente);
             } else if (viewer3D) {
               viewer3D.resize();
@@ -443,23 +460,53 @@
 
     let sdf = await DB_CACHE.get('moleculas', termo);
 
+    // 1. PubChem via SMILES Canônico (Mais estável que nomes em português)
+    if (!sdf && smiles && smiles !== '--' && !smiles.includes('.')) {
+      try {
+        const urlSmiles = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(smiles)}/SDF?record_type=3d`;
+        const res = await fetch(urlSmiles);
+        if (res.ok) {
+          const txt = await res.text();
+          if (validarConteudoSDF(txt)) {
+            sdf = txt;
+            await DB_CACHE.set('moleculas', termo, sdf);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. PubChem via Nome/Query
     if (!sdf) {
       try {
         const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termo)}/SDF?record_type=3d`;
         const res = await fetch(url);
         if (res.ok) {
           const txt = await res.text();
-          if (txt && txt.includes('$$$$')) {
+          if (validarConteudoSDF(txt)) {
             sdf = txt;
             await DB_CACHE.set('moleculas', termo, sdf);
           }
         }
       } catch (e) {
-        console.warn('[3D Conformer] Falha de download:', e);
+        console.warn('[3D Conformer] Falha de download PubChem:', e);
       }
     }
 
-    if (sdf) {
+    // 3. Fallback CACTUS NIH
+    if (!sdf && smiles && smiles !== '--') {
+      try {
+        const resC = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/file?format=sdf`);
+        if (resC.ok) {
+          const txtC = await resC.text();
+          if (validarConteudoSDF(txtC)) {
+            sdf = txtC;
+            await DB_CACHE.set('moleculas', termo, sdf);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (sdf && validarConteudoSDF(sdf)) {
       sdfCachePendente = sdf;
       if (modoVisualizacao === '3D' && div3D.offsetWidth > 0 && div3D.offsetHeight > 0) {
         renderizarCena3DBancada(sdf);
@@ -560,12 +607,11 @@
       return;
     }
 
-    // Busca cascata: LAB_DATABASE.species -> DICIONARIO_MOLECULAR -> BANCO_SINTESES_LAIFT
     let info = (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species && LAB_DATABASE.species[alvoId])
       ? LAB_DATABASE.species[alvoId]
       : (DICIONARIO_MOLECULAR[alvoId] || null);
 
-    if (!info && typeof window.BANCO_SINTESES_LAIFT !== 'undefined') {
+    if (!info && typeof window.BANCO_SINTESES_LAIFT !== 'undefined' && Array.isArray(window.BANCO_SINTESES_LAIFT)) {
       const synth = window.BANCO_SINTESES_LAIFT.find(s => s.produtoId === alvoId || s.id === alvoId);
       if (synth) {
         info = {
@@ -710,7 +756,7 @@
   }
 
   // =========================================================================
-  // 8. VERIFICAÇÃO UNIFICADA DE SÍNTESE E REAÇÕES (LAB_DATABASE + BANCO_SINTESES)
+  // 8. VERIFICAÇÃO UNIFICADA DE SÍNTESE E REAÇÕES
   // =========================================================================
   async function verificarSinteseFarmaceutica() {
     let reacoesParaVerificar = [];
@@ -764,7 +810,7 @@
   }
 
   // =========================================================================
-  // 9. CHAT DO PRECEPTOR (QUÍMICO FARMACÊUTICO CONECTADO AO ENGINE)
+  // 9. CHAT DO PRECEPTOR COM IA
   // =========================================================================
   window.toggleLabChat = function() {
     const drawer = document.getElementById('labChatDrawer');
@@ -1805,7 +1851,6 @@
     if (modal) modal.style.display = 'none';
   };
 
-  // Funções Globais de Controle de Interface (Garante resposta mesmo antes do DOM completo)
   window.toggleLabFullscreen = function() {
     const doc = document;
     const docEl = doc.documentElement;
@@ -1861,7 +1906,6 @@
       }
       modal.style.display = 'flex';
 
-      // Notifica o iframe para disparar resize no WebGL assim que o modal se tornar visível
       setTimeout(() => {
         try {
           if (iframe.contentWindow) {
