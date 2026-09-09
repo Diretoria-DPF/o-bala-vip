@@ -1538,4 +1538,52 @@ canvas { 
     width: 210px;
     height: 32px;
   }
+
+/* =========================================================
+   INTEGRAÇÃO DO ESTÚDIO 3D COM A BANCADA
+   ========================================================= */
+
+/* Botão de Destaque no Cabeçalho */
+.btn-studio-launch {
+  background: rgba(0, 229, 255, 0.12) !important;
+  border-color: var(--neon-cyan) !important;
+  color: var(--neon-cyan) !important;
+  font-weight: 700;
+  transition: var(--transition-smooth);
+}
+
+.btn-studio-launch:hover {
+  background: var(--neon-cyan) !important;
+  color: #000 !important;
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.5) !important;
+}
+
+/* Modal Fullscreen do Iframe */
+.studio-iframe-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 99999;
+  background: rgba(1, 4, 10, 0.98);
+  backdrop-filter: blur(10px);
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.studio-iframe-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.studio-iframe-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+  
 }
