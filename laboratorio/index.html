@@ -27,6 +27,10 @@
     </div>
 
     <div class="header-right">
+      <!-- Botão de Tela Cheia Nativa -->
+      <button class="manual-btn" id="btnLabFullscreen" onclick="toggleLabFullscreen()" title="Alternar Tela Cheia">
+        ⛶ Tela Cheia
+      </button>
       <button class="manual-btn btn-studio-launch" id="btnOpenStudio" onclick="abrirStudio()" title="Abrir Estúdio de Modelagem Molecular 3D">
         🧬 Estúdio 3D
       </button>
@@ -393,7 +397,24 @@
         if (typeof atualizarInspecaoMolecular === 'function') setTimeout(atualizarInspecaoMolecular, 60);
         if (typeof desenharCurvaPH === 'function') setTimeout(desenharCurvaPH, 90);
       }
+
+      function toggleLabFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.warn(`[LAIFT Fullscreen] Erro: ${err.message}`);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
     }
+
+    document.addEventListener('fullscreenchange', () => {
+      const btn = document.getElementById('btnLabFullscreen');
+      if (btn) {
+        btn.textContent = document.fullscreenElement ? '⛶ Restaurar' : '⛶ Tela Cheia';
+        }
   </script>
 
   <!-- Módulos de Execução Científica -->
