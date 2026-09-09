@@ -13,22 +13,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Urbanist:wght@400;600;700;800&display=swap" rel="stylesheet">
 
   <!-- =========================================================================
-       2. BIBLIOTECAS QUIMIOINFORMÁTICAS & MOTORES GRÁFICOS WEBGL
+       2. MOTORES GRÁFICOS & QUIMIOINFORMÁTICA
        ========================================================================= -->
-  <!-- SmilesDrawer: Renderizador vetorial 2D ultra-rápido -->
   <script src="https://unpkg.com/smiles-drawer@2.1.7/dist/smiles-drawer.min.js"></script>
-  <!-- 3Dmol.js: Motor gráfico WebGL de alto desempenho para conformações 3D -->
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
-  <!-- RDKit.js: Compilação WebAssembly para química medicinal in-silico e ETKDG -->
   <script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
 
-  <!-- Folha de Estilos Exclusiva do Estúdio -->
   <link rel="stylesheet" href="studio.css">
 </head>
 <body class="studio-cockpit-locked">
 
   <!-- =========================================================================
-       3. CABEÇALHO DO ESTÚDIO (BARRA DE CONTROLE SUPERIOR)
+       3. CABEÇALHO DO ESTÚDIO
        ========================================================================= -->
   <header class="studio-main-header">
     <div class="header-branding">
@@ -41,17 +37,14 @@
     </div>
 
     <div class="header-control-actions">
-      <!-- Alternância de Tela Cheia Nativa do Navegador (F11 / API Fullscreen) -->
       <button class="studio-btn btn-fullscreen-toggle" id="btnToggleNativeFullscreen" onclick="toggleNativeFullscreen()" title="Alternar modo Tela Cheia">
         ⛶ Tela Cheia
       </button>
 
-      <!-- Botão de Sincronização e Envio à Bancada Principal -->
       <button class="studio-btn btn-action-transfer" id="btnCarregarNaBancada" onclick="carregarCompostoDoStudioNaBancada()" style="display: none;" title="Transferir molécula ativa diretamente para a vidraria da bancada">
         🧪 Transferir para Bancada
       </button>
 
-      <!-- Botão de Fechamento / Retorno ao Laboratório -->
       <button class="studio-btn btn-action-back" onclick="retornarAoLaboratorio()" title="Retornar à Bancada">
         ✕ Voltar
       </button>
@@ -59,22 +52,18 @@
   </header>
 
   <!-- =========================================================================
-       4. WORKSPACE EM GRADE TELA CHEIA (SIDEBAR DE BUSCA + VIEWPORT 3D/2D)
+       4. WORKSPACE EM GRADE
        ========================================================================= -->
   <main class="studio-workspace-grid">
 
-    <!-- ---------------------------------------------------------------------
-         4.1. NAVEGADOR VIRTUALIZADO DE COMPOSTOS (SIDEBAR ESQUERDA)
-         --------------------------------------------------------------------- -->
+    <!-- 4.1. NAVEGADOR VIRTUALIZADO DE COMPOSTOS -->
     <aside class="studio-sidebar-panel">
-      
       <div class="sidebar-search-container">
         <div class="search-input-wrapper">
           <span class="search-icon">🔍</span>
           <input type="text" id="studioSearchInput" placeholder="Buscar por nome, fórmula ou SMILES..." oninput="filtrarCompostosStudio(this.value)" autocomplete="off" spellcheck="false">
         </div>
 
-        <!-- Filtros Rápidos por Classe e Aplicação Terapêutica -->
         <div class="category-filters-scroll">
           <button class="category-pill active" data-cat="todas" onclick="filtrarCategoriaStudio('todas')">Todas</button>
           <button class="category-pill" data-cat="farmacos" onclick="filtrarCategoriaStudio('farmacos')">Fármacos</button>
@@ -84,71 +73,56 @@
         </div>
       </div>
 
-      <!-- Contêiner de Alta Performance: Renderização em Chunks / Virtualização -->
-      <div class="compound-virtual-list" id="studioCompoundList" onscroll="handleStudioScroll()">
-        <!-- Itens inseridos dinamicamente pelo studio.js -->
-      </div>
+      <div class="compound-virtual-list" id="studioCompoundList" onscroll="handleStudioScroll()"></div>
 
-      <!-- Resumo Numérico de Busca -->
       <div class="sidebar-footer-counter">
         <span id="studioFilteredCount">0 compostos visíveis</span>
       </div>
     </aside>
 
-    <!-- ---------------------------------------------------------------------
-         4.2. VIEWPORT CIENTÍFICO TRIDIMENSIONAL & ÁREA DE MODELAGEM
-         --------------------------------------------------------------------- -->
+    <!-- 4.2. VIEWPORT 3D / 2D & TELEMETRIA -->
     <section class="studio-viewport-panel">
       
-      <!-- Barra de Ferramentas de Renderização, Geometria e Exportação -->
+      <!-- Barra de Ferramentas -->
       <nav class="studio-toolbar-ribbon">
-        
-        <!-- Alternância de Dimensão -->
         <div class="toolbar-cluster">
           <span class="cluster-label">Modo:</span>
           <button class="tool-btn" id="btnStudioView2D" onclick="setStudioModoVisual('2D')">2D Vetorial</button>
           <button class="tool-btn active" id="btnStudioView3D" onclick="setStudioModoVisual('3D')">3D WebGL</button>
         </div>
 
-        <!-- Modelos de Projeção Atômica 3D -->
         <div class="toolbar-cluster" id="group3DStyles">
           <span class="cluster-label">Representação:</span>
-          <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')" title="Esferas e bastões com raio atômico balanceado">Ball & Stick</button>
-          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')" title="Modelo compacto de preenchimento espacial com raios de Van der Waals">CPK (VDW)</button>
-          <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')" title="Modelo esquelético de linhas">Wireframe</button>
-          <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')" title="Superfície de acessibilidade ao solvente com transparência eletrostática">Superfície SAS</button>
+          <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')">Ball & Stick</button>
+          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')">CPK (VDW)</button>
+          <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')">Wireframe</button>
+          <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')">Superfície SAS</button>
         </div>
 
-        <!-- Ferramentas de Inspeção Geométrica de Ligações -->
         <div class="toolbar-cluster">
           <span class="cluster-label">Geometria:</span>
-          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()" title="Ativa a seleção de átomos no WebGL para medição de distâncias e ângulos">
+          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()">
             📏 Medir (Å / °)
           </button>
-          <button class="tool-btn" onclick="limparMedicoes3D()" title="Limpa linhas de medida e rótulos da cena">Limpar</button>
+          <button class="tool-btn" onclick="limparMedicoes3D()">Limpar</button>
         </div>
 
-        <!-- Dinâmica de Câmera e Exportações -->
         <div class="toolbar-cluster right-aligned-cluster">
-          <button class="tool-btn" id="btnAutoRotate" onclick="toggleAutoRotacao3D()" title="Ativa a rotação cinética automática da molécula">🔄 Giro</button>
-          <button class="tool-btn" onclick="resetarCamera3D()" title="Centraliza e reajusta o zoom da molécula">🎯 Centro</button>
-          <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()" title="Exportar imagem do modelo em alta resolução PNG">📷 PNG</button>
-          <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()" title="Baixar arquivo de estrutura conformacional SDF 3D">💾 SDF</button>
+          <button class="tool-btn" id="btnAutoRotate" onclick="toggleAutoRotacao3D()">🔄 Giro</button>
+          <button class="tool-btn" onclick="resetarCamera3D()">🎯 Centro</button>
+          <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()">📷 PNG</button>
+          <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()">💾 SDF</button>
         </div>
       </nav>
 
-      <!-- Viewports de Renderização Molecular (2D / 3D) -->
+      <!-- Viewports de Renderização -->
       <div class="studio-canvas-stage" id="studioCanvasWrapper">
-        
-        <!-- Viewport 3D Principal (3Dmol.js) -->
         <div id="studioViewer3D" class="viewer-surface-3d"></div>
 
-        <!-- Viewport 2D Alternativo (SmilesDrawer) -->
         <div id="studioViewer2D" class="viewer-surface-2d" style="display: none;">
           <canvas id="studioCanvas2D" width="650" height="480"></canvas>
         </div>
 
-        <!-- Alerta Flutuante: Modo Medição Ativo -->
         <div class="measure-indicator-pill" id="measureHud" style="display: none;">
           <div class="indicator-dot-pulse"></div>
           <div class="indicator-texts">
@@ -157,42 +131,45 @@
           </div>
         </div>
 
-        <!-- Indicador de Processamento do RDKit WASM -->
         <div class="rdkit-engine-status" id="rdkitIndicator" style="display: none;">
           <span class="spinner-inline"></span>
           <span id="rdkitIndicatorText">Processando quimiometria...</span>
         </div>
 
-        <!-- Marca d'Água Central Informativa -->
         <div class="studio-watermark-overlay" id="studioWatermark">
           Selecione uma espécie molecular no painel esquerdo para renderizar a estrutura
         </div>
       </div>
 
-      <!-- Fita Inferior de Metadados e Telemetria Molecular -->
+      <!-- Fita Inferior: Telemetria Físico-Química & Dossiê Lipinski -->
       <footer class="studio-telemetry-hud">
         <div class="hud-item-block">
-          <span class="hud-title">Espécie Selecionada</span>
+          <span class="hud-title">Espécie</span>
           <strong class="hud-value name-highlight" id="studioMolNome">Aguardando seleção</strong>
         </div>
 
         <div class="hud-item-block">
-          <span class="hud-title">Fórmula Molecular</span>
-          <strong class="hud-value formula-highlight" id="studioMolFormula">--</strong>
+          <span class="hud-title">Fórmula / Massa</span>
+          <span class="hud-value">
+            <strong id="studioMolFormula" style="color: var(--neon-yellow);">--</strong> • 
+            <strong id="studioMolMassa" style="color: var(--neon-emerald);">-- g/mol</strong>
+          </span>
         </div>
 
-        <div class="hud-item-block">
-          <span class="hud-title">Massa Molar</span>
-          <strong class="hud-value mass-highlight" id="studioMolMassa">-- g/mol</strong>
-        </div>
-
-        <div class="hud-item-block">
-          <span class="hud-title">IUPAC / SMILES Canônico</span>
-          <span class="hud-value smiles-mono-text" id="studioMolSmiles" title="SMILES Canônico">--</span>
+        <!-- Descritores de Lipinski / Farmacocinética In Silico -->
+        <div class="hud-item-block lipinski-descriptors-block">
+          <span class="hud-title">Perfil Farmacocinético (RDKit / Lipinski Ro5)</span>
+          <div class="lipinski-metrics-row">
+            <span class="metric-pill" title="LogP de Crippen (Lipofilicidade) &le; 5">LogP: <strong id="descLogP">--</strong></span>
+            <span class="metric-pill" title="Área de Superfície Polar Topológica (TPSA) &le; 140 Å²">TPSA: <strong id="descTPSA">-- Å²</strong></span>
+            <span class="metric-pill" title="Doadores de H (&le; 5) / Aceptores de H (&le; 10)">HBD/HBA: <strong id="descHBD_HBA">-- / --</strong></span>
+            <span class="metric-pill" title="Ligações Rotacionáveis (Flexibilidade) &le; 10">RotB: <strong id="descRotB">--</strong></span>
+            <span class="lipinski-status-badge badge-pending" id="lipinskiBadge">Avaliando</span>
+          </div>
         </div>
 
         <div class="hud-item-block measurement-readout-block">
-          <span class="hud-title">Leitura Geométrica em Tempo Real</span>
+          <span class="hud-title">Geometria</span>
           <strong class="hud-value measure-value" id="studioLastMeasurement">Nenhum átomo selecionado</strong>
         </div>
       </footer>
@@ -201,30 +178,22 @@
   </main>
 
   <!-- =========================================================================
-       5. INTEGRAÇÃO DOS BANCOS DE DADOS E MOTORES DE EXECUÇÃO
+       5. SCRIPTS E INTEGRAÇÃO
        ========================================================================= -->
-  <!-- Bases Físico-Químicas e de Sínteses Compartilhadas com o Laboratório -->
   <script src="../dados/lab-database.js"></script>
   <script src="../dados/sinteses-database.js"></script>
-
-  <!-- Persistência Local e Integração com Bases Científicas Globais -->
   <script src="../js/lab-apis.js"></script>
   <script src="../js/lab-storage.js"></script>
-
-  <!-- Motor Controlador do Estúdio de Projeção -->
   <script src="studio.js"></script>
 
-  <!-- Controlador Auxiliar de Tela Cheia Nativa e Roteamento de Janela -->
   <script>
     function toggleNativeFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(err => {
-          console.warn(`[Studio Fullscreen] Erro ao engajar tela cheia: ${err.message}`);
+          console.warn(`[Studio Fullscreen] Erro: ${err.message}`);
         });
       } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        }
+        if (document.exitFullscreen) document.exitFullscreen();
       }
     }
 
@@ -238,12 +207,8 @@
 
     document.addEventListener('fullscreenchange', () => {
       const btn = document.getElementById('btnToggleNativeFullscreen');
-      if (btn) {
-        btn.textContent = document.fullscreenElement ? '⛶ Restaurar' : '⛶ Tela Cheia';
-      }
-      if (typeof resetarCamera3D === 'function') {
-        setTimeout(resetarCamera3D, 150);
-      }
+      if (btn) btn.textContent = document.fullscreenElement ? '⛶ Restaurar' : '⛶ Tela Cheia';
+      if (typeof resetarCamera3D === 'function') setTimeout(resetarCamera3D, 150);
     });
   </script>
 </body>
