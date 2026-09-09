@@ -1,12 +1,16 @@
 /**
  * LAIFT — MOTOR COGNITIVO DO PRECEPTOR VIRTUAL DE BANCADA
- * Perfil: Químico Farmacêutico & Preceptor Especialista
- * Escopo: Química, Farmácia, Física, Biologia, Toxicologia e Práticas de Bancada.
+ * Perfil: Químico Farmacêutico Sênior & Preceptor de Bancada
+ * Arquitetura: Cascata em 3 Camadas com Diálogo Contínuo (Padrão Anamnese Clínica)
+ * Escopo: Química, Farmácia, Física, Biologia, Bioquímica, Toxicologia e Bancada.
  */
 
 window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
 
 const LabPreceptorEngine = {
+  // Histórico de conversação contínuo (memória recente para réplicas e tréplicas)
+  historicoChatLab: [],
+
   // =========================================================================
   // 1. ACERVO CURADO DE SÍNTESES FARMACÊUTICAS E INDUSTRIAIS (CAMADA 1)
   // =========================================================================
@@ -273,7 +277,6 @@ const LabPreceptorEngine = {
     }
   },
 
-  // Ingestão dinâmica de acervos externos adicionais
   carregarBaseSintesesDinamica() {
     if (typeof window.BANCO_SINTESES_LAIFT === 'undefined' || !Array.isArray(window.BANCO_SINTESES_LAIFT)) {
       return;
@@ -304,11 +307,11 @@ const LabPreceptorEngine = {
       if (chaveNormalizada) this.ROTAS_SINTESE[chaveNormalizada] = dadosFormatados;
     });
 
-    console.log(`✅ [Preceptor Farmacêutico] ${Object.keys(this.ROTAS_SINTESE).length} rotas carregadas.`);
+    console.log(`✅ [Preceptor Farmacêutico] ${Object.keys(this.ROTAS_SINTESE).length} rotas indexadas na Camada 1.`);
   },
 
   // =========================================================================
-  // 2. DISPARO REMOTO AO APPS SCRIPT (CAMADA 3 — GROQ 120B)
+  // 2. DISPARO REMOTO AO APPS SCRIPT (CAMADA 3 — PADRÃO CLÍNICO GROQ)
   // =========================================================================
   async consultarGroqRemoto(msgUsuario, sys, calcularpH, agitadorAtivo) {
     const gateway = window.APPS_SCRIPT_GATEWAY;
@@ -322,20 +325,24 @@ const LabPreceptorEngine = {
       .join(', ') || 'Vidraria limpa / solvente puro';
 
     const contextoBancada = `
-[PARÂMETROS REAIS DA BANCADA NO MOMENTO]:
-- Temperatura Atual: ${sys.temp.toFixed(1)} °C
-- Pressão Interna: ${sys.pressao.toFixed(2)} atm
-- pH Medido: ${calcularpH().toFixed(2)}
-- Volume Total: ${sys.vol.toFixed(1)} mL (capacidade: ${sys.maxVol} mL)
-- Sistema Físico: ${sys.isClosed ? 'FECHADO COM ROLHA' : 'ABERTO À ATMOSFERA'}
-- Agitador Magnético: ${agitadorAtivo ? 'LIGADO' : 'DESLIGADO'}
-- Espécies no vaso: [${especiesVaso}]
+- Temperatura: ${sys.temp.toFixed(1)} °C
+- Pressão: ${sys.pressao.toFixed(2)} atm
+- pH Atual: ${calcularpH().toFixed(2)}
+- Volume: ${sys.vol.toFixed(1)} mL (Capacidade máxima: ${sys.maxVol} mL)
+- Sistema Físico: ${sys.isClosed ? 'Fechado com rolha' : 'Aberto à atmosfera'}
+- Agitador Magnético: ${agitadorAtivo ? 'Ativo' : 'Desligado'}
+- Espécies presentes no vaso: [${especiesVaso}]
 `.trim();
+
+    // Mantém o histórico recente (janela deslizante de 8 turnos)
+    this.historicoChatLab.push({ autor: 'estudante', texto: msgUsuario });
+    if (this.historicoChatLab.length > 8) this.historicoChatLab.shift();
 
     const payload = {
       acao: 'consultarPreceptorIA',
       duvida: msgUsuario,
-      contexto: contextoBancada
+      contexto: contextoBancada,
+      historico: this.historicoChatLab
     };
 
     const res = await fetch(gateway, {
@@ -349,45 +356,27 @@ const LabPreceptorEngine = {
     }
 
     const data = await res.json();
-    const textoResposta = data.resposta || data.conteudo || data.mensagem;
-    
+    const textoResposta = data.resposta || data.conteudo || data.falaPaciente || data.mensagem;
+
     if (!textoResposta) {
       throw new Error(data.erro || 'O backend retornou uma resposta sem conteúdo textual.');
     }
+
+    // Registra a fala do preceptor no histórico para contexto imediato da próxima pergunta
+    this.historicoChatLab.push({ autor: 'preceptor', texto: textoResposta });
+    if (this.historicoChatLab.length > 8) this.historicoChatLab.shift();
 
     return textoResposta;
   },
 
   // =========================================================================
-  // 3. PROCESSAMENTO CIENTÍFICO E VALIDAÇÃO DE ESCOPO
+  // 3. MOTOR PRINCIPAL DE PROCESSAMENTO EM CASCATA
   // =========================================================================
   async processarMensagem(msgUsuario, sys, calcularpH, agitadorAtivo) {
     const texto = msgUsuario.toLowerCase().trim();
     const textoNorm = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // Verificação rigorosa de escopo científico (Química, Farmácia, Física, Biologia, Laboratório)
-    const termosAceitos = [
-      'quimica', 'farmacia', 'fisica', 'biologia', 'sintese', 'reacao', 'reagente', 'solucao', 
-      'concentracao', 'mol', 'ph', 'temperatura', 'pressao', 'aspirina', 'paracetamol', 'dipirona', 
-      'ibuprofeno', 'diclofenaco', 'losartana', 'captopril', 'metformina', 'amoxicilina', 'omeprazol', 
-      'diazepam', 'fluoxetina', 'sertralina', 'atorvastatina', 'sildenafila', 'acido', 'base', 'sal', 
-      'ester', 'alcool', 'metal', 'precipitado', 'vaso', 'vidraria', 'bancada', 'farmacotécnica', 
-      'farmacologia', 'toxicologia', 'biodestilação', 'mecanismo', 'catalisador', 'como', 'o que', 
-      'qual', 'por que', 'ajuda', 'diagnostico', 'status', 'misturar', 'adicionar'
-    ];
-
-    // Se a pergunta for totalmente fora do escopo científico (ex: entretenimento, política, futebol), barre com elegância
-    const foraDeEscopo = !termosAceitos.some(termo => textoNorm.includes(termo)) && texto.length > 5;
-    if (foraDeEscopo && !textoNorm.includes("ola") && !textoNorm.includes("bom dia") && !textoNorm.includes("boa tarde")) {
-      return `
-🧪 **Escopo do Preceptor Acadêmico:**
-Como Químico Farmacêutico e Preceptor de Bancada, minhas orientações são restritas aos domínios da **Química, Farmácia, Física, Biologia, Farmacotécnica e Operações Laboratoriais**. 
-
-Por favor, direcione sua dúvida para os fenômenos da bancada, propriedades moleculares, mecanismos reacionais ou rotas de síntese farmacêutica. Como posso ajudar com sua prática científica hoje?
-      `.trim();
-    }
-
-    // 1. Diagnóstico da vidraria atual
+    // 1. Diagnóstico rápido do vaso atual
     if (textoNorm.includes("o que tem") || textoNorm.includes("acontecendo") || textoNorm.includes("analis") || textoNorm.includes("diagnostico") || textoNorm.includes("status")) {
       const diag = this.gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo);
       return `
@@ -400,7 +389,7 @@ ${diag.detalhes}
       `.trim();
     }
 
-    // 2. Predição de incompatibilidades e reações imediatas
+    // 2. Predição de incompatibilidades e reações imediatas da bancada
     if (textoNorm.includes("acontece se") || textoNorm.includes("misturar") || textoNorm.includes("adicionar") || textoNorm.includes("colocar")) {
       if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
         for (const [reag, info] of Object.entries(LAB_DATABASE.species)) {
@@ -411,7 +400,7 @@ ${diag.detalhes}
       }
     }
 
-    // 3. Extração do composto pesquisado para busca no acervo
+    // 3. Extração limpa para busca em acervo de síntese
     const termoComposto = textoNorm
       .replace(/como sintetizar|como fazer|rota de sintese de|sintese de|sintetizar|como preparar|preparo de|reacao de|fazer/gi, '')
       .replace(/[?.,!]/g, '')
@@ -462,15 +451,16 @@ ${diag.detalhes}
           }
         }
       } catch (e) {
-        console.warn('[Preceptor] Cache global indisponível:', e);
+        console.warn('[Preceptor] Cache global não respondeu:', e);
       }
     }
 
-    // --- CAMADA 3: Disparo Cognitivo ao Cluster Groq 120B ---
+    // --- CAMADA 3: Disparo Cognitivo Aberto via Cluster Groq ---
+    // Envia qualquer dúvida sobre química, farmácia, física, biologia, bancada ou cálculo analítico
     try {
       const respostaIA = await this.consultarGroqRemoto(msgUsuario, sys, calcularpH, agitadorAtivo);
 
-      // Persistência em segundo plano na planilha para aprendizado coletivo
+      // Persistência em segundo plano na planilha para alimentar o aprendizado coletivo
       if (termoComposto.length >= 3 && gateway) {
         fetch(gateway, {
           method: 'POST',
@@ -486,20 +476,20 @@ ${diag.detalhes}
         }).catch(() => {});
       }
 
-      return `${respostaIA}\n\n*(👨‍🔬 Orientações validadas pelo Químico Farmacêutico & Groq 120B)*`;
+      return `${respostaIA}\n\n*(👨‍🔬 Orientações validadas pelo Químico Farmacêutico)*`;
 
     } catch (erroGroq) {
       console.error('[Preceptor IA Error]:', erroGroq);
 
       return `
-⚠️ **Instabilidade na conexão com o Preceptor Sênior (Groq 120B).**
+⚠️ **Instabilidade na conexão com o Preceptor Sênior.**
 *Detalhe técnico:* \`${erroGroq.message || erroGroq}\`
 
 **Parâmetros Atuais da Bancada:**
 * **Temperatura:** ${sys.temp.toFixed(1)} °C | **pH:** ${calcularpH().toFixed(2)} | **Volume:** ${sys.vol.toFixed(1)} mL
-* **Agitador:** ${agitadorAtivo ? 'Ligado' : 'Desligado'} | **Sistema:** ${sys.isClosed ? 'Fechado' : 'Aberto'}
+* **Agitador:** ${agitadorAtivo ? 'Ligado' : 'Desligado'} | **Sistema:** ${sys.isClosed ? 'Fechado com rolha' : 'Aberto'}
 
-*Sugestão:* Você pode consultar rotas farmaceuticas de alta velocidade: **Dipirona**, **Aspirina**, **Paracetamol**, **Ibuprofeno**, **Diclofenaco**, **Captopril**, **Losartana**, **Amoxicilina** ou **Omeprazol**.
+*Sugestão:* A base local contínua pronta para responder sobre: **Dipirona**, **Aspirina**, **Paracetamol**, **Ibuprofeno**, **Diclofenaco**, **Captopril**, **Losartana**, **Amoxicilina** ou **Omeprazol**.
       `.trim();
     }
   },
@@ -542,7 +532,7 @@ ${diag.detalhes}
     }
 
     if (['CaCO3_s', 'NaHCO3_s', 'NaHCO3_aq', 'Na2CO3_aq'].includes(reagenteAlvo) && temAcido) {
-      return "🧪 **Reação de Efervescência:** Ocorre liberação rápida de **Dióxido de Carbono (CO₂)**. Atenção estricta à sobrepressão caso utilize vidraria fechada com rolha.";
+      return "🧪 **Reação de Efervescência:** Ocorre liberação rápida de **Dióxido de Carbono (CO₂)**. Atenção estrita à sobrepressão caso utilize vidraria fechada com rolha.";
     }
 
     return "A adição deste reagente modificará a estequiometria e o equilíbrio iônico do meio. Acompanhe a curva de titulação e o pH após o despejo.";
@@ -568,9 +558,14 @@ window.limparChatPreceptor = function() {
   const chatBox = document.getElementById('labChatMessages');
   if (!chatBox) return;
 
+  // Reseta o histórico de conversas do Preceptor
+  if (window.LabPreceptorEngine) {
+    window.LabPreceptorEngine.historicoChatLab = [];
+  }
+
   chatBox.innerHTML = `
     <div class="lab-chat-msg msg-preceptor">
-      Bancada sob supervisão do <strong>Químico Farmacêutico & Preceptor LAIFT</strong>. Como posso auxiliar na sua prática, cálculo estequiométrico ou rota de síntese hoje?
+      Bancada sob supervisão do <strong>Químico Farmacêutico & Preceptor LAIFT</strong>. Como posso auxiliar na sua prática, cálculo estequiométrico, rota de síntese ou fundamentos analíticos hoje?
       <div class="chip-container">
         <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Dipirona?')">💊 Síntese de Dipirona</button>
         <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Aspirina?')">🧪 Rota da Aspirina</button>
