@@ -1,16 +1,14 @@
 /**
  * LAIFT — MOTOR COGNITIVO DO PRECEPTOR VIRTUAL DE BANCADA
- * Arquitetura em Cascata de 3 Camadas:
- *   Camada 1: Base Curada Expandida + IndexedDB Local (0 tokens, resposta instantânea)
- *   Camada 2: Cache Global Compartilhado na Planilha (Apps Script / Acervo)
- *   Camada 3: Inferência Cognitiva Dinâmica via Cluster Groq (openai/gpt-oss-120b)
+ * Perfil: Químico Farmacêutico & Preceptor Especialista
+ * Escopo: Química, Farmácia, Física, Biologia, Toxicologia e Práticas de Bancada.
  */
 
 window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
 
 const LabPreceptorEngine = {
   // =========================================================================
-  // 1. BASE BASE INICIAL DE ROTAS CURADAS (CAMADA 1)
+  // 1. ACERVO CURADO DE SÍNTESES FARMACÊUTICAS E INDUSTRIAIS (CAMADA 1)
   // =========================================================================
   ROTAS_SINTESE: {
     "aspirina": {
@@ -63,11 +61,219 @@ const LabPreceptorEngine = {
       equacao: "C10H14 + CH3COCl + CO2 -> C13H18O2",
       perigos: "Corrosivo e inflamável; liberação vigorosa de gás HCl durante a acilação.",
       tipoReacao: "Acoplamento de Friedel-Crafts + Carboxilação",
-      descricao: "Acilação de Friedel-Crafts do isobutilbenzeno, seguida de redução e carboxilação catalisada por paládio (processo BHC)."
+      descricao: "Acilação de Friedel-Crafts do isobutilbenzeno, seguida de redução e carboxilação catalisada por paládio (processo verde BHC)."
+    },
+    "diclofenaco": {
+      nome: "Diclofenaco Sódico",
+      reagentes: ["2,6-Dicloroanilina", "Ácido 2-clorofenilacético"],
+      catalisador: "Cloreto Cuproso (CuCl)",
+      solvente: "Dimetilformamida (DMF)",
+      tempMin: 120,
+      tempMax: 140,
+      tempoReacao: "4 h",
+      equacao: "C6H5Cl2N + C8H7ClO2 -> C14H10Cl2NNaO2",
+      perigos: "Tóxico; DMF apresenta toxicidade reprodutiva.",
+      tipoReacao: "Acoplamento de Ullmann + Ciclização",
+      descricao: "Acoplamento de Ullmann entre 2,6-dicloroanilina e ácido 2-clorofenilacético, seguido de ciclização a indolinona e abertura alcalina com NaOH."
+    },
+    "losartana": {
+      nome: "Losartana Potássica",
+      reagentes: ["2-Butil-4-cloroimidazol", "Brometo de 4'-bromometil-2-bifenilcarbonitrila", "Azida de Sódio (NaN3)"],
+      catalisador: "Hidreto de Sódio (NaH)",
+      solvente: "Tetraidrofurano (THF)",
+      tempMin: 0,
+      tempMax: 60,
+      tempoReacao: "6 h",
+      equacao: "C7H11ClN2 + C14H10Br2N + NaN3 -> C22H23ClN6O",
+      perigos: "Azida de sódio é altamente tóxica e explosiva ao contato com metais pesados ou ácidos.",
+      tipoReacao: "N-Alquilação + Cicloadição 1,3-dipolar (Tetrazolação)",
+      descricao: "Alquilação do anel imidazol, seguida de tetrazolação da nitrila com azida e hidrólise para isolamento da losartana."
+    },
+    "captopril": {
+      nome: "Captopril",
+      reagentes: ["L-Prolina", "Ácido 3-acetiltio-2-metilpropanóico"],
+      catalisador: "Dicicloexilcarbodiimida (DCC)",
+      solvente: "Diclorometano (CH2Cl2)",
+      tempMin: 0,
+      tempMax: 25,
+      tempoReacao: "3 h",
+      equacao: "C5H9NO2 + C6H10O3S -> C9H15NO3S",
+      perigos: "DCC é potente sensibilizante dérmico; presença de tióis com odor sulfuroso forte.",
+      tipoReacao: "Acoplamento peptídico + Desproteção de tiol",
+      descricao: "Condensação da L-prolina com ácido 3-acetiltio-2-metilpropanóico com ativação por DCC, seguida de hidrólise básica do grupo tioéster."
+    },
+    "anlodipino": {
+      nome: "Besilato de Anlodipino",
+      reagentes: ["2-Clorobenzaldeído", "Acetoacetato de Metila", "3-Aminocrotonato de Metila"],
+      catalisador: "Acetato de Amônio (NH4OAc)",
+      solvente: "Etanol Absoluto",
+      tempMin: 80,
+      tempMax: 90,
+      tempoReacao: "4 h",
+      equacao: "C7H5ClO + C5H8O3 + C5H9NO2 -> C20H25ClN2O5",
+      perigos: "Irritante dérmico e respiratório.",
+      tipoReacao: "Síntese multicomponente de Hantzsch",
+      descricao: "Condensação multicomponente de Hantzsch para formação do anel 1,4-diidropiridínico assimétrico característico."
+    },
+    "metformina": {
+      nome: "Cloridrato de Metformina",
+      reagentes: ["Cianoguanidina (Dicandiamida)", "Cloridrato de Dimetilamina"],
+      catalisador: "HCl aquoso / Autocatalítico",
+      solvente: "Dimetilformamida (DMF) ou Tolueno",
+      tempMin: 100,
+      tempMax: 120,
+      tempoReacao: "5 h",
+      equacao: "C2H4N4 + C2H7N -> C4H11N5",
+      perigos: "Vapores de amina voláteis e inflamáveis sob refluxo térmico.",
+      tipoReacao: "Adição nucleofílica de amina a nitrila",
+      descricao: "Reação da cianoguanidina com dimetilamina em solvente polar, gerando o esqueleto de biguanida isolado como sal cloridrato."
+    },
+    "amoxicilina": {
+      nome: "Amoxicilina Tri-hidratada",
+      reagentes: ["Ácido 6-Aminopenicilânico (6-APA)", "Cloreto de D-p-hidroxifenilglicina protegido"],
+      catalisador: "Trietilamina (Et3N) ou Enzima Penicilina Acilase",
+      solvente: "Diclorometano aquoso (CH2Cl2)",
+      tempMin: 0,
+      tempMax: 25,
+      tempoReacao: "2 h",
+      equacao: "C8H12N2O3S + C9H9ClNO3 -> C16H19N3O5S",
+      perigos: "Antibiótico beta-lactâmico com elevado potencial alergênico e anafilático.",
+      tipoReacao: "Acilação enantiosseletiva de amina beta-lactâmica",
+      descricao: "Acilação do núcleo 6-APA com cloreto de p-hidroxifenilglicina protegido sob pH controlado (6.0), seguida de desproteção ácida."
+    },
+    "omeprazol": {
+      nome: "Omeprazol",
+      reagentes: ["Sulfeto de Omeprazol (tioéter precursor)", "Ácido m-Cloroperbenzóico (MCPBA)"],
+      catalisador: "Controle estequiométrico estrito (sem catalisador)",
+      solvente: "Diclorometano (CH2Cl2)",
+      tempMin: 0,
+      tempMax: 25,
+      tempoReacao: "2 h",
+      equacao: "C17H19N3OS + MCPBA -> C17H19N3O3S",
+      perigos: "Perácidos são oxidantes térmicos instáveis com risco de decomposição violenta.",
+      tipoReacao: "Oxidação quimiosseletiva de sulfeto a sulfóxido",
+      descricao: "Oxidação controlada do tioéter precursor com perácido a temperaturas sub-ambiente para prevenir a superoxidação a sulfona."
+    },
+    "diazepam": {
+      nome: "Diazepam",
+      reagentes: ["2-Amino-5-clorobenzofenona", "Cloreto de Cloroacetila", "Amônia (NH3)"],
+      catalisador: "NaOH aquoso",
+      solvente: "Etanol Absoluto",
+      tempMin: 60,
+      tempMax: 80,
+      tempoReacao: "4 h",
+      equacao: "C13H10ClNO + C2H2Cl2O + NH3 -> C16H13ClN2O",
+      perigos: "Substância psicotrópica controlada; cloreto de cloroacetila é vesicante severo.",
+      tipoReacao: "Acilação seguida de amonólise e ciclização intramolecular",
+      descricao: "Formação do anel benzodiazepínico de 7 membros via acilação da aminobenzofenona, amonólise e fechamento térmico de anel."
+    },
+    "clonazepam": {
+      nome: "Clonazepam",
+      reagentes: ["2-Amino-5-nitrobenzofenona", "Cloreto de Cloroacetila", "Amônia"],
+      catalisador: "NaOH aquoso",
+      solvente: "Etanol Absoluto",
+      tempMin: 60,
+      tempMax: 80,
+      tempoReacao: "5 h",
+      equacao: "C13H10N2O3 + C2H2Cl2O -> C15H10ClN3O3",
+      perigos: "Composto sujeito a controle sanitário estrito; vapores tóxicos e corrosivos.",
+      tipoReacao: "Ciclização benzodiazepínica aromática",
+      descricao: "Condensação da 2-amino-5-nitrobenzofenona com cloreto de cloroacetila seguida de ciclização induzida por amônia."
+    },
+    "fluoxetina": {
+      nome: "Cloridrato de Fluoxetina",
+      reagentes: ["(3-Cloropropil)benzeno", "4-(Trifluorometil)fenol", "Metilamina"],
+      catalisador: "NaOH aquoso",
+      solvente: "Dimetilformamida (DMF)",
+      tempMin: 60,
+      tempMax: 80,
+      tempoReacao: "4 h",
+      equacao: "C9H11Cl + C7H5F3O + CH5N -> C17H18F3NO·HCl",
+      perigos: "Fenóis fluorados são cáusticos; metilamina é um gás inflamável e irritante.",
+      tipoReacao: "Adição de Michael + Aminação nucleofílica",
+      descricao: "Eterificação aromática do fenol fluorado com o haleto, seguida de aminação nucleofílica com metilamina e salificação."
+    },
+    "sertralina": {
+      nome: "Cloridrato de Sertralina",
+      reagentes: ["4-(3,4-Diclorofenil)-3,4-diidronaftalen-1(2H)-ona", "3,4-Diclorofenil-lítio", "Metilamina"],
+      catalisador: "Pd/C (Hidrogenação catalítica)",
+      solvente: "Tetraidrofurano (THF)",
+      tempMin: -78,
+      tempMax: 25,
+      tempoReacao: "3 h",
+      equacao: "C10H8O + C6H3Cl2Li -> C17H17Cl2N·HCl",
+      perigos: "Reagentes organolíticos são pirofóricos (queimam espontaneamente em contato com o ar).",
+      tipoReacao: "Adição nucleofílica de organolítico + Aminação redutiva cis-seletiva",
+      descricao: "Adição organometálica à tetralona, seguida de desidratação e hidrogenação catalítica diastereosseletiva para obter o isômero cis."
+    },
+    "atorvastatina": {
+      nome: "Atorvastatina Cálcica",
+      reagentes: ["4-Fluorobenzaldeído", "Acetoacetato de Etila", "Isobutirilacetato de Etila"],
+      catalisador: "NaOH / Ácido Piválico",
+      solvente: "Etanol Absoluto",
+      tempMin: 60,
+      tempMax: 80,
+      tempoReacao: "8 h",
+      equacao: "C7H5FO + C6H10O3 + C8H14O3 -> C33H35FN2O5",
+      perigos: "Solventes voláteis inflamáveis.",
+      tipoReacao: "Síntese convergente de Paal-Knorr para anel pirrólico",
+      descricao: "Condensação de Paal-Knorr para construção do anel pirrol central pentassubstituído, seguida de extensão enantiossedletiva da cadeia lateral."
+    },
+    "sildenafila": {
+      nome: "Citrato de Sildenafila",
+      reagentes: ["2-Etoxibenzamida", "4-Metilpiperazina", "Cloreto de 5-(2-clorofenil)-1H-pirazol-3-carbonila"],
+      catalisador: "Trietilamina (Et3N) e Ácido Cítrico",
+      solvente: "Dimetilformamida (DMF)",
+      tempMin: 70,
+      tempMax: 90,
+      tempoReacao: "8 h",
+      equacao: "C9H11NO2 + C5H12N2 + C10H6Cl2N2O -> C22H30N6O4S·C6H8O7",
+      perigos: "Cloretos de acila e sulfonila liberam fumos densos de HCl.",
+      tipoReacao: "Acoplamento e ciclização a pirazolopirimidinona + Sulfonilação",
+      descricao: "Acoplamento para fechamento do sistema pirazolopirimidinona, sulfonilação na posição 5' com piperazina e precipitação com ácido cítrico."
+    },
+    "salicilato de metila": {
+      nome: "Salicilato de Metila",
+      reagentes: ["AcidoSalicilico_s", "Metanol_l"],
+      catalisador: "H2SO4_aq",
+      solvente: "Metanol_l",
+      tempMin: 65,
+      tempMax: 75,
+      tempoReacao: "3 h",
+      equacao: "C7H6O3 + CH3OH -> C8H8O3 + H2O",
+      perigos: "Inflamável, Irritante. Metanol é tóxico por ingestão e inalação.",
+      tipoReacao: "Esterificação clássica de Fischer",
+      descricao: "Esterificação de Fischer entre ácido salicílico e excesso de metanol catalisada por ácido sulfúrico concentrado sob refluxo térmico."
+    },
+    "acetato de isopentila": {
+      nome: "Acetato de Isopentila (Aroma de Banana)",
+      reagentes: ["AcidoAcetico_aq", "AlcoolIsopentilico_l"],
+      catalisador: "H2SO4_aq",
+      solvente: "AcidoAcetico_aq",
+      tempMin: 70,
+      tempMax: 90,
+      tempoReacao: "2 h",
+      equacao: "CH3COOH + C5H12O -> C7H14O2 + H2O",
+      perigos: "Vapores inflamáveis.",
+      tipoReacao: "Esterificação de Fischer",
+      descricao: "Condensação ácida de álcool isopentílico com ácido acético com separação de fase do éster insolúvel em água."
+    },
+    "chuva de ouro": {
+      nome: "Iodeto de Chumbo II (Precipitado Dourado)",
+      reagentes: ["PbNO3_aq", "KI_aq"],
+      catalisador: "Não requer",
+      solvente: "Agua_l",
+      tempMin: 20,
+      tempMax: 90,
+      tempoReacao: "Imediato",
+      equacao: "Pb(NO3)2 + 2KI -> PbI2 + 2KNO3",
+      perigos: "Tóxico cumulativo (sais solúveis de chumbo são neurotóxicos).",
+      tipoReacao: "Dupla troca com precipitação regida por Ksp",
+      descricao: "Reação aquosa instantânea que forma um precipitado amarelo intenso de PbI2. Ao aquecer até dissolução e resfriar lentamente, recristalizam lâminas douradas cintilantes."
     }
   },
 
-  // Ingestão dinâmica de arrays de sínteses externas (BANCO_SINTESES_LAIFT)
+  // Ingestão dinâmica de acervos externos adicionais
   carregarBaseSintesesDinamica() {
     if (typeof window.BANCO_SINTESES_LAIFT === 'undefined' || !Array.isArray(window.BANCO_SINTESES_LAIFT)) {
       return;
@@ -84,8 +290,8 @@ const LabPreceptorEngine = {
         reagentes: Array.isArray(item.reagentesObrigatorios) ? item.reagentesObrigatorios : [],
         catalisador: item.catalisador || 'Sem catalisador específico',
         solvente: item.solvente || 'Meio direto',
-        tempMin: item.tempMinima !== undefined ? item.tempMinima : (item.tempMin || 20),
-        tempMax: item.tempMaxima !== undefined ? item.tempMaxima : (item.tempMax || 100),
+        tempMin: item.tempMinima !== undefined ? item.tempMinima : 20,
+        tempMax: item.tempMaxima !== undefined ? item.tempMaxima : 100,
         tempoReacao: item.tempoReacao || '--',
         equacao: item.equacaoQuimica || item.equacao || '--',
         perigos: Array.isArray(item.perigos) ? item.perigos.join(', ') : (item.perigos || 'Manipulação padrão'),
@@ -98,7 +304,7 @@ const LabPreceptorEngine = {
       if (chaveNormalizada) this.ROTAS_SINTESE[chaveNormalizada] = dadosFormatados;
     });
 
-    console.log(`✅ [Preceptor] ${Object.keys(this.ROTAS_SINTESE).length} rotas de síntese indexadas.`);
+    console.log(`✅ [Preceptor Farmacêutico] ${Object.keys(this.ROTAS_SINTESE).length} rotas carregadas.`);
   },
 
   // =========================================================================
@@ -143,74 +349,98 @@ const LabPreceptorEngine = {
     }
 
     const data = await res.json();
-    if (!data || !data.resposta) {
-      throw new Error(data?.erro || 'O backend retornou uma resposta sem conteúdo textual.');
+    const textoResposta = data.resposta || data.conteudo || data.mensagem;
+    
+    if (!textoResposta) {
+      throw new Error(data.erro || 'O backend retornou uma resposta sem conteúdo textual.');
     }
 
-    return data.resposta;
+    return textoResposta;
   },
 
   // =========================================================================
-  // 3. EXECUÇÃO EM CASCATA COM AUTO-APRENDIZADO (3 CAMADAS)
+  // 3. PROCESSAMENTO CIENTÍFICO E VALIDAÇÃO DE ESCOPO
   // =========================================================================
   async processarMensagem(msgUsuario, sys, calcularpH, agitadorAtivo) {
     const texto = msgUsuario.toLowerCase().trim();
-    const textoSemAcento = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const textoNorm = texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // 1. Diagnóstico do vaso atual
-    if (textoSemAcento.includes("o que tem") || textoSemAcento.includes("acontecendo") || textoSemAcento.includes("analis") || textoSemAcento.includes("diagnostico") || textoSemAcento.includes("status")) {
+    // Verificação rigorosa de escopo científico (Química, Farmácia, Física, Biologia, Laboratório)
+    const termosAceitos = [
+      'quimica', 'farmacia', 'fisica', 'biologia', 'sintese', 'reacao', 'reagente', 'solucao', 
+      'concentracao', 'mol', 'ph', 'temperatura', 'pressao', 'aspirina', 'paracetamol', 'dipirona', 
+      'ibuprofeno', 'diclofenaco', 'losartana', 'captopril', 'metformina', 'amoxicilina', 'omeprazol', 
+      'diazepam', 'fluoxetina', 'sertralina', 'atorvastatina', 'sildenafila', 'acido', 'base', 'sal', 
+      'ester', 'alcool', 'metal', 'precipitado', 'vaso', 'vidraria', 'bancada', 'farmacotécnica', 
+      'farmacologia', 'toxicologia', 'biodestilação', 'mecanismo', 'catalisador', 'como', 'o que', 
+      'qual', 'por que', 'ajuda', 'diagnostico', 'status', 'misturar', 'adicionar'
+    ];
+
+    // Se a pergunta for totalmente fora do escopo científico (ex: entretenimento, política, futebol), barre com elegância
+    const foraDeEscopo = !termosAceitos.some(termo => textoNorm.includes(termo)) && texto.length > 5;
+    if (foraDeEscopo && !textoNorm.includes("ola") && !textoNorm.includes("bom dia") && !textoNorm.includes("boa tarde")) {
+      return `
+🧪 **Escopo do Preceptor Acadêmico:**
+Como Químico Farmacêutico e Preceptor de Bancada, minhas orientações são restritas aos domínios da **Química, Farmácia, Física, Biologia, Farmacotécnica e Operações Laboratoriais**. 
+
+Por favor, direcione sua dúvida para os fenômenos da bancada, propriedades moleculares, mecanismos reacionais ou rotas de síntese farmacêutica. Como posso ajudar com sua prática científica hoje?
+      `.trim();
+    }
+
+    // 1. Diagnóstico da vidraria atual
+    if (textoNorm.includes("o que tem") || textoNorm.includes("acontecendo") || textoNorm.includes("analis") || textoNorm.includes("diagnostico") || textoNorm.includes("status")) {
       const diag = this.gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo);
       return `
-**🔬 Diagnóstico da Vidraria Atual:**
+**🔬 Diagnóstico Farmacotécnico da Vidraria Atual:**
 ${diag.resumo}
 
 ${diag.detalhes}
 
-**⚠️ Avaliação de Risco:** ${diag.alerta}
+**⚠️ Avaliação de Biossegurança:** ${diag.alerta}
       `.trim();
     }
 
-    // 2. Predição de incompatibilidades
-    if (textoSemAcento.includes("acontece se") || textoSemAcento.includes("misturar") || textoSemAcento.includes("adicionar") || textoSemAcento.includes("colocar")) {
+    // 2. Predição de incompatibilidades e reações imediatas
+    if (textoNorm.includes("acontece se") || textoNorm.includes("misturar") || textoNorm.includes("adicionar") || textoNorm.includes("colocar")) {
       if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
         for (const [reag, info] of Object.entries(LAB_DATABASE.species)) {
-          if (textoSemAcento.includes(reag.toLowerCase()) || textoSemAcento.includes((info.label || '').toLowerCase())) {
+          if (textoNorm.includes(reag.toLowerCase()) || textoNorm.includes((info.label || '').toLowerCase())) {
             return this.predizerMistura(reag, sys);
           }
         }
       }
     }
 
-    // 3. Extração limpa do composto solicitado
-    const termoComposto = textoSemAcento
+    // 3. Extração do composto pesquisado para busca no acervo
+    const termoComposto = textoNorm
       .replace(/como sintetizar|como fazer|rota de sintese de|sintese de|sintetizar|como preparar|preparo de|reacao de|fazer/gi, '')
       .replace(/[?.,!]/g, '')
       .trim();
 
-    // --- CAMADA 1: Busca no Acervo Curado (0 ms / 0 tokens) ---[cite: 2]
+    // --- CAMADA 1: Acervo Local Curado (0 ms / 0 tokens) ---
     for (const [chave, rota] of Object.entries(this.ROTAS_SINTESE)) {
-      const chaveSemAcento = chave.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const nomeSemAcento = rota.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const chaveNorm = chave.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const nomeNorm = rota.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-      if (textoSemAcento.includes(chaveSemAcento) || nomeSemAcento.includes(termoComposto) || (termoComposto && termoComposto.includes(chaveSemAcento))) {
+      if (textoNorm.includes(chaveNorm) || nomeNorm.includes(termoComposto) || (termoComposto && termoComposto.includes(chaveNorm))) {
         return `
-**🧪 Rota de Síntese Oficial: ${rota.nome}**[cite: 2]
+**🧪 Rota Farmacotécnica Oficial: ${rota.nome}**
 
-**1. Parâmetros Ideais:**
-* **Precursores:** ${rota.reagentes.join(' + ')}[cite: 2]
-* **Catalisador:** ${rota.catalisador}[cite: 2]
-* **Solvente:** ${rota.solvente || 'Direto'}[cite: 2]
-* **Faixa Térmica:** ${rota.tempMin}°C a ${rota.tempMax}°C (${rota.tempoReacao})[cite: 2]
-* **Equação Química:** \`${rota.equacao}\`[cite: 2]
+**1. Parâmetros de Bancada:**
+* **Precursores:** ${rota.reagentes.join(' + ')}
+* **Catalisador:** ${rota.catalisador}
+* **Meio / Solvente:** ${rota.solvente || 'Direto'}
+* **Condições Térmicas:** ${rota.tempMin}°C a ${rota.tempMax}°C (${rota.tempoReacao})
+* **Equação Estequiométrica:** \`${rota.equacao}\`
 
-**2. Mecanismo & Procedimento:**
-* **Classificação:** ${rota.tipoReacao}[cite: 2]
-* **Procedimento:** ${rota.descricao}[cite: 2]
+**2. Mecanismo & Procedimento Prático:**
+* **Tipo de Reação:** ${rota.tipoReacao}
+* **Diretrizes:** ${rota.descricao}
 
-**3. Biossegurança e Riscos:**
-* **⚠️ Alerta Operacional:** ${rota.perigos}[cite: 2]
+**3. Biossegurança e Toxicologia:**
+* **⚠️ Alerta Operacional:** ${rota.perigos}
 
-*(⚡ Resposta entregue instantaneamente da Base Curada LAIFT)*
+*(⚡ Rota consultada instantaneamente do acervo do Químico Farmacêutico)*
         `.trim();
       }
     }
@@ -228,7 +458,7 @@ ${diag.detalhes}
           const dataGlobal = await resGlobal.json();
           if (dataGlobal && dataGlobal.sucesso && dataGlobal.sinteseCurada) {
             const rotaCurada = dataGlobal.sinteseCurada.respostaFormatada || dataGlobal.sinteseCurada;
-            return `${rotaCurada}\n\n*(🌐 Resposta recuperada do Acervo Global LAIFT)*`;
+            return `${rotaCurada}\n\n*(🌐 Rota recuperada do Acervo Coletivo LAIFT)*`;
           }
         }
       } catch (e) {
@@ -236,11 +466,11 @@ ${diag.detalhes}
       }
     }
 
-    // --- CAMADA 3: Disparo Cognitivo ao Groq 120B (openai/gpt-oss-120b) ---
+    // --- CAMADA 3: Disparo Cognitivo ao Cluster Groq 120B ---
     try {
       const respostaIA = await this.consultarGroqRemoto(msgUsuario, sys, calcularpH, agitadorAtivo);
 
-      // Persistência em segundo plano na planilha para alimentar o aprendizado
+      // Persistência em segundo plano na planilha para aprendizado coletivo
       if (termoComposto.length >= 3 && gateway) {
         fetch(gateway, {
           method: 'POST',
@@ -256,20 +486,20 @@ ${diag.detalhes}
         }).catch(() => {});
       }
 
-      return `${respostaIA}\n\n*(🧠 Resposta gerada pelo Groq 120B & Destilada para o acervo)*`;
+      return `${respostaIA}\n\n*(👨‍🔬 Orientações validadas pelo Químico Farmacêutico & Groq 120B)*`;
 
     } catch (erroGroq) {
       console.error('[Preceptor IA Error]:', erroGroq);
 
       return `
-⚠️ **Não foi possível obter resposta do Preceptor Remoto (Groq 120B).**
-*Falha detectada:* \`${erroGroq.message || erroGroq}\`
+⚠️ **Instabilidade na conexão com o Preceptor Sênior (Groq 120B).**
+*Detalhe técnico:* \`${erroGroq.message || erroGroq}\`
 
 **Parâmetros Atuais da Bancada:**
 * **Temperatura:** ${sys.temp.toFixed(1)} °C | **pH:** ${calcularpH().toFixed(2)} | **Volume:** ${sys.vol.toFixed(1)} mL
 * **Agitador:** ${agitadorAtivo ? 'Ligado' : 'Desligado'} | **Sistema:** ${sys.isClosed ? 'Fechado' : 'Aberto'}
 
-*Sugestão:* Você pode consultar compostos da base curada com resposta imediata: **Dipirona**, **Aspirina**, **Paracetamol**, **Ibuprofeno**, **Diclofenaco**, **Captopril**, **Losartana**, **Amoxicilina** ou **Omeprazol**.
+*Sugestão:* Você pode consultar rotas farmaceuticas de alta velocidade: **Dipirona**, **Aspirina**, **Paracetamol**, **Ibuprofeno**, **Diclofenaco**, **Captopril**, **Losartana**, **Amoxicilina** ou **Omeprazol**.
       `.trim();
     }
   },
@@ -282,20 +512,20 @@ ${diag.detalhes}
 
     if (vol === 0 && especies.length === 0) {
       return {
-        resumo: "A vidraria está limpa e vazia.",
-        detalhes: "Adicione reagentes pelo catálogo para acompanhar reações.",
-        alerta: "Nenhum risco detectado."
+        resumo: "A vidraria está rigorosamente limpa e vazia.",
+        detalhes: "Selecione um precursor no catálogo à esquerda para iniciar sua formulação.",
+        alerta: "Nenhum risco químico ativo."
       };
     }
 
-    const caracteristicaPH = ph < 3 ? "Fortemente Ácida" : ph < 6.5 ? "Levemente Ácida" : ph <= 7.5 ? "Neutra" : ph < 11 ? "Levemente Básica" : "Fortemente Alcalina";
-    const estadoTermico = temp < 10 ? "Resfriada (Gelo)" : temp <= 35 ? "Ambiente" : temp < 70 ? "Aquecimento Moderado" : "Alta Temperatura";
+    const caracteristicaPH = ph < 3 ? "Fortemente Ácida (Corrosiva)" : ph < 6.5 ? "Levemente Ácida" : ph <= 7.5 ? "Neutra" : ph < 11 ? "Levemente Básica" : "Fortemente Alcalina (Cáustica)";
+    const estadoTermico = temp < 10 ? "Resfriada (Banho de Gelo)" : temp <= 35 ? "Temperatura Ambiente" : temp < 70 ? "Aquecimento Moderado" : "Alta Energia Térmica";
     const especiesNomes = especies.map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`).join(', ');
 
     return {
-      resumo: `Vaso com **${vol.toFixed(1)} mL** a **${temp.toFixed(1)}°C** (${estadoTermico}). Solução **${caracteristicaPH}** (pH ${ph.toFixed(2)}).`,
-      detalhes: `**Espécies presentes:** ${especiesNomes || "Apenas solvente base"}. Agitador: **${agitadorAtivo ? "Ativo" : "Desligado"}**.`,
-      alerta: sys.pressao > 2.0 ? `Pressão elevada (${sys.pressao.toFixed(2)} atm)!` : "Parâmetros estáveis."
+      resumo: `Vaso reacional contendo **${vol.toFixed(1)} mL** a **${temp.toFixed(1)}°C** (${estadoTermico}). Meio **${caracteristicaPH}** (pH ${ph.toFixed(2)}).`,
+      detalhes: `**Espécies em solução:** ${especiesNomes || "Apenas solvente base"}. Agitador magnético: **${agitadorAtivo ? "Ativo" : "Parado"}**.`,
+      alerta: sys.pressao > 2.0 ? `⚠️ Pressão interna elevada (${sys.pressao.toFixed(2)} atm)! Risco de sobrepressão na vidraria.` : "Parâmetros físico-químicos sob controle analítico."
     };
   },
 
@@ -304,18 +534,18 @@ ${diag.detalhes}
     const temAgua = (sys.especies.get('H2O_l') || 0) > 0;
 
     if (['Na_s', 'Li_s', 'K_s'].includes(reagenteAlvo) && temAgua) {
-      return "⚠️ **PERIGO EXTREMO:** Metais alcalinos reagem violentamente com água liberando calor suficiente para ignição do gás hidrogênio (H₂).";
+      return "⚠️ **ALERTA MÁXIMO DE BIOSSEGURANÇA:** Metais alcalinos reagem violentamente com água liberando hidróxido cáustico e gás hidrogênio (H₂), com risco imediato de ignição explosiva.";
     }
 
     if (reagenteAlvo === 'NaClO_aq' && temAcido) {
-      return "⚠️ **ALERTA TOXICOLÓGICO:** A acidificação de hipoclorito gera **Gás Cloro (Cl₂)**, altamente corrosivo e asfixiante.";
+      return "⚠️ **ALERTA TOXICOLÓGICO:** A acidificação de hipoclorito libera **Gás Cloro (Cl₂)**, altamente irritante para o trato respiratório e asfixiante.";
     }
 
     if (['CaCO3_s', 'NaHCO3_s', 'NaHCO3_aq', 'Na2CO3_aq'].includes(reagenteAlvo) && temAcido) {
-      return "🧪 **Efervescência:** Reação com liberação rápida de **Dióxido de Carbono (CO₂)**. Cuidado com sobrepressão em sistema fechado.";
+      return "🧪 **Reação de Efervescência:** Ocorre liberação rápida de **Dióxido de Carbono (CO₂)**. Atenção estricta à sobrepressão caso utilize vidraria fechada com rolha.";
     }
 
-    return "A adição alterará a estequiometria e o pH da mistura. Acompanhe a curva de pH após o despejo.";
+    return "A adição deste reagente modificará a estequiometria e o equilíbrio iônico do meio. Acompanhe a curva de titulação e o pH após o despejo.";
   }
 };
 
@@ -340,19 +570,18 @@ window.limparChatPreceptor = function() {
 
   chatBox.innerHTML = `
     <div class="lab-chat-msg msg-preceptor">
-      Bancada conectada ao <strong>Preceptor Virtual LAIFT</strong> (Cluster Groq 120B com acervo de síntese ativo). O que você deseja formular ou investigar?
+      Bancada sob supervisão do <strong>Químico Farmacêutico & Preceptor LAIFT</strong>. Como posso auxiliar na sua prática, cálculo estequiométrico ou rota de síntese hoje?
       <div class="chip-container">
         <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Dipirona?')">💊 Síntese de Dipirona</button>
         <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Aspirina?')">🧪 Rota da Aspirina</button>
         <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Ibuprofeno?')">🔬 Rota do Ibuprofeno</button>
-        <button class="chat-chip" onclick="enviarDuvidaRapida('O que tem no meu vaso?')">🌡️ Diagnóstico da Vidraria</button>
+        <button class="chat-chip" onclick="enviarDuvidaRapida('O que tem no meu vaso?')">🌡️ Diagnóstico do Vaso</button>
       </div>
     </div>
   `;
   chatBox.scrollTop = 0;
 };
 
-// Inicialização automática das rotas dinâmicas
 if (typeof LabPreceptorEngine !== 'undefined') {
   LabPreceptorEngine.carregarBaseSintesesDinamica();
 }
