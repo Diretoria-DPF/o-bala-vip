@@ -166,36 +166,43 @@
     async init() {
       if (this.db) return this.db;
       return new Promise((resolve) => {
-        const req = indexedDB.open('LAIFT_LocalChem_v2', 1);
-        req.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains('moleculas')) db.createObjectStore('moleculas', { keyPath: 'chave' });
-          if (!db.objectStoreNames.contains('respostasIA')) db.createObjectStore('respostasIA', { keyPath: 'pergunta' });
-        };
-        req.onsuccess = (e) => { this.db = e.target.result; resolve(this.db); };
-        req.onerror = () => resolve(null);
+        try {
+          if (!window.indexedDB) return resolve(null);
+          const req = indexedDB.open('LAIFT_LocalChem_v2', 1);
+          req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('moleculas')) db.createObjectStore('moleculas', { keyPath: 'chave' });
+            if (!db.objectStoreNames.contains('respostasIA')) db.createObjectStore('respostasIA', { keyPath: 'pergunta' });
+          };
+          req.onsuccess = (e) => { this.db = e.target.result; resolve(this.db); };
+          req.onerror = () => resolve(null);
+        } catch (err) {
+          resolve(null);
+        }
       });
     },
     async get(storeName, key) {
+      if (!key) return null;
       const db = await this.init();
       if (!db) return null;
       return new Promise((resolve) => {
         try {
           const tx = db.transaction(storeName, 'readonly');
-          const req = tx.objectStore(storeName).get(key.toLowerCase().trim());
+          const req = tx.objectStore(storeName).get(String(key).toLowerCase().trim());
           req.onsuccess = () => resolve(req.result ? req.result.dados : null);
           req.onerror = () => resolve(null);
         } catch (e) { resolve(null); }
       });
     },
     async set(storeName, key, dados) {
+      if (!key || !dados) return;
       const db = await this.init();
       if (!db) return;
       try {
         const tx = db.transaction(storeName, 'readwrite');
         tx.objectStore(storeName).put({
-          chave: key.toLowerCase().trim(),
-          pergunta: key.toLowerCase().trim(),
+          chave: String(key).toLowerCase().trim(),
+          pergunta: String(key).toLowerCase().trim(),
           dados: dados,
           ts: Date.now()
         });
@@ -236,6 +243,7 @@
   let viewer3D = null;
   let modoVisualizacao = '2D';
   let compostoAtualParaDossie = null;
+  let sdfCachePendente = null; // Buffer para conformação 3D enquanto no modo 2D
 
   const logEl = document.getElementById('logStream');
   const phCanvas = document.getElementById('phCanvas');
@@ -284,7 +292,7 @@
   }
 
   // =========================================================================
-  // 6. VISUALIZADOR 2D HÍBRIDO & 3D (3Dmol.js)
+  // 6. VISUALIZADOR 2D HÍBRIDO & 3D (3Dmol.js com proteção de Framebuffer 0x0)
   // =========================================================================
   function initSmilesDrawer() {
     try {
@@ -306,6 +314,26 @@
     }
   }
 
+  function renderizarCena3DBancada(sdfText) {
+    const div3D = document.getElementById('viewer3D');
+    if (!div3D || !window.$3Dmol || !sdfText) return;
+
+    // Proteção absoluta contra erro WebGL: Framebuffer has zero size
+    if (div3D.offsetWidth === 0 || div3D.offsetHeight === 0) return;
+
+    div3D.innerHTML = '';
+    viewer3D = $3Dmol.createViewer(div3D, { backgroundColor: '#020617' });
+    viewer3D.addModel(sdfText, "sdf");
+    viewer3D.setStyle({}, {
+      stick: { radius: 0.14, colorscheme: 'Jmol' },
+      sphere: { scale: 0.25, colorscheme: 'Jmol' }
+    });
+    viewer3D.zoomTo();
+    viewer3D.render();
+    viewer3D.resize();
+    viewer3D.animate({ loop: "backAndForth", step: 0.4 });
+  }
+
   window.setModoVisualizacao = function(modo) {
     modoVisualizacao = modo;
     const canvas2D = document.getElementById('moleculeCanvas');
@@ -319,6 +347,8 @@
 
     if (modo === '2D') {
       if (div3D) div3D.style.display = 'none';
+      if (viewer3D) viewer3D.stopAnimate();
+
       if (img2D && img2D.getAttribute('data-active') === 'true') {
         img2D.style.display = 'block';
         if (canvas2D) canvas2D.style.display = 'none';
@@ -331,10 +361,17 @@
       if (img2D) img2D.style.display = 'none';
       if (div3D) {
         div3D.style.display = 'block';
-        if (viewer3D) {
-          viewer3D.resize();
-          viewer3D.render();
-        }
+        setTimeout(() => {
+          if (div3D.offsetWidth > 0 && div3D.offsetHeight > 0) {
+            if (!viewer3D && sdfCachePendente) {
+              renderizarCena3DBancada(sdfCachePendente);
+            } else if (viewer3D) {
+              viewer3D.resize();
+              viewer3D.render();
+              viewer3D.animate({ loop: "backAndForth", step: 0.4 });
+            }
+          }
+        }, 60);
       }
     }
   };
@@ -423,16 +460,10 @@
     }
 
     if (sdf) {
-      div3D.innerHTML = '';
-      viewer3D = $3Dmol.createViewer(div3D, { backgroundColor: '#020617' });
-      viewer3D.addModel(sdf, "sdf");
-      viewer3D.setStyle({}, {
-        stick: { radius: 0.14, colorscheme: 'Jmol' },
-        sphere: { scale: 0.25, colorscheme: 'Jmol' }
-      });
-      viewer3D.zoomTo();
-      viewer3D.render();
-      viewer3D.animate({ loop: "backAndForth", step: 0.4 });
+      sdfCachePendente = sdf;
+      if (modoVisualizacao === '3D' && div3D.offsetWidth > 0 && div3D.offsetHeight > 0) {
+        renderizarCena3DBancada(sdf);
+      }
     }
   }
 
@@ -688,7 +719,6 @@
       reacoesParaVerificar = reacoesParaVerificar.concat(LAB_DATABASE.reactions);
     }
 
-    // Integra dinamicamente todo o acervo do sinteses-database.js
     if (typeof window.BANCO_SINTESES_LAIFT !== 'undefined' && Array.isArray(window.BANCO_SINTESES_LAIFT)) {
       const idsExistentes = new Set(reacoesParaVerificar.map(r => r.id));
       window.BANCO_SINTESES_LAIFT.forEach(rx => {
@@ -958,6 +988,7 @@
     reagentesAdicionados.clear();
     reacoesCatalogadas.clear();
     compostoAtualParaDossie = null;
+    sdfCachePendente = null;
 
     const overlay = document.getElementById('alertOverlay');
     if (overlay) overlay.style.display = 'none';
@@ -1742,7 +1773,7 @@
   }
 
   // =========================================================================
-  // 17. EXPORTAÇÕES GLOBAIS E CICLO DE INICIALIZAÇÃO
+  // 17. CONTROLES DE INTERFACE, MODAIS E EXPORTAÇÃO GLOBAL
   // =========================================================================
   window.proximaMissao = function() { missaoAtual++; resetarLaboratorio(); atualizarUI_Missao(); };
   window.abrirLivroMissoes = function() {
@@ -1774,6 +1805,38 @@
     if (modal) modal.style.display = 'none';
   };
 
+  // Funções Globais de Controle de Interface (Garante resposta mesmo antes do DOM completo)
+  window.toggleLabFullscreen = function() {
+    const doc = document;
+    const docEl = doc.documentElement;
+    const requestFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+    const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+    const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+
+    if (!isFs) {
+      if (requestFs) requestFs.call(docEl).catch(err => console.warn('[LAIFT Fullscreen]', err));
+    } else {
+      if (exitFs) exitFs.call(doc).catch(err => console.warn('[LAIFT Fullscreen]', err));
+    }
+  };
+
+  window.switchRightTab = function(tabId) {
+    document.querySelectorAll('.rtab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+    document.querySelectorAll('.rtab-pane').forEach(pane => pane.classList.toggle('active', pane.id === tabId));
+    if (tabId === 'tabPH') desenharCurvaPH();
+    if (tabId === 'tabMol') atualizarInspecaoMolecular();
+  };
+
+  window.setMobileView = function(viewName) {
+    const grid = document.getElementById('mainGrid');
+    if (grid) grid.setAttribute('data-mobile-view', viewName);
+    document.querySelectorAll('.m-nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.target === viewName));
+    if (viewName === 'analise') {
+      setTimeout(atualizarInspecaoMolecular, 60);
+      setTimeout(desenharCurvaPH, 90);
+    }
+  };
+
   window.resetarLaboratorio = resetarLaboratorio;
   window.trocarVidraria = trocarVidraria;
   window.iniciarAdicao = iniciarAdicao;
@@ -1784,7 +1847,107 @@
   window.consultarDadosPubChem = consultarDadosPubChem;
   window.catalogarFormulacaoNoBanco = catalogarFormulacaoNoBanco;
 
-  // Inicialização sequencial da bancada
+  // =========================================================================
+  // 18. INTEGRAÇÃO BIDIRECIONAL COM O ESTÚDIO 3D (BROADCASTCHANNEL, IFRAME & LOCALSTORAGE)
+  // =========================================================================
+
+  window.abrirStudio = function() {
+    const modal = document.getElementById('studioIframeModal');
+    const iframe = document.getElementById('studioIframe');
+
+    if (modal && iframe) {
+      if (!iframe.src || !iframe.src.includes('studio/index.html')) {
+        iframe.src = 'studio/index.html';
+      }
+      modal.style.display = 'flex';
+
+      // Notifica o iframe para disparar resize no WebGL assim que o modal se tornar visível
+      setTimeout(() => {
+        try {
+          if (iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ acao: 'studioAberto' }, '*');
+          }
+        } catch (e) {}
+      }, 150);
+    } else {
+      window.open('studio/index.html', '_blank');
+    }
+  };
+
+  window.fecharStudio = function() {
+    const modal = document.getElementById('studioIframeModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  function processarCompostoDoStudio(dados) {
+    if (!dados || !dados.chave) return;
+
+    const chave = dados.chave;
+    const nome = dados.nome || chave;
+
+    const radio = document.querySelector(`input[name="reagenteSel"][value="${chave}"]`);
+    if (radio) {
+      radio.checked = true;
+      const detailsPai = radio.closest('details');
+      if (detailsPai) detailsPai.open = true;
+      radio.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      const catContainer = document.querySelector('#catalogContainer .reagent-list');
+      if (catContainer) {
+        const novoLabel = document.createElement('label');
+        novoLabel.innerHTML = `<input type="radio" name="reagenteSel" value="${chave}" checked> 🧬 ${nome} (Estúdio 3D)`;
+        novoLabel.querySelector('input').addEventListener('change', () => {
+          atualizarInspecaoMolecular(chave);
+        });
+        catContainer.prepend(novoLabel);
+      }
+    }
+
+    atualizarInspecaoMolecular(chave);
+    tocarSom('sucesso');
+    log(`🧬 Molécula [${nome}] carregada do Estúdio 3D para a bancada.`, 'log-info');
+    window.fecharStudio();
+  }
+
+  // 1. Ouvinte BroadcastChannel de alta velocidade
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const labChannel = new BroadcastChannel('laift_molecular_bus');
+      labChannel.onmessage = function(event) {
+        if (event.data && (event.data.tipo === 'CARREGAR_COMPOSTO_BANCADA' || event.data.acao === 'carregarCompostoNaBancada')) {
+          processarCompostoDoStudio(event.data.composto);
+        }
+      };
+    } catch (e) {
+      console.warn('[script.js] BroadcastChannel não disponível:', e);
+    }
+  }
+
+  // 2. Ouvinte postMessage (Modal Iframe)
+  window.addEventListener('message', function(event) {
+    if (event.data) {
+      if (event.data.acao === 'carregarCompostoNaBancada') {
+        processarCompostoDoStudio(event.data.composto);
+      } else if (event.data.acao === 'fecharModalStudio') {
+        window.fecharStudio();
+      }
+    }
+  });
+
+  // 3. Ouvinte LocalStorage (Abas Externas)
+  window.addEventListener('storage', function(event) {
+    if (event.key === 'laift_composto_transferido' && event.newValue) {
+      try {
+        const payload = JSON.parse(event.newValue);
+        processarCompostoDoStudio(payload);
+        localStorage.removeItem('laift_composto_transferido');
+      } catch (e) {}
+    }
+  });
+
+  // =========================================================================
+  // 19. INICIALIZAÇÃO SEQUENCIAL
+  // =========================================================================
   construirCatalogo();
   resetarLaboratorio();
   atualizarUI_Missao();
@@ -1798,97 +1961,4 @@
   timerLoop = setInterval(loopTermico, 200);
   log('🚀 LAIFT Engine Uninassau iniciado com Sucesso!', 'log-info');
 
-
-// =========================================================================
-  // 18. INTEGRAÇÃO BIDIRECIONAL COM O ESTÚDIO 3D (IFRAME & LOCALSTORAGE)
-  // =========================================================================
-
-  /**
-   * Abre o estúdio no modal interno ou em nova aba caso esteja em mobile
-   */
-  window.abrirStudio = function() {
-    const modal = document.getElementById('studioIframeModal');
-    const iframe = document.getElementById('studioIframe');
-
-    if (modal && iframe) {
-      // Carrega o arquivo isolado do estúdio
-      if (!iframe.src || !iframe.src.includes('studio/index.html')) {
-        iframe.src = 'studio/index.html';
-      }
-      modal.style.display = 'flex';
-    } else {
-      window.open('studio/index.html', '_blank');
-    }
-  };
-
-  /**
-   * Fecha o modal do estúdio
-   */
-  window.fecharStudio = function() {
-    const modal = document.getElementById('studioIframeModal');
-    if (modal) modal.style.display = 'none';
-  };
-
-  /**
-   * Processa o composto recebido do Estúdio (seja de 60 reagentes ou dos 2.500)
-   */
-  function processarCompostoDoStudio(dados) {
-    if (!dados || !dados.chave) return;
-
-    const chave = dados.chave;
-    const nome = dados.nome || chave;
-
-    // 1. Tenta selecionar no rádio de reagentes se ele já existir no catálogo
-    const radio = document.querySelector(`input[name="reagenteSel"][value="${chave}"]`);
-    if (radio) {
-      radio.checked = true;
-      const detailsPai = radio.closest('details');
-      if (detailsPai) detailsPai.open = true;
-      radio.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } else {
-      // 2. Se for um dos 2.500 compostos expandidos, adiciona uma opção dinâmica no catálogo
-      const catContainer = document.querySelector('#catalogContainer .reagent-list');
-      if (catContainer) {
-        const novoLabel = document.createElement('label');
-        novoLabel.innerHTML = `<input type="radio" name="reagenteSel" value="${chave}" checked> 🧬 ${nome} (Estúdio 3D)`;
-        novoLabel.querySelector('input').addEventListener('change', () => {
-          atualizarInspecaoMolecular(chave);
-        });
-        catContainer.prepend(novoLabel);
-      }
-    }
-
-    // 3. Atualiza o painel de inspeção molecular da bancada
-    atualizarInspecaoMolecular(chave);
-
-    // 4. Emite feedback sonoro e no log
-    tocarSom('sucesso');
-    log(`🧬 Molécula [${nome}] carregada do Estúdio 3D para a bancada.`, 'log-info');
-
-    // 5. Fecha o modal se estiver ativo
-    window.fecharStudio();
-  }
-
-  // Ouvinte 1: Mensagens vindas do Iframe (postMessage)
-  window.addEventListener('message', function(event) {
-    if (event.data && event.data.acao === 'carregarCompostoNaBancada') {
-      processarCompostoDoStudio(event.data.composto);
-    }
-  });
-
-  // Ouvinte 2: Sincronização entre abas diferentes (localStorage)
-  window.addEventListener('storage', function(event) {
-    if (event.key === 'laift_composto_transferido' && event.newValue) {
-      try {
-        const payload = JSON.parse(event.newValue);
-        processarCompostoDoStudio(payload);
-        localStorage.removeItem('laift_composto_transferido');
-      } catch (e) {}
-    }
-  });
-
-  // Exportações para o escopo global
-  window.abrirStudio = window.abrirStudio;
-  window.fecharStudio = window.fecharStudio;
-  
 })();
