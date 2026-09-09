@@ -37,7 +37,7 @@
   let debounceBuscaTimer = null;
 
   // =========================================================================
-  // 1. INGESTÃO RESILIENTE DOS BANCOS DE DADOS (COM BASE DE CONTINGÊNCIA)
+  // 1. INGESTÃO RESILIENTE DOS BANCOS DE DADOS
   // =========================================================================
   function obterFontesDeDados() {
     const labDb = window.LAB_DATABASE || 
@@ -117,7 +117,7 @@
       });
     }
 
-    // 4. Base Interna de Salvaguarda (Garante funcionamento mesmo se sínteses der 404)
+    // 4. Base Interna de Salvaguarda (Reserva offline e contingência de rede)
     const acervoReserva = [
       { id: "AAS", chaveOriginal: "AAS_s", nome: "Ácido Acetilsalicílico (Aspirina)", formula: "C9H8O4", molarMass: 180.16, smiles: "CC(=O)OC1=CC=CC=C1C(=O)O", categoria: "farmacos", pubchemQuery: "Aspirin" },
       { id: "Paracetamol", chaveOriginal: "Paracetamol_s", nome: "Paracetamol (Acetaminofeno)", formula: "C8H9NO2", molarMass: 151.16, smiles: "CC(=O)NC1=CC=C(O)C=C1", categoria: "farmacos", pubchemQuery: "Acetaminophen" },
@@ -168,7 +168,7 @@
   }
 
   // =========================================================================
-  // 2. VIRTUALIZAÇÃO DA LISTA LATERAL (60 FPS)
+  // 2. VIRTUALIZAÇÃO DA LISTA LATERAL
   // =========================================================================
   function renderizarListaCompostos(reset = true) {
     const listContainer = document.getElementById('studioCompoundList');
@@ -359,15 +359,20 @@
   }
 
   // =========================================================================
-  // 4. RESOLUÇÃO DE CONFORMAÇÃO 3D (PUBChem / CACTUS / RDKit ETKDG)
+  // 4. RESOLUÇÃO DE CONFORMAÇÃO 3D (COM VALIDAÇÃO RÍGIDA DE SDF)
   // =========================================================================
+  function validarConteudoSDF(sdfText) {
+    if (!sdfText || typeof sdfText !== 'string') return false;
+    return sdfText.includes('$$$$') || sdfText.includes('M  END');
+  }
+
   async function resolverCoordenadas3D(smiles, termoBusca) {
     if (!smiles && !termoBusca) return null;
 
     // 1. IndexedDB Cache Local
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
       const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
-      if (cache && cache.sdf) return cache.sdf;
+      if (cache && validarConteudoSDF(cache.sdf)) return cache.sdf;
     }
 
     // 2. PubChem REST 3D Direto por SMILES
@@ -379,7 +384,7 @@
         if (res.ok) {
           const sdfText = await res.text();
           exibirStatusRDKit(false);
-          if (sdfText && sdfText.includes("$$$$")) {
+          if (validarConteudoSDF(sdfText)) {
             salvarEmCache(smiles, termoBusca, sdfText);
             return sdfText;
           }
@@ -387,7 +392,7 @@
       } catch (e) {}
     }
 
-    // 3. CACTUS NIH 3D por SMILES (Conversor geométrico direto)
+    // 3. CACTUS NIH 3D por SMILES
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Gerando coordenadas (CACTUS NIH)...");
@@ -395,7 +400,7 @@
         if (resC.ok) {
           const txtC = await resC.text();
           exibirStatusRDKit(false);
-          if (txtC && txtC.includes("$$$$")) {
+          if (validarConteudoSDF(txtC)) {
             salvarEmCache(smiles, termoBusca, txtC);
             return txtC;
           }
@@ -403,12 +408,12 @@
       } catch (e) {}
     }
 
-    // 4. RDKit WASM ETKDG (Conformação in-browser local)
+    // 4. RDKit WASM ETKDG (Conformação local in-browser)
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
         try {
-          exibirStatusRDKit(true, "Calculando geometria 3D local (ETKDG)...");
+          exibirStatusRDKit(true, "Calculando geometria 3D (ETKDG)...");
           const mol = rdkit.get_mol(smiles);
           if (mol) {
             mol.add_hs();
@@ -416,7 +421,7 @@
               const sdfGerado = mol.to_sdf();
               mol.delete();
               exibirStatusRDKit(false);
-              if (sdfGerado && sdfGerado.includes("$$$$")) {
+              if (validarConteudoSDF(sdfGerado)) {
                 salvarEmCache(smiles, termoBusca, sdfGerado);
                 return sdfGerado;
               }
@@ -437,7 +442,7 @@
         if (resN.ok) {
           const sdfText = await resN.text();
           exibirStatusRDKit(false);
-          if (sdfText && sdfText.includes("$$$$")) {
+          if (validarConteudoSDF(sdfText)) {
             salvarEmCache(smiles, termoBusca, sdfText);
             return sdfText;
           }
@@ -456,7 +461,7 @@
   }
 
   // =========================================================================
-  // 5. VIEWPORT 3D & CORREÇÃO DEFINITIVA DE FRAMEBUFFER
+  // 5. VIEWPORT 3D & PREVENÇÃO DO ERRO .length NO 3DMOL
   // =========================================================================
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
@@ -485,7 +490,7 @@
     const sdf = await resolverCoordenadas3D(comp.smiles, comp.pubchemQuery || comp.nome);
     sdfCacheLocal = sdf;
 
-    if (sdf) {
+    if (sdf && validarConteudoSDF(sdf)) {
       construirCena3D(sdf);
     } else {
       const container3D = document.getElementById('studioViewer3D');
@@ -501,74 +506,95 @@
 
   function construirCena3D(sdfText) {
     const container = document.getElementById('studioViewer3D');
-    if (!container || !window.$3Dmol) return;
+    if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
 
-    container.innerHTML = '';
-    studioViewer = $3Dmol.createViewer(container, { backgroundColor: '#020617' });
-    studioViewer.addModel(sdfText, 'sdf');
-
-    aplicarEstiloVisual(modeloAtual);
-
-    studioViewer.setClickable({}, true, function(atom) {
-      if (modoMedicaoAtivo) processarCliqueMedicao(atom);
-    });
-
-    studioViewer.zoomTo();
-    studioViewer.render();
-
-    // Redimensionamento forçado progressivo
-    requestAnimationFrame(() => {
+    try {
+      container.innerHTML = '';
       if (studioViewer) {
-        studioViewer.resize();
-        studioViewer.render();
+        try { studioViewer.stopAnimate(); } catch (e) {}
       }
-    });
 
-    setTimeout(() => {
-      if (studioViewer) {
-        studioViewer.resize();
-        studioViewer.render();
+      studioViewer = $3Dmol.createViewer(container, { backgroundColor: '#020617' });
+      const model = studioViewer.addModel(sdfText, 'sdf');
+
+      // Trava de segurança: impede chamadas de estilo se o modelo não gerou átomos
+      if (!model || typeof model.selectedAtoms !== 'function' || model.selectedAtoms({}).length === 0) {
+        container.innerHTML = `
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f87171; font-size: 0.8rem; text-align: center;">
+            ⚠️ Arquivo de estrutura sem átomos válidos.
+          </div>
+        `;
+        return;
       }
-    }, 120);
 
-    if (autoRotacaoAtiva) {
-      studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
+      aplicarEstiloVisual(modeloAtual);
+
+      studioViewer.setClickable({}, true, function(atom) {
+        if (modoMedicaoAtivo) processarCliqueMedicao(atom);
+      });
+
+      studioViewer.zoomTo();
+      studioViewer.render();
+
+      requestAnimationFrame(() => {
+        if (studioViewer) {
+          studioViewer.resize();
+          studioViewer.render();
+        }
+      });
+
+      setTimeout(() => {
+        if (studioViewer) {
+          studioViewer.resize();
+          studioViewer.render();
+        }
+      }, 120);
+
+      if (autoRotacaoAtiva) {
+        studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
+      }
+    } catch (errCena) {
+      console.warn('[Studio 3Dmol] Erro ao construir modelo:', errCena);
     }
   }
 
   function aplicarEstiloVisual(tipo) {
     if (!studioViewer) return;
-    studioViewer.removeAllSurfaces();
+    try {
+      studioViewer.removeAllSurfaces();
 
-    switch (tipo) {
-      case 'ballstick':
-        studioViewer.setStyle({}, {
-          stick: { radius: 0.15, colorscheme: 'Jmol' },
-          sphere: { scale: 0.28, colorscheme: 'Jmol' }
-        });
-        break;
-      case 'cpk':
-        studioViewer.setStyle({}, {
-          sphere: { scale: 1.0, colorscheme: 'Jmol' }
-        });
-        break;
-      case 'wireframe':
-        studioViewer.setStyle({}, {
-          line: { linewidth: 2.2, colorscheme: 'Jmol' }
-        });
-        break;
-      case 'surface':
-        studioViewer.setStyle({}, {
-          stick: { radius: 0.12, colorscheme: 'Jmol' },
-          sphere: { scale: 0.22, colorscheme: 'Jmol' }
-        });
-        studioViewer.addSurface($3Dmol.SurfaceType.VDW, {
-          opacity: 0.65,
-          color: '#38bdf8'
-        });
-        break;
+      switch (tipo) {
+        case 'ballstick':
+          studioViewer.setStyle({}, {
+            stick: { radius: 0.15, colorscheme: 'Jmol' },
+            sphere: { scale: 0.28, colorscheme: 'Jmol' }
+          });
+          break;
+        case 'cpk':
+          studioViewer.setStyle({}, {
+            sphere: { scale: 1.0, colorscheme: 'Jmol' }
+          });
+          break;
+        case 'wireframe':
+          studioViewer.setStyle({}, {
+            line: { linewidth: 2.2, colorscheme: 'Jmol' }
+          });
+          break;
+        case 'surface':
+          studioViewer.setStyle({}, {
+            stick: { radius: 0.12, colorscheme: 'Jmol' },
+            sphere: { scale: 0.22, colorscheme: 'Jmol' }
+          });
+          studioViewer.addSurface($3Dmol.SurfaceType.VDW, {
+            opacity: 0.65,
+            color: '#38bdf8'
+          });
+          break;
+      }
+      studioViewer.render();
+    } catch (errEstilo) {
+      console.warn('[Studio 3Dmol] Erro ao aplicar estilo visual:', errEstilo);
     }
-    studioViewer.render();
   }
 
   function desenharEstrutura2DStudio(smiles, nome) {
