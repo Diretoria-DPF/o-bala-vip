@@ -1,13 +1,6 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
- * Arquivo: studio.js
- * 
- * Funcionalidades:
- * 1. Virtualização de 2.500+ compostos sem perda de frames.
- * 2. Cálculo de descritores farmacocinéticos (LogP, TPSA, HBD, HBA, RotB) via RDKit.js WASM.
- * 3. Validação instantânea da Regra dos Cinco de Lipinski (Drogabilidade Oral).
- * 4. Sincronização em tempo real via BroadcastChannel API (laift_molecular_bus).
- * 5. Visualizador 3D multimodelo (Ball & Stick, CPK, Wireframe, SAS) e medição geométrica (Å / °).
+ * Arquivo: studio/studio.js (Motor Corrigido e Otimizado)
  */
 
 (function() {
@@ -40,13 +33,14 @@
   let debounceBuscaTimer = null;
 
   // =========================================================================
-  // 2. INGESTÃO DOS COMPOSTOS
+  // 2. INGESTÃO DOS BANCOS DE DADOS
   // =========================================================================
   function indexarAcervoCompleto() {
     const mapaUnico = new Map();
 
-    if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
-      Object.entries(LAB_DATABASE.species).forEach(([chave, dados]) => {
+    // 1. Espécies do laboratório principal (window.LAB_DATABASE)
+    if (typeof window.LAB_DATABASE !== 'undefined' && window.LAB_DATABASE.species) {
+      Object.entries(window.LAB_DATABASE.species).forEach(([chave, dados]) => {
         const id = chave.replace(/_s|_l|_aq|_g/g, '');
         mapaUnico.set(id.toLowerCase(), {
           id: id,
@@ -61,6 +55,7 @@
       });
     }
 
+    // 2. Sínteses farmacêuticas (window.BANCO_SINTESES_LAIFT)
     if (typeof window.BANCO_SINTESES_LAIFT !== 'undefined' && Array.isArray(window.BANCO_SINTESES_LAIFT)) {
       window.BANCO_SINTESES_LAIFT.forEach(synth => {
         if (!synth || !synth.nomeComposto) return;
@@ -81,6 +76,7 @@
       });
     }
 
+    // 3. Catálogo expandido (se injetado globalmente)
     if (typeof window.BANCO_COMPOSTOS_EXPANDIDO !== 'undefined' && Array.isArray(window.BANCO_COMPOSTOS_EXPANDIDO)) {
       window.BANCO_COMPOSTOS_EXPANDIDO.forEach(c => {
         if (!c || !c.nome) return;
@@ -105,7 +101,7 @@
 
     const totalBadge = document.getElementById('studioTotalBadge');
     if (totalBadge) {
-      totalBadge.textContent = `${compostosIndexados.length} Compostos Prontos`;
+      totalBadge.textContent = `${compostosIndexados.length} Compostos Indexados`;
     }
 
     atualizarContadorFiltrados();
@@ -125,7 +121,7 @@
   }
 
   // =========================================================================
-  // 3. VIRTUALIZAÇÃO DA LISTA (SCROLL BUFFER)
+  // 3. VIRTUALIZAÇÃO DA LISTA
   // =========================================================================
   function renderizarListaCompostos(reset = true) {
     const listContainer = document.getElementById('studioCompoundList');
@@ -213,7 +209,7 @@
   };
 
   // =========================================================================
-  // 4. RDKIT WEBASSEMBLY & CÁLCULO DE LIPINSKI (LogP, TPSA, HBD, HBA)
+  // 4. MOTOR RDKIT WASM & FARMACOCINÉTICA (LIPINSKI)
   // =========================================================================
   async function carregarRDKitSobDemanda() {
     if (RDKitModuleInstance) return RDKitModuleInstance;
@@ -226,17 +222,17 @@
     }
 
     rdkitCarregando = true;
-    exibirStatusRDKit(true, "Carregando RDKit WebAssembly...");
+    exibirStatusRDKit(true, "Inicializando RDKit WebAssembly...");
 
     try {
       if (typeof window.initRDKitModule === 'function') {
         RDKitModuleInstance = await window.initRDKitModule();
-        console.log("✅ [RDKit WASM] Motor de Quimiometria Ativo.");
+        console.log("✅ [RDKit WASM] Pronto.");
       }
       exibirStatusRDKit(false);
       return RDKitModuleInstance;
     } catch (err) {
-      console.warn("⚠️ [RDKit WASM] Falha no carregamento:", err);
+      console.warn("⚠️ [RDKit WASM] Indisponível, usando rede:", err);
       exibirStatusRDKit(false);
       rdkitCarregando = false;
       return null;
@@ -250,9 +246,6 @@
     if (ind) ind.style.display = visivel ? 'flex' : 'none';
   }
 
-  /**
-   * Extração de descritores farmacocinéticos e cálculo da Regra dos Cinco de Lipinski
-   */
   async function avaliarPerfilLipinski(smiles, molarMass) {
     const elLogP = document.getElementById('descLogP');
     const elTPSA = document.getElementById('descTPSA');
@@ -281,18 +274,16 @@
 
     try {
       const mol = rdkit.get_mol(smiles);
-      if (!mol) throw new Error("SMILES inválido");
+      if (!mol) return;
 
       const desc = JSON.parse(mol.get_descriptors());
       mol.delete();
 
-      const mw = (typeof molarMass === 'number' && molarMass > 0) 
-        ? molarMass 
-        : (desc.exactmw || desc.amw || 0);
+      const mw = (typeof molarMass === 'number' && molarMass > 0) ? molarMass : (desc.exactmw || desc.amw || 0);
       const logp = desc.CrippenClogP !== undefined ? desc.CrippenClogP : (desc.clogp || 0);
       const tpsa = desc.tpsa !== undefined ? desc.tpsa : 0;
-      const hbd = desc.lipinskiHBD !== undefined ? desc.lipinskiHBD : (desc.NumHBD !== undefined ? desc.NumHBD : 0);
-      const hba = desc.lipinskiHBA !== undefined ? desc.lipinskiHBA : (desc.NumHBA !== undefined ? desc.NumHBA : 0);
+      const hbd = desc.lipinskiHBD !== undefined ? desc.lipinskiHBD : (desc.NumHBD || 0);
+      const hba = desc.lipinskiHBA !== undefined ? desc.lipinskiHBA : (desc.NumHBA || 0);
       const rotb = desc.NumRotatableBonds !== undefined ? desc.NumRotatableBonds : 0;
 
       elLogP.textContent = logp.toFixed(2);
@@ -300,46 +291,58 @@
       elHBD_HBA.textContent = `${hbd} / ${hba}`;
       elRotB.textContent = rotb;
 
-      // Avaliação da Regra dos Cinco de Lipinski
       let violacoes = 0;
-      const falhas = [];
-
-      if (mw > 500) { violacoes++; falhas.push("Massa > 500 Da"); }
-      if (logp > 5.0) { violacoes++; falhas.push("LogP > 5.0"); }
-      if (hbd > 5) { violacoes++; falhas.push("Doadores H > 5"); }
-      if (hba > 10) { violacoes++; falhas.push("Aceptores H > 10"); }
+      if (mw > 500) violacoes++;
+      if (logp > 5.0) violacoes++;
+      if (hbd > 5) violacoes++;
+      if (hba > 10) violacoes++;
 
       if (violacoes === 0) {
         elBadge.className = 'lipinski-status-badge badge-approved';
-        elBadge.textContent = 'Lipinski: Aprovado (0 violações)';
-        elBadge.title = 'Em conformidade total com os critérios de biodisponibilidade oral.';
+        elBadge.textContent = 'Lipinski: Aprovado';
       } else if (violacoes === 1) {
         elBadge.className = 'lipinski-status-badge badge-warning';
-        elBadge.textContent = `Lipinski: 1 Violação (${falhas[0]})`;
-        elBadge.title = 'Critério aceitável para fármacos orais (tolerância de 1 violação).';
+        elBadge.textContent = 'Lipinski: 1 Violação';
       } else {
         elBadge.className = 'lipinski-status-badge badge-rejected';
         elBadge.textContent = `Lipinski: ${violacoes} Violações`;
-        elBadge.title = `Baixa probabilidade de absorção oral: ${falhas.join(', ')}`;
       }
     } catch (err) {
-      console.warn("[Lipinski Evaluation Error]", err);
       elBadge.className = 'lipinski-status-badge badge-pending';
-      elBadge.textContent = 'Erro de Cálculo';
+      elBadge.textContent = 'Erro de Leitura';
     }
   }
 
   // =========================================================================
-  // 5. PIPELINE 3D E VIEWPORT
+  // 5. RESOLUÇÃO DE COORDENADAS E RENDERIZAÇÃO
   // =========================================================================
   async function resolverCoordenadas3D(smiles, termoBusca) {
     if (!smiles && !termoBusca) return null;
 
+    // 1. IndexedDB Cache
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
       const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
       if (cache && cache.sdf) return cache.sdf;
     }
 
+    // 2. PubChem REST 3D Direto (Rápido e Preciso)
+    try {
+      exibirStatusRDKit(true, "Buscando conformação 3D (PubChem)...");
+      const query = encodeURIComponent((termoBusca || smiles).trim());
+      const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`);
+      if (res.ok) {
+        const sdfText = await res.text();
+        exibirStatusRDKit(false);
+        if (sdfText && sdfText.includes("$$$$")) {
+          if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarCompostoLocal === 'function') {
+            LabStorageEngine.salvarCompostoLocal(smiles || termoBusca, { sdf: sdfText, nome: termoBusca });
+          }
+          return sdfText;
+        }
+      }
+    } catch (e) {}
+
+    // 3. Fallback: RDKit ETKDG Local
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
@@ -348,12 +351,10 @@
           const mol = rdkit.get_mol(smiles);
           if (mol) {
             mol.add_hs();
-            const embedStatus = mol.embed_mol();
-            if (embedStatus >= 0) {
+            if (mol.embed_mol() >= 0) {
               const sdfGerado = mol.to_sdf();
               mol.delete();
               exibirStatusRDKit(false);
-
               if (sdfGerado && sdfGerado.includes("$$$$")) {
                 if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarCompostoLocal === 'function') {
                   LabStorageEngine.salvarCompostoLocal(smiles, { sdf: sdfGerado, nome: termoBusca });
@@ -369,22 +370,7 @@
       }
     }
 
-    try {
-      exibirStatusRDKit(true, "Consultando PubChem PUG-REST 3D...");
-      const query = encodeURIComponent((termoBusca || smiles).trim());
-      const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`);
-      if (res.ok) {
-        const sdfText = await res.text();
-        exibirStatusRDKit(false);
-        if (sdfText && sdfText.includes("$$$$")) {
-          if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarCompostoLocal === 'function') {
-            LabStorageEngine.salvarCompostoLocal(smiles || termoBusca, { sdf: sdfText, nome: termoBusca });
-          }
-          return sdfText;
-        }
-      }
-    } catch (e) {}
-
+    // 4. Fallback: CACTUS NIH
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Consultando CACTUS NIH...");
@@ -417,9 +403,11 @@
     if (elMassa) elMassa.textContent = comp.molarMass !== '--' ? `${parseFloat(comp.molarMass).toFixed(2)} g/mol` : '-- g/mol';
     if (btnBench) btnBench.style.display = 'inline-flex';
 
+    // Renderiza 2D de forma síncrona imediata
     desenharEstrutura2DStudio(comp.smiles, comp.nome);
     avaliarPerfilLipinski(comp.smiles, parseFloat(comp.molarMass));
 
+    // Carrega modelo 3D
     const sdf = await resolverCoordenadas3D(comp.smiles, comp.pubchemQuery || comp.nome);
     sdfCacheLocal = sdf;
 
@@ -430,7 +418,8 @@
       if (container3D) {
         container3D.innerHTML = `
           <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f87171; font-size: 0.8rem; text-align: center; max-width: 80%;">
-            ⚠️ Coordenadas 3D indisponíveis. A projeção 2D continua ativa.
+            ⚠️ Coordenadas 3D indisponíveis nos repositórios para <strong>${comp.nome}</strong>.<br>
+            A projeção plana continua disponível no botão "2D Vetorial".
           </div>
         `;
       }
@@ -453,6 +442,7 @@
 
     studioViewer.zoomTo();
     studioViewer.render();
+    studioViewer.resize();
 
     if (autoRotacaoAtiva) {
       studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
@@ -533,7 +523,7 @@
   }
 
   // =========================================================================
-  // 6. CONTROLE DE MODOS & MEDIÇÃO GEOMÉTRICA (Å / °)
+  // 6. CONTROLES DE MODELO E MEDIÇÃO GEOMÉTRICA
   // =========================================================================
   window.setModelo3D = function(modo) {
     modeloAtual = modo;
@@ -654,11 +644,12 @@
     if (studioViewer) {
       studioViewer.zoomTo();
       studioViewer.render();
+      studioViewer.resize();
     }
   };
 
   // =========================================================================
-  // 7. EXPORTAÇÃO (PNG & SDF)
+  // 7. EXPORTAÇÃO
   // =========================================================================
   window.exportarImagemPNG = function() {
     const nomeBase = (compostoSelecionado?.nome || 'molecula').replace(/\s+/g, '_');
@@ -680,7 +671,7 @@
 
   window.exportarArquivoSDF = function() {
     if (!sdfCacheLocal) {
-      alert("Aguarde a resolução da conformação tridimensional antes de exportar.");
+      alert("Aguarde o carregamento do modelo 3D antes de exportar o arquivo SDF.");
       return;
     }
     const nomeBase = (compostoSelecionado?.nome || 'composto').replace(/\s+/g, '_');
@@ -694,7 +685,7 @@
   };
 
   // =========================================================================
-  // 8. SINCRONIZAÇÃO VIA BROADCASTCHANNEL & CONTROLE DE SELEÇÃO
+  // 8. SINCRONIZAÇÃO E TRANSFERÊNCIA
   // =========================================================================
   window.selecionarCompostoStudio = function(comp, el) {
     compostoSelecionado = comp;
@@ -715,7 +706,6 @@
       timestamp: Date.now()
     };
 
-    // 1. Emissão Primária: BroadcastChannel API
     if (labBroadcast) {
       labBroadcast.postMessage({
         tipo: 'CARREGAR_COMPOSTO_BANCADA',
@@ -723,7 +713,6 @@
       });
     }
 
-    // 2. Emissão Secundária: PostMessage (se inserido em Iframe)
     if (window.parent && window.parent !== window) {
       window.parent.postMessage({
         acao: 'carregarCompostoNaBancada',
@@ -731,48 +720,35 @@
       }, '*');
     }
 
-    // 3. Emissão Terciária: LocalStorage (para abas externas em navegadores legados)
     localStorage.setItem('laift_composto_transferido', JSON.stringify(payload));
 
-    // Retorno ao ambiente principal
     if (window.opener) {
       window.close();
     } else if (window.parent && window.parent !== window) {
-      // Solicita fechamento de modal se aplicável
       window.parent.postMessage({ acao: 'fecharModalStudio' }, '*');
     } else {
       window.location.href = '../index.html';
     }
   };
 
-  window.onMoleculeEdited = function(novoSmiles, novoNome = "Composto Modificado") {
-    const novoComposto = {
-      id: 'custom_' + Date.now(),
-      chaveOriginal: 'custom_' + Date.now(),
-      nome: novoNome,
-      formula: 'Derivado In Silico',
-      molarMass: '--',
-      smiles: novoSmiles,
-      categoria: 'farmacos',
-      pubchemQuery: novoNome
-    };
-
-    compostosIndexados.unshift(novoComposto);
-    compostosFiltrados.unshift(novoComposto);
-    renderizarListaCompostos(true);
-    selecionarCompostoStudio(novoComposto);
-  };
-
   // =========================================================================
-  // 9. INICIALIZAÇÃO
+  // 9. INICIALIZAÇÃO ROBUSTA (PROTEÇÃO CONTRA DOMContentLoaded RACE)
   // =========================================================================
-  document.addEventListener('DOMContentLoaded', () => {
+  function initStudio() {
     indexarAcervoCompleto();
     renderizarListaCompostos(true);
 
     if (compostosIndexados.length > 0) {
-      selecionarCompostoStudio(compostosIndexados[0]);
+      const primeiro = document.querySelector('.compound-item');
+      selecionarCompostoStudio(compostosIndexados[0], primeiro);
     }
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initStudio);
+  } else {
+    // Se o DOM já estiver pronto, inicializa imediatamente
+    initStudio();
+  }
 
 })();
