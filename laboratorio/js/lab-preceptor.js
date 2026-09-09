@@ -8,6 +8,42 @@
 
 window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
 
+
+// Função executada ao carregar o script para indexar qualquer quantidade de sínteses
+  carregarBaseSintesesDinamica() {
+    if (typeof window.BANCO_SINTESES_LAIFT === 'undefined' || !Array.isArray(window.BANCO_SINTESES_LAIFT)) {
+      return;
+    }
+
+    window.BANCO_SINTESES_LAIFT.forEach(item => {
+      // Cria chaves de busca primárias e secundárias (sem acento, minúsculas, nome comercial)
+      const chaveId = item.id.replace('sintese_', '').toLowerCase().trim();
+      const chaveNome = item.nomeComposto.toLowerCase().trim();
+      const chaveNormalizada = chaveNome.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const dadosFormatados = {
+        nome: item.nomeComposto,
+        reagentes: Array.isArray(item.reagentesObrigatorios) ? item.reagentesObrigatorios : [],
+        catalisador: item.catalisador || 'Sem catalisador específico',
+        solvente: item.solvente || 'Meio direto',
+        tempMin: item.tempMinima,
+        tempMax: item.tempMaxima,
+        tempoReacao: item.tempoReacao || '--',
+        equacao: item.equacaoQuimica || '--',
+        perigos: Array.isArray(item.perigos) ? item.perigos.join(', ') : (item.perigos || 'Manipulação padrão'),
+        tipoReacao: item.tipoReacao || 'Síntese química',
+        descricao: item.descricao || ''
+      };
+
+      // Registra no dicionário de busca rápida
+      this.ROTAS_SINTESE[chaveId] = dadosFormatados;
+      this.ROTAS_SINTESE[chaveNormalizada] = dadosFormatados;
+    });
+
+    console.log(`✅ [Preceptor] ${Object.keys(this.ROTAS_SINTESE).length} rotas de síntese indexadas na Camada 1.`);
+  }
+
+
 const LabPreceptorEngine = {
   // =========================================================================
   // 1. BASE DE SÍNTESES FARMACÊUTICAS E INDUSTRIAIS (CAMADA 1)
@@ -52,228 +88,7 @@ const LabPreceptorEngine = {
       tipoReacao: "Sulfometilação nucleofílica seguida de salificação",
       descricao: "Reação da 4-metilaminoantipirina com formaldeído e bissulfito de sódio, seguida de metilação e salificação alcalina."
     },
-    "ibuprofeno": {
-      nome: "Ibuprofeno",
-      reagentes: ["Isobutilbenzeno", "Cloreto de Acetila", "Dióxido de Carbono (CO2)"],
-      catalisador: "Cloreto de Alumínio (AlCl3) / Catalisador de Paládio",
-      solvente: "Diclorometano (CH2Cl2)",
-      tempMin: 0,
-      tempMax: 25,
-      tempoReacao: "2 h",
-      equacao: "C10H14 + CH3COCl + CO2 -> C13H18O2",
-      perigos: "Corrosivo e inflamável; liberação intensa de gás clorídrico (HCl) na acilação.",
-      tipoReacao: "Acoplamento de Friedel-Crafts + Carboxilação",
-      descricao: "Síntese multi-etapas: acilação de Friedel-Crafts do isobutilbenzeno, seguida de redução e carboxilação catalisada por paládio (processo verde BHC)."
-    },
-    "diclofenaco": {
-      nome: "Diclofenaco Sódico",
-      reagentes: ["2,6-Dicloroanilina", "Ácido 2-clorofenilacético"],
-      catalisador: "Cloreto Cuproso (CuCl)",
-      solvente: "Dimetilformamida (DMF)",
-      tempMin: 120,
-      tempMax: 140,
-      tempoReacao: "4 h",
-      equacao: "C6H5Cl2N + C8H7ClO2 -> C14H10Cl2NNaO2",
-      perigos: "Tóxico; DMF apresenta toxicidade reprodutiva.",
-      tipoReacao: "Acoplamento de Ullmann + Ciclização",
-      descricao: "Acoplamento de Ullmann entre 2,6-dicloroanilina e ácido 2-clorofenilacético, seguido de ciclização a indolinona e abertura alcalina com NaOH."
-    },
-    "losartana": {
-      nome: "Losartana Potássica",
-      reagentes: ["2-Butil-4-cloroimidazol", "Brometo de 4'-bromometil-2-bifenilcarbonitrila", "Azida de Sódio (NaN3)"],
-      catalisador: "Hidreto de Sódio (NaH)",
-      solvente: "Tetraidrofurano (THF)",
-      tempMin: 0,
-      tempMax: 60,
-      tempoReacao: "6 h",
-      equacao: "C7H11ClN2 + C14H10Br2N + NaN3 -> C22H23ClN6O",
-      perigos: "Azida de sódio é altamente tóxica e explosiva ao contato com metais pesados ou ácidos.",
-      tipoReacao: "N-Alquilação + Cicloadição 1,3-dipolar (Tetrazolação)",
-      descricao: "Alquilação do anel imidazol, seguida de tetrazolação da nitrila com azida e hidrólise para isolamento da losartana."
-    },
-    "captopril": {
-      nome: "Captopril",
-      reagentes: ["L-Prolina", "Ácido 3-acetiltio-2-metilpropanóico"],
-      catalisador: "Dicicloexilcarbodiimida (DCC)",
-      solvente: "Diclorometano (CH2Cl2)",
-      tempMin: 0,
-      tempMax: 25,
-      tempoReacao: "3 h",
-      equacao: "C5H9NO2 + C6H10O3S -> C9H15NO3S",
-      perigos: "DCC é potente sensibilizante dérmico; presença de tióis com odor sulfuroso forte.",
-      tipoReacao: "Acoplamento peptídico + Desproteção de tiol",
-      descricao: "Condensação da L-prolina com ácido 3-acetiltio-2-metilpropanóico com ativação por DCC, seguida de hidrólise básica do grupo tioéster."
-    },
-    "anlodipino": {
-      nome: "Besilato de Anlodipino",
-      reagentes: ["2-Clorobenzaldeído", "Acetoacetato de Metila", "3-Aminocrotonato de Metila"],
-      catalisador: "Acetato de Amônio (NH4OAc)",
-      solvente: "Etanol Absoluto",
-      tempMin: 80,
-      tempMax: 90,
-      tempoReacao: "4 h",
-      equacao: "C7H5ClO + C5H8O3 + C5H9NO2 -> C20H25ClN2O5",
-      perigos: "Irritante dérmico e respiratório.",
-      tipoReacao: "Síntese multicomponente de Hantzsch",
-      descricao: "Condensação multicomponente de Hantzsch para formação do anel 1,4-diidropiridínico assimétrico característico."
-    },
-    "metformina": {
-      nome: "Cloridrato de Metformina",
-      reagentes: ["Cianoguanidina (Dicandiamida)", "Cloridrato de Dimetilamina"],
-      catalisador: "HCl aquoso / Autocatalítico",
-      solvente: "Dimetilformamida (DMF) ou Tolueno",
-      tempMin: 100,
-      tempMax: 120,
-      tempoReacao: "5 h",
-      equacao: "C2H4N4 + C2H7N -> C4H11N5",
-      perigos: "Vapores de amina voláteis e inflamáveis sob refluxo térmico.",
-      tipoReacao: "Adição nucleofílica de amina a nitrila",
-      descricao: "Reação da cianoguanidina com dimetilamina em solvente polar, gerando o esqueleto de biguanida isolado como sal cloridrato."
-    },
-    "amoxicilina": {
-      nome: "Amoxicilina Tri-hidratada",
-      reagentes: ["Ácido 6-Aminopenicilânico (6-APA)", "Cloreto de D-p-hidroxifenilglicina protegido"],
-      catalisador: "Trietilamina (Et3N) ou Enzima Penicilina Acilase",
-      solvente: "Diclorometano aquoso (CH2Cl2)",
-      tempMin: 0,
-      tempMax: 25,
-      tempoReacao: "2 h",
-      equacao: "C8H12N2O3S + C9H9ClNO3 -> C16H19N3O5S",
-      perigos: "Antibiótico beta-lactâmico com elevado potencial alergênico e anafilático.",
-      tipoReacao: "Acilação enantiosseletiva de amina beta-lactâmica",
-      descricao: "Acilação do núcleo 6-APA com cloreto de p-hidroxifenilglicina protegido sob pH controlado (6.0), seguida de desproteção ácida."
-    },
-    "omeprazol": {
-      nome: "Omeprazol",
-      reagentes: ["Sulfeto de Omeprazol (tioéter precursor)", "Ácido m-Cloroperbenzóico (MCPBA)"],
-      catalisador: "Controle estequiométrico estrito (sem catalisador)",
-      solvente: "Diclorometano (CH2Cl2)",
-      tempMin: 0,
-      tempMax: 25,
-      tempoReacao: "2 h",
-      equacao: "C17H19N3OS + MCPBA -> C17H19N3O3S",
-      perigos: "Perácidos são oxidantes térmicos instáveis com risco de decomposição violenta.",
-      tipoReacao: "Oxidação quimiosseletiva de sulfeto a sulfóxido",
-      descricao: "Oxidação controlada do tioéter precursor com perácido a temperaturas sub-ambiente para prevenir a superoxidação a sulfona."
-    },
-    "diazepam": {
-      nome: "Diazepam",
-      reagentes: ["2-Amino-5-clorobenzofenona", "Cloreto de Cloroacetila", "Amônia (NH3)"],
-      catalisador: "NaOH aquoso",
-      solvente: "Etanol Absoluto",
-      tempMin: 60,
-      tempMax: 80,
-      tempoReacao: "4 h",
-      equacao: "C13H10ClNO + C2H2Cl2O + NH3 -> C16H13ClN2O",
-      perigos: "Substância psicotrópica controlada; cloreto de cloroacetila é vesicante severo.",
-      tipoReacao: "Acilação seguida de amonólise e ciclização intramolecular",
-      descricao: "Formação do anel benzodiazepínico de 7 membros via acilação da aminobenzofenona, amonólise e fechamento térmico de anel."
-    },
-    "clonazepam": {
-      nome: "Clonazepam",
-      reagentes: ["2-Amino-5-nitrobenzofenona", "Cloreto de Cloroacetila", "Amônia"],
-      catalisador: "NaOH aquoso",
-      solvente: "Etanol Absoluto",
-      tempMin: 60,
-      tempMax: 80,
-      tempoReacao: "5 h",
-      equacao: "C13H10N2O3 + C2H2Cl2O -> C15H10ClN3O3",
-      perigos: "Composto sujeito a controle sanitário estrito; vapores tóxicos e corrosivos.",
-      tipoReacao: "Ciclização benzodiazepínica aromática",
-      descricao: "Condensação da 2-amino-5-nitrobenzofenona com cloreto de cloroacetila seguida de ciclização induzida por amônia."
-    },
-    "fluoxetina": {
-      nome: "Cloridrato de Fluoxetina",
-      reagentes: ["(3-Cloropropil)benzeno", "4-(Trifluorometil)fenol", "Metilamina"],
-      catalisador: "NaOH aquoso",
-      solvente: "Dimetilformamida (DMF)",
-      tempMin: 60,
-      tempMax: 80,
-      tempoReacao: "4 h",
-      equacao: "C9H11Cl + C7H5F3O + CH5N -> C17H18F3NO·HCl",
-      perigos: "Fenóis fluorados são cáusticos; metilamina é um gás inflamável e irritante.",
-      tipoReacao: "Adição de Michael + Aminação nucleofílica",
-      descricao: "Eterificação aromática do fenol fluorado com o haleto, seguida de aminação nucleofílica com metilamina e salificação."
-    },
-    "sertralina": {
-      nome: "Cloridrato de Sertralina",
-      reagentes: ["4-(3,4-Diclorofenil)-3,4-diidronaftalen-1(2H)-ona", "3,4-Diclorofenil-lítio", "Metilamina"],
-      catalisador: "Pd/C (Hidrogenação catalítica)",
-      solvente: "Tetraidrofurano (THF)",
-      tempMin: -78,
-      tempMax: 25,
-      tempoReacao: "3 h",
-      equacao: "C10H8O + C6H3Cl2Li -> C17H17Cl2N·HCl",
-      perigos: "Reagentes organolíticos são pirofóricos (queimam espontaneamente em contato com o ar).",
-      tipoReacao: "Adição nucleofílica de organolítico + Aminação redutiva cis-seletiva",
-      descricao: "Adição organometálica à tetralona, seguida de desidratação e hidrogenação catalítica diastereosseletiva para obter o isômero cis."
-    },
-    "atorvastatina": {
-      nome: "Atorvastatina Cálcica",
-      reagentes: ["4-Fluorobenzaldeído", "Acetoacetato de Etila", "Isobutirilacetato de Etila"],
-      catalisador: "NaOH / Ácido Piválico",
-      solvente: "Etanol Absoluto",
-      tempMin: 60,
-      tempMax: 80,
-      tempoReacao: "8 h",
-      equacao: "C7H5FO + C6H10O3 + C8H14O3 -> C33H35FN2O5",
-      perigos: "Solventes voláteis inflamáveis.",
-      tipoReacao: "Síntese convergente de Paal-Knorr para anel pirrólico",
-      descricao: "Condensação de Paal-Knorr para construção do anel pirrol central pentassubstituído, seguida de extensão enantiossedletiva da cadeia lateral."
-    },
-    "sildenafila": {
-      nome: "Citrato de Sildenafila",
-      reagentes: ["2-Etoxibenzamida", "4-Metilpiperazina", "Cloreto de 5-(2-clorofenil)-1H-pirazol-3-carbonila"],
-      catalisador: "Trietilamina (Et3N) e Ácido Cítrico",
-      solvente: "Dimetilformamida (DMF)",
-      tempMin: 70,
-      tempMax: 90,
-      tempoReacao: "8 h",
-      equacao: "C9H11NO2 + C5H12N2 + C10H6Cl2N2O -> C22H30N6O4S·C6H8O7",
-      perigos: "Cloretos de acila e sulfonila liberam fumos densos de HCl.",
-      tipoReacao: "Acoplamento e ciclização a pirazolopirimidinona + Sulfonilação",
-      descricao: "Acoplamento para fechamento do sistema pirazolopirimidinona, sulfonilação na posição 5' com piperazina e precipitação com ácido cítrico."
-    },
-    "salicilato de metila": {
-      nome: "Salicilato de Metila",
-      reagentes: ["AcidoSalicilico_s", "Metanol_l"],
-      catalisador: "H2SO4_aq",
-      solvente: "Metanol_l",
-      tempMin: 65,
-      tempMax: 75,
-      tempoReacao: "3 h",
-      equacao: "C7H6O3 + CH3OH -> C8H8O3 + H2O",
-      perigos: "Inflamável, Irritante. Metanol é tóxico por ingestão e inalação.",
-      tipoReacao: "Esterificação clássica de Fischer",
-      descricao: "Esterificação de Fischer entre ácido salicílico e excesso de metanol catalisada por ácido sulfúrico concentrado sob refluxo térmico."
-    },
-    "acetato de isopentila": {
-      nome: "Acetato de Isopentila (Aroma de Banana)",
-      reagentes: ["AcidoAcetico_aq", "AlcoolIsopentilico_l"],
-      catalisador: "H2SO4_aq",
-      solvente: "AcidoAcetico_aq",
-      tempMin: 70,
-      tempMax: 90,
-      tempoReacao: "2 h",
-      equacao: "CH3COOH + C5H12O -> C7H14O2 + H2O",
-      perigos: "Vapores inflamáveis.",
-      tipoReacao: "Esterificação de Fischer",
-      descricao: "Condensação ácida de álcool isopentílico com ácido acético com separação de fase do éster insolúvel em água."
-    },
-    "chuva de ouro": {
-      nome: "Iodeto de Chumbo II (Precipitado Dourado)",
-      reagentes: ["PbNO3_aq", "KI_aq"],
-      catalisador: "Não requer",
-      solvente: "Agua_l",
-      tempMin: 20,
-      tempMax: 90,
-      tempoReacao: "Imediato",
-      equacao: "Pb(NO3)2 + 2KI -> PbI2 + 2KNO3",
-      perigos: "Tóxico cumulativo (sais solúveis de chumbo são neurotóxicos).",
-      tipoReacao: "Dupla troca com precipitação regida por Ksp",
-      descricao: "Reação aquosa instantânea que forma um precipitado amarelo intenso de PbI2. Ao aquecer até dissolução e resfriar lentamente, recristalizam lâminas douradas cintilantes."
-    }
-  },
+   
 
   // =========================================================================
   // 2. DISPARO REMOTO AO APPS SCRIPT (CAMADA 3 — GROQ 120B)
@@ -485,6 +300,11 @@ window.limparChatPreceptor = function() {
   `;
   chatBox.scrollTop = 0;
 };
+
+// Inicialização automática das sínteses
+if (typeof LabPreceptorEngine !== 'undefined') {
+  LabPreceptorEngine.carregarBaseSintesesDinamica();
+}
 
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', () => {
