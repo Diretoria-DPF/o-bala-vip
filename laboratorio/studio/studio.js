@@ -1,19 +1,20 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
  * Arquivo: studio/studio.js
+ * Motor Quimiométrico, Pipeline 3Dmol.js/RDKit WASM, Virtualizador e BroadcastChannel
  */
 
 (function() {
   'use strict';
 
-  // Barramento BroadcastChannel protegido contra restrições de sandbox
+  // Barramento BroadcastChannel protegido contra restrições de sandbox de iframe
   let labBroadcast = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
       labBroadcast = new BroadcastChannel('laift_molecular_bus');
     }
   } catch (e) {
-    console.warn('[Studio] BroadcastChannel não permitido neste contexto, usando contingência.');
+    console.warn('[Studio] BroadcastChannel restrito no contexto, usando postMessage/localStorage.');
   }
 
   let studioViewer = null;
@@ -36,7 +37,7 @@
   let debounceBuscaTimer = null;
 
   // =========================================================================
-  // 1. INGESTÃO RESILIENTE DOS BANCOS DE DADOS
+  // 1. INGESTÃO RESILIENTE DOS BANCOS DE DADOS (COM BASE DE CONTINGÊNCIA)
   // =========================================================================
   function obterFontesDeDados() {
     const labDb = window.LAB_DATABASE || 
@@ -58,7 +59,7 @@
     const mapaUnico = new Map();
     const { labDb, synthDb, expandidoDb } = obterFontesDeDados();
 
-    // 1. Ingestão da base da bancada
+    // 1. Ingestão da base principal da bancada
     if (labDb && labDb.species) {
       Object.entries(labDb.species).forEach(([chave, dados]) => {
         const id = chave.replace(/_s|_l|_aq|_g/g, '');
@@ -116,24 +117,38 @@
       });
     }
 
-    // 4. Contingência integrada (caso os scripts externos sofram bloqueio)
-    if (mapaUnico.size === 0) {
-      const catalogoEmergencia = [
-        { id: "AAS", chaveOriginal: "AAS_s", nome: "Ácido Acetilsalicílico (Aspirina)", formula: "C9H8O4", molarMass: 180.16, smiles: "CC(=O)OC1=CC=CC=C1C(=O)O", categoria: "farmacos", pubchemQuery: "Aspirin" },
-        { id: "Paracetamol", chaveOriginal: "Paracetamol_s", nome: "Paracetamol (Acetaminofeno)", formula: "C8H9NO2", molarMass: 151.16, smiles: "CC(=O)NC1=CC=C(O)C=C1", categoria: "farmacos", pubchemQuery: "Acetaminophen" },
-        { id: "Ibuprofeno", chaveOriginal: "C13H18O2_s", nome: "Ibuprofeno", formula: "C13H18O2", molarMass: 206.28, smiles: "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O", categoria: "farmacos", pubchemQuery: "Ibuprofen" },
-        { id: "Cafeina", chaveOriginal: "Cafeina_s", nome: "Cafeína", formula: "C8H10N4O2", molarMass: 194.19, smiles: "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", categoria: "farmacos", pubchemQuery: "Caffeine" },
-        { id: "Etanol", chaveOriginal: "Etanol_l", nome: "Etanol Absoluto", formula: "C2H6O", molarMass: 46.07, smiles: "CCO", categoria: "solventes", pubchemQuery: "Ethanol" }
-      ];
-      catalogoEmergencia.forEach(c => mapaUnico.set(c.id.toLowerCase(), c));
-    }
+    // 4. Base Interna de Salvaguarda (Garante funcionamento mesmo se sínteses der 404)
+    const acervoReserva = [
+      { id: "AAS", chaveOriginal: "AAS_s", nome: "Ácido Acetilsalicílico (Aspirina)", formula: "C9H8O4", molarMass: 180.16, smiles: "CC(=O)OC1=CC=CC=C1C(=O)O", categoria: "farmacos", pubchemQuery: "Aspirin" },
+      { id: "Paracetamol", chaveOriginal: "Paracetamol_s", nome: "Paracetamol (Acetaminofeno)", formula: "C8H9NO2", molarMass: 151.16, smiles: "CC(=O)NC1=CC=C(O)C=C1", categoria: "farmacos", pubchemQuery: "Acetaminophen" },
+      { id: "Dipirona", chaveOriginal: "Dipirona_s", nome: "Dipirona Sódica (Metamizol)", formula: "C13H16N3NaO4S", molarMass: 333.34, smiles: "CN(CS(=O)(=O)[O-])C1=C(C)N(N1C)C2=CC=CC=C2.[Na+]", categoria: "farmacos", pubchemQuery: "Metamizole sodium" },
+      { id: "Ibuprofeno", chaveOriginal: "C13H18O2_s", nome: "Ibuprofeno", formula: "C13H18O2", molarMass: 206.28, smiles: "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O", categoria: "farmacos", pubchemQuery: "Ibuprofen" },
+      { id: "Cafeina", chaveOriginal: "Cafeina_s", nome: "Cafeína", formula: "C8H10N4O2", molarMass: 194.19, smiles: "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", categoria: "farmacos", pubchemQuery: "Caffeine" },
+      { id: "AcidoSalicilico", chaveOriginal: "AcidoSalicilico_s", nome: "Ácido Salicílico", formula: "C7H6O3", molarMass: 138.12, smiles: "O=C(O)C1=CC=CC=C1O", categoria: "reagentes", pubchemQuery: "Salicylic acid" },
+      { id: "AnidridoAcetico", chaveOriginal: "AnidridoAcetico_l", nome: "Anidrido Acético", formula: "C4H6O3", molarMass: 102.09, smiles: "CC(=O)OC(=O)C", categoria: "reagentes", pubchemQuery: "Acetic anhydride" },
+      { id: "pAminofenol", chaveOriginal: "pAminofenol_s", nome: "4-Aminofenol", formula: "C6H7NO", molarMass: 109.13, smiles: "NC1=CC=C(O)C=C1", categoria: "reagentes", pubchemQuery: "4-Aminophenol" },
+      { id: "Etanol", chaveOriginal: "Etanol_l", nome: "Etanol Absoluto", formula: "C2H6O", molarMass: 46.07, smiles: "CCO", categoria: "solventes", pubchemQuery: "Ethanol" },
+      { id: "Metanol", chaveOriginal: "Metanol_l", nome: "Metanol", formula: "CH4O", molarMass: 32.04, smiles: "CO", categoria: "solventes", pubchemQuery: "Methanol" },
+      { id: "Acetona", chaveOriginal: "Acetona_l", nome: "Acetona Pura", formula: "C3H6O", molarMass: 58.08, smiles: "CC(=O)C", categoria: "solventes", pubchemQuery: "Acetone" },
+      { id: "Hexano", chaveOriginal: "Hexano_l", nome: "Hexano", formula: "C6H14", molarMass: 86.18, smiles: "CCCCCC", categoria: "solventes", pubchemQuery: "Hexane" },
+      { id: "Cloroformio", chaveOriginal: "Cloroformio_l", nome: "Clorofórmio", formula: "CHCl3", molarMass: 119.38, smiles: "ClC(Cl)Cl", categoria: "solventes", pubchemQuery: "Chloroform" },
+      { id: "Sarin", chaveOriginal: "C4H10FO2P_l", nome: "Sarin (GB)", formula: "C4H10FO2P", molarMass: 140.09, smiles: "CC(C)OP(=O)(C)F", categoria: "toxicos", pubchemQuery: "Sarin" },
+      { id: "Estricnina", chaveOriginal: "C20H22N2O2_s", nome: "Estricnina", formula: "C20H22N2O2", molarMass: 334.41, smiles: "O=C1CC2OCC=C3CN4CCC56C4CC3C2C5=CC=CC61", categoria: "toxicos", pubchemQuery: "Strychnine" }
+    ];
+
+    acervoReserva.forEach(comp => {
+      const norm = comp.id.toLowerCase();
+      if (!mapaUnico.has(norm)) {
+        mapaUnico.set(norm, comp);
+      }
+    });
 
     compostosIndexados = Array.from(mapaUnico.values()).sort((a, b) => a.nome.localeCompare(b.nome));
     compostosFiltrados = [...compostosIndexados];
 
     const totalBadge = document.getElementById('studioTotalBadge');
     if (totalBadge) {
-      totalBadge.textContent = `${compostosIndexados.length} Compostos Prontos`;
+      totalBadge.textContent = `${compostosIndexados.length} Espécies Indexadas`;
     }
 
     atualizarContadorFiltrados();
@@ -142,8 +157,8 @@
   function classificarCategoria(formula, chave, label) {
     const txt = (chave + ' ' + (label || '')).toLowerCase();
     if (txt.includes('sarin') || txt.includes('vx') || txt.includes('estricnina') || txt.includes('toxina')) return 'toxicos';
-    if (txt.includes('agua') || txt.includes('etanol') || txt.includes('metanol') || txt.includes('acetona') || txt.includes('hexano')) return 'solventes';
-    if (txt.includes('acido') || txt.includes('hidroxido') || txt.includes('cloreto') || txt.includes('sulfato')) return 'reagentes';
+    if (txt.includes('agua') || txt.includes('etanol') || txt.includes('metanol') || txt.includes('acetona') || txt.includes('hexano') || txt.includes('cloroformio')) return 'solventes';
+    if (txt.includes('acido') || txt.includes('hidroxido') || txt.includes('cloreto') || txt.includes('sulfato') || txt.includes('anidrido')) return 'reagentes';
     return 'farmacos';
   }
 
@@ -153,7 +168,7 @@
   }
 
   // =========================================================================
-  // 2. VIRTUALIZAÇÃO DA LISTA LATERAL
+  // 2. VIRTUALIZAÇÃO DA LISTA LATERAL (60 FPS)
   // =========================================================================
   function renderizarListaCompostos(reset = true) {
     const listContainer = document.getElementById('studioCompoundList');
@@ -218,7 +233,7 @@
       });
 
       renderizarListaCompostos(true);
-    }, 150);
+    }, 120);
   };
 
   window.filtrarCategoriaStudio = function(cat) {
@@ -251,7 +266,7 @@
       exibirStatusRDKit(true, "Iniciando RDKit WebAssembly...");
       try {
         if (typeof window.initRDKitModule === 'function') {
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout RDKit")), 5000));
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout RDKit")), 4000));
           RDKitModuleInstance = await Promise.race([window.initRDKitModule(), timeoutPromise]);
           exibirStatusRDKit(false);
           resolve(RDKitModuleInstance);
@@ -260,7 +275,7 @@
           resolve(null);
         }
       } catch (e) {
-        console.warn("[RDKit] Fallback ativado:", e.message || e);
+        console.warn("[RDKit] Inicialização offline/fallback:", e.message || e);
         exibirStatusRDKit(false);
         resolve(null);
       }
@@ -298,7 +313,7 @@
     const rdkit = await carregarRDKitSobDemanda();
     if (!rdkit) {
       elBadge.className = 'lipinski-status-badge badge-pending';
-      elBadge.textContent = 'Calculando...';
+      elBadge.textContent = 'Estimado';
       return;
     }
 
@@ -329,7 +344,7 @@
 
       if (violacoes === 0) {
         elBadge.className = 'lipinski-status-badge badge-approved';
-        elBadge.textContent = 'Lipinski: Aprovado';
+        elBadge.textContent = 'Lipinski: Aprovado (0 viol.)';
       } else if (violacoes === 1) {
         elBadge.className = 'lipinski-status-badge badge-warning';
         elBadge.textContent = 'Lipinski: 1 Violação';
@@ -344,21 +359,21 @@
   }
 
   // =========================================================================
-  // 4. RESOLUÇÃO DE CONFORMAÇÃO 3D (SMILES PRIMÁRIO)
+  // 4. RESOLUÇÃO DE CONFORMAÇÃO 3D (PUBChem / CACTUS / RDKit ETKDG)
   // =========================================================================
   async function resolverCoordenadas3D(smiles, termoBusca) {
     if (!smiles && !termoBusca) return null;
 
-    // 1. IndexedDB Cache
+    // 1. IndexedDB Cache Local
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
       const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
       if (cache && cache.sdf) return cache.sdf;
     }
 
     // 2. PubChem REST 3D Direto por SMILES
-    if (smiles && smiles !== '--') {
+    if (smiles && smiles !== '--' && !smiles.includes('.')) {
       try {
-        exibirStatusRDKit(true, "Buscando conformação 3D (PubChem)...");
+        exibirStatusRDKit(true, "Consultando PubChem 3D...");
         const urlSmiles = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(smiles)}/SDF?record_type=3d`;
         const res = await fetch(urlSmiles);
         if (res.ok) {
@@ -372,7 +387,7 @@
       } catch (e) {}
     }
 
-    // 3. CACTUS NIH 3D por SMILES (Gera coordenadas 3D instantaneamente)
+    // 3. CACTUS NIH 3D por SMILES (Conversor geométrico direto)
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Gerando coordenadas (CACTUS NIH)...");
@@ -388,10 +403,35 @@
       } catch (e) {}
     }
 
-    // 4. PubChem por Query/Nome em Inglês
+    // 4. RDKit WASM ETKDG (Conformação in-browser local)
+    if (smiles && smiles !== '--' && !smiles.includes('.')) {
+      const rdkit = await carregarRDKitSobDemanda();
+      if (rdkit) {
+        try {
+          exibirStatusRDKit(true, "Calculando geometria 3D local (ETKDG)...");
+          const mol = rdkit.get_mol(smiles);
+          if (mol) {
+            mol.add_hs();
+            if (mol.embed_mol() >= 0) {
+              const sdfGerado = mol.to_sdf();
+              mol.delete();
+              exibirStatusRDKit(false);
+              if (sdfGerado && sdfGerado.includes("$$$$")) {
+                salvarEmCache(smiles, termoBusca, sdfGerado);
+                return sdfGerado;
+              }
+            } else {
+              mol.delete();
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 5. PubChem por Query/Nome em Inglês
     if (termoBusca) {
       try {
-        exibirStatusRDKit(true, "Consultando PubChem...");
+        exibirStatusRDKit(true, "Consultando PubChem por nome...");
         const query = encodeURIComponent(termoBusca.trim());
         const resN = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`);
         if (resN.ok) {
@@ -416,7 +456,7 @@
   }
 
   // =========================================================================
-  // 5. VIEWPORT 3D & CORREÇÃO DE DIMENSÕES WEBGL
+  // 5. VIEWPORT 3D & CORREÇÃO DEFINITIVA DE FRAMEBUFFER
   // =========================================================================
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
@@ -427,11 +467,16 @@
     const elNome = document.getElementById('studioMolNome');
     const elFormula = document.getElementById('studioMolFormula');
     const elMassa = document.getElementById('studioMolMassa');
+    const elSmiles = document.getElementById('studioMolSmiles');
     const btnBench = document.getElementById('btnCarregarNaBancada');
 
     if (elNome) elNome.textContent = comp.nome;
     if (elFormula) elFormula.textContent = comp.formula;
     if (elMassa) elMassa.textContent = comp.molarMass !== '--' ? `${parseFloat(comp.molarMass).toFixed(2)} g/mol` : '-- g/mol';
+    if (elSmiles) {
+      elSmiles.textContent = comp.smiles || '--';
+      elSmiles.title = comp.smiles || '--';
+    }
     if (btnBench) btnBench.style.display = 'inline-flex';
 
     desenharEstrutura2DStudio(comp.smiles, comp.nome);
@@ -471,13 +516,20 @@
     studioViewer.zoomTo();
     studioViewer.render();
 
-    // Garante que o canvas assuma o tamanho total real do contêiner
+    // Redimensionamento forçado progressivo
+    requestAnimationFrame(() => {
+      if (studioViewer) {
+        studioViewer.resize();
+        studioViewer.render();
+      }
+    });
+
     setTimeout(() => {
       if (studioViewer) {
         studioViewer.resize();
         studioViewer.render();
       }
-    }, 100);
+    }, 120);
 
     if (autoRotacaoAtiva) {
       studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
@@ -558,7 +610,7 @@
   }
 
   // =========================================================================
-  // 6. CONTROLES E MEDIÇÃO GEOMÉTRICA
+  // 6. CONTROLES E MEDIÇÃO GEOMÉTRICA (Å / °)
   // =========================================================================
   window.setModelo3D = function(modo) {
     modeloAtual = modo;
@@ -761,11 +813,11 @@
   };
 
   // =========================================================================
-  // 7. INICIALIZAÇÃO ASSÍNCRONA E RESIZE LISTENER
+  // 7. INICIALIZAÇÃO ASSÍNCRONA COM PROTEÇÃO DE FRAMEBUFFER
   // =========================================================================
   async function inicializarStudioComPolling() {
     let tentativas = 0;
-    while (tentativas < 20) {
+    while (tentativas < 10) {
       const { labDb, synthDb } = obterFontesDeDados();
       if (labDb || synthDb) break;
       await new Promise(r => setTimeout(r, 100));
@@ -795,7 +847,13 @@
           studioViewer.resize();
           studioViewer.render();
         }
-      }, 150);
+      }, 100);
+      setTimeout(() => {
+        if (studioViewer) {
+          studioViewer.resize();
+          studioViewer.render();
+        }
+      }, 300);
     }
   });
 
