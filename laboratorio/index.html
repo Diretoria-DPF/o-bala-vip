@@ -14,6 +14,84 @@
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
   
   <link rel="stylesheet" href="style.css">
+
+  <!-- =========================================================================
+       CONTROLADORES GLOBAIS DE INTERFACE (INICIALIZADOS ANTES DO DOM)
+       ========================================================================= -->
+  <script>
+    // 1. Tela Cheia Nativa Cross-Browser
+    window.toggleLabFullscreen = function() {
+      const doc = document;
+      const docEl = doc.documentElement;
+
+      const requestFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+      const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+      const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+
+      if (!isFs) {
+        if (requestFs) {
+          requestFs.call(docEl).catch(err => console.warn('[LAIFT Fullscreen]', err));
+        }
+      } else {
+        if (exitFs) {
+          exitFs.call(doc).catch(err => console.warn('[LAIFT Fullscreen]', err));
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', () => {
+      const btn = document.getElementById('btnLabFullscreen');
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (btn) btn.textContent = isFs ? '⛶ Restaurar' : '⛶ Tela Cheia';
+    });
+
+    // 2. Alternância de Abas no Painel Direito
+    window.switchRightTab = function(tabId) {
+      document.querySelectorAll('.rtab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+      document.querySelectorAll('.rtab-pane').forEach(pane => pane.classList.toggle('active', pane.id === tabId));
+      if (tabId === 'tabPH' && typeof window.desenharCurvaPH === 'function') window.desenharCurvaPH();
+      if (tabId === 'tabMol' && typeof window.atualizarInspecaoMolecular === 'function') window.atualizarInspecaoMolecular();
+    };
+
+    // 3. Controle de Visão Mobile
+    window.setMobileView = function(viewName) {
+      const grid = document.getElementById('mainGrid');
+      if (grid) grid.setAttribute('data-mobile-view', viewName);
+      document.querySelectorAll('.m-nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.target === viewName));
+      if (viewName === 'analise') {
+        if (typeof window.atualizarInspecaoMolecular === 'function') setTimeout(window.atualizarInspecaoMolecular, 60);
+        if (typeof window.desenharCurvaPH === 'function') setTimeout(window.desenharCurvaPH, 90);
+      }
+    };
+
+    // 4. Modal do Estúdio 3D (Iframe)
+    window.abrirStudio = function() {
+      const modal = document.getElementById('studioIframeModal');
+      const iframe = document.getElementById('studioIframe');
+
+      if (modal && iframe) {
+        if (!iframe.src || !iframe.src.includes('studio/index.html')) {
+          iframe.src = 'studio/index.html';
+        }
+        modal.style.display = 'flex';
+
+        setTimeout(() => {
+          try {
+            if (iframe.contentWindow) {
+              iframe.contentWindow.postMessage({ acao: 'studioAberto' }, '*');
+            }
+          } catch (e) {}
+        }, 150);
+      } else {
+        window.open('studio/index.html', '_blank');
+      }
+    };
+
+    window.fecharStudio = function() {
+      const modal = document.getElementById('studioIframeModal');
+      if (modal) modal.style.display = 'none';
+    };
+  </script>
 </head>
 <body class="cockpit-locked">
 
@@ -27,22 +105,20 @@
     </div>
 
     <div class="header-right">
-      <!-- Botão de Tela Cheia com Suporte Cross-Browser -->
-      <button class="manual-btn" id="btnLabFullscreen" onclick="toggleLabFullscreen()" title="Alternar Tela Cheia">
+      <button class="manual-btn" id="btnLabFullscreen" onclick="window.toggleLabFullscreen()" title="Alternar Tela Cheia">
         ⛶ Tela Cheia
       </button>
 
-      <!-- Botão de Acesso ao Estúdio 3D -->
-      <button class="manual-btn btn-studio-launch" id="btnOpenStudio" onclick="abrirStudio()" title="Abrir Estúdio de Modelagem Molecular 3D">
+      <button class="manual-btn btn-studio-launch" id="btnOpenStudio" onclick="window.abrirStudio()" title="Abrir Estúdio de Modelagem Molecular 3D">
         🧬 Estúdio 3D
       </button>
 
-      <!-- Botão do Guia de Bancada -->
       <button class="manual-btn" id="btnManual" title="Manual e Guia de Bancada" onclick="abrirManual()">
         📖 Guia
       </button>
     </div>
   </header>
+
   <!-- ==========================================
        GRID PRINCIPAL DA BANCADA (100dvh LOCKED)
   ========================================== -->
@@ -118,7 +194,7 @@
     <!-- 2. PAINEL CENTRAL: VIDRARIA & PALCO -->
     <section class="visual-stage" id="viewBancada">
       
-      <!-- HUD Superior em Fita -->
+      <!-- HUD Superior -->
       <div class="hud-overlay">
         <div class="hud-card">
           <div class="hud-label">Temperatura</div>
@@ -138,7 +214,7 @@
         </div>
       </div>
 
-      <!-- Termômetro de Coluna -->
+      <!-- Termômetro -->
       <div class="thermo-column">
         <div class="thermo-stick">
           <div class="thermo-fill-bar" id="thermoFill"></div>
@@ -146,7 +222,7 @@
         <div class="thermo-bulb-circle" id="thermoBulb"></div>
       </div>
 
-      <!-- Vidraria de Reação -->
+      <!-- Vidraria -->
       <div class="glassware-zone" id="glasswareZone" onclick="toggleFoco()">
         <div class="glass-vessel vessel-beaker" id="vessel">
           <div class="stopper-cap" id="stopperCap"></div>
@@ -172,12 +248,11 @@
       <div class="tripod"></div>
       <div class="bench"></div>
 
-      <!-- Botão do Preceptor Ancorado na Bancada -->
+      <!-- Botão Preceptor -->
       <button id="labChatWidgetBtn" onclick="toggleLabChat()" title="Consultar o Preceptor da Bancada">
         💬 <span>Preceptor de Bancada</span>
       </button>
 
-      <!-- Assinatura Inferior -->
       <div class="signature desktop-only">LAIFT • SISTEMA DE SÍNTESE</div>
 
       <button class="btn-close-focus" id="btnCloseFocus" onclick="toggleFoco()">✕ Sair do Foco</button>
@@ -187,15 +262,15 @@
     <aside class="side-panel-right" id="viewAnalise">
       
       <div class="right-tab-bar">
-        <button class="rtab-btn active" data-tab="tabMol" onclick="switchRightTab('tabMol')">🔬 Molécula</button>
-        <button class="rtab-btn" data-tab="tabPH" onclick="switchRightTab('tabPH')">📈 Curva pH</button>
-        <button class="rtab-btn" data-tab="tabLog" onclick="switchRightTab('tabLog')">📋 Vaso/Log</button>
-        <button class="rtab-btn" data-tab="tabMissao" onclick="switchRightTab('tabMissao')">🎯 Roteiro</button>
+        <button class="rtab-btn active" data-tab="tabMol" onclick="window.switchRightTab('tabMol')">🔬 Molécula</button>
+        <button class="rtab-btn" data-tab="tabPH" onclick="window.switchRightTab('tabPH')">📈 Curva pH</button>
+        <button class="rtab-btn" data-tab="tabLog" onclick="window.switchRightTab('tabLog')">📋 Vaso/Log</button>
+        <button class="rtab-btn" data-tab="tabMissao" onclick="window.switchRightTab('tabMissao')">🎯 Roteiro</button>
       </div>
 
       <div class="tab-content-container">
         
-        <!-- Aba 1: Inspeção Molecular Híbrida -->
+        <!-- Aba 1: Molécula -->
         <div class="rtab-pane active" id="tabMol">
           <div class="panel mol-panel">
             <div class="panel-section-header">
@@ -249,7 +324,7 @@
           </div>
         </div>
 
-        <!-- Aba 2: Curva de Titulação / Monitoramento de pH -->
+        <!-- Aba 2: Curva de pH -->
         <div class="rtab-pane" id="tabPH">
           <div class="panel" style="height: 100%; display: flex; flex-direction: column;">
             <div class="panel-section-header">
@@ -262,7 +337,7 @@
           </div>
         </div>
 
-        <!-- Aba 3: Espécies Químicas & Diário de Bordo -->
+        <!-- Aba 3: Log -->
         <div class="rtab-pane" id="tabLog">
           <div class="panel" style="height: 100%; display: flex; flex-direction: column;">
             <div class="panel-section-header">
@@ -274,7 +349,7 @@
           </div>
         </div>
 
-        <!-- Aba 4: Roteiros Práticos e Missões -->
+        <!-- Aba 4: Roteiro -->
         <div class="rtab-pane" id="tabMissao">
           <div class="panel mission-box" style="height: 100%; display: flex; flex-direction: column;">
             <div class="panel-section-header">
@@ -299,13 +374,13 @@
        BARRA DE NAVEGAÇÃO INFERIOR NATIVA (MOBILE)
   ========================================== -->
   <nav class="mobile-nav-bar" id="mobileNavBar">
-    <button class="m-nav-btn active" data-target="bancada" onclick="setMobileView('bancada')">
+    <button class="m-nav-btn active" data-target="bancada" onclick="window.setMobileView('bancada')">
       🧪 <span>Bancada</span>
     </button>
-    <button class="m-nav-btn" data-target="reagentes" onclick="setMobileView('reagentes')">
+    <button class="m-nav-btn" data-target="reagentes" onclick="window.setMobileView('reagentes')">
       ⚙️ <span>Reagentes</span>
     </button>
-    <button class="m-nav-btn" data-target="analise" onclick="setMobileView('analise')">
+    <button class="m-nav-btn" data-target="analise" onclick="window.setMobileView('analise')">
       📊 <span>Análise</span>
     </button>
     <button class="m-nav-btn" data-target="chat" onclick="toggleLabChat()">
@@ -314,7 +389,7 @@
   </nav>
 
   <!-- ==========================================
-       DRAWER DO PRECEPTOR COM IA (GROQ 120B)
+       DRAWER DO PRECEPTOR
   ========================================== -->
   <div id="labChatDrawer">
     <div class="lab-chat-header">
@@ -377,60 +452,13 @@
   </div>
 
   <!-- ==========================================
-       MODAL DE TELA CHEIA DO ESTÚDIO 3D (IFRAME)
+       MODAL DO ESTÚDIO 3D (IFRAME)
   ========================================== -->
   <div id="studioIframeModal" class="studio-iframe-modal" style="display: none;">
     <div class="studio-iframe-wrapper">
       <iframe id="studioIframe" src="" frameborder="0" allowfullscreen></iframe>
     </div>
   </div>
-
-  <!-- Controlador de Abas e Modo Mobile -->
-  <script>
-    function switchRightTab(tabId) {
-      document.querySelectorAll('.rtab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
-      document.querySelectorAll('.rtab-pane').forEach(pane => pane.classList.toggle('active', pane.id === tabId));
-      if (tabId === 'tabPH' && typeof desenharCurvaPH === 'function') desenharCurvaPH();
-      if (tabId === 'tabMol' && typeof atualizarInspecaoMolecular === 'function') atualizarInspecaoMolecular();
-    }
-
-    function setMobileView(viewName) {
-      const grid = document.getElementById('mainGrid');
-      if (grid) grid.setAttribute('data-mobile-view', viewName);
-      document.querySelectorAll('.m-nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.target === viewName));
-      if (viewName === 'analise') {
-        if (typeof atualizarInspecaoMolecular === 'function') setTimeout(atualizarInspecaoMolecular, 60);
-        if (typeof desenharCurvaPH === 'function') setTimeout(desenharCurvaPH, 90);
-      }
-
-     // Controlador de Tela Cheia Nativa (Cross-Browser)
-    window.toggleLabFullscreen = function() {
-      const doc = document;
-      const docEl = doc.documentElement;
-
-      const requestFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
-      const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
-      const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
-
-      if (!isFs) {
-        if (requestFs) {
-          requestFs.call(docEl).catch(err => {
-            console.warn('[LAIFT Fullscreen]', err);
-          });
-        }
-      } else {
-        if (exitFs) {
-          exitFs.call(doc).catch(err => console.warn('[LAIFT Fullscreen]', err));
-        }
-      }
-    };
-
-    document.addEventListener('fullscreenchange', () => {
-      const btn = document.getElementById('btnLabFullscreen');
-      const isFs = document.fullscreenElement || document.webkitFullscreenElement;
-      if (btn) btn.textContent = isFs ? '⛶ Restaurar' : '⛶ Tela Cheia';
-    });
-  </script>
 
   <!-- Módulos de Execução Científica -->
   <script src="js/lab-apis.js"></script>
