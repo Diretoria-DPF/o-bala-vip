@@ -700,7 +700,7 @@ const LAB_DATABASE = {
       fp: 284.0,
       formula: "C21H22N2O2",
       smiles: "C1CC2CC1C13CCN4C1(C2)C(=CC5=CC=CC=C53)COC4=O",
-      iupac": "strychnine",
+      iupac: "strychnine",
       pubchemQuery: "Strychnine",
       dissociation: null
     },
@@ -713,7 +713,7 @@ const LAB_DATABASE = {
       fp: 225.0,
       formula: "C11H17N3O8",
       smiles: "O=C1NC(=O)C2=C(N1)C(NC(=O)C2)C3(O)CC4C(OC5C(O)C(O)C(N)CC5O4)C3O",
-      iupac": "tetrodotoxin",
+      iupac: "tetrodotoxin",
       pubchemQuery: "Tetrodotoxin",
       dissociation: null
     },
@@ -726,7 +726,7 @@ const LAB_DATABASE = {
       fp: 221.0,
       formula: "C31H42N2O6",
       smiles: "CC1=CC(=O)N(C1)C2CCC3C(C2)C4CCC5(C(C4CC3)OC5=O)O",
-      iupac": "batrachotoxin",
+      iupac: "batrachotoxin",
       pubchemQuery: "Batrachotoxin",
       dissociation: null
     },
