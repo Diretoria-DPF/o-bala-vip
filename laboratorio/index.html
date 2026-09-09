@@ -27,17 +27,22 @@
     </div>
 
     <div class="header-right">
-      <!-- Botão de Tela Cheia Nativa -->
+      <!-- Botão de Tela Cheia com Suporte Cross-Browser -->
       <button class="manual-btn" id="btnLabFullscreen" onclick="toggleLabFullscreen()" title="Alternar Tela Cheia">
         ⛶ Tela Cheia
       </button>
+
+      <!-- Botão de Acesso ao Estúdio 3D -->
       <button class="manual-btn btn-studio-launch" id="btnOpenStudio" onclick="abrirStudio()" title="Abrir Estúdio de Modelagem Molecular 3D">
         🧬 Estúdio 3D
       </button>
-      <button class="manual-btn" id="btnManual" title="Manual e Guia de Bancada" onclick="abrirManual()">📖 Guia</button>
+
+      <!-- Botão do Guia de Bancada -->
+      <button class="manual-btn" id="btnManual" title="Manual e Guia de Bancada" onclick="abrirManual()">
+        📖 Guia
+      </button>
     </div>
   </header>
-
   <!-- ==========================================
        GRID PRINCIPAL DA BANCADA (100dvh LOCKED)
   ========================================== -->
@@ -398,23 +403,33 @@
         if (typeof desenharCurvaPH === 'function') setTimeout(desenharCurvaPH, 90);
       }
 
-      function toggleLabFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-          console.warn(`[LAIFT Fullscreen] Erro: ${err.message}`);
-        });
+     // Controlador de Tela Cheia Nativa (Cross-Browser)
+    window.toggleLabFullscreen = function() {
+      const doc = document;
+      const docEl = doc.documentElement;
+
+      const requestFs = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+      const exitFs = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+      const isFs = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+
+      if (!isFs) {
+        if (requestFs) {
+          requestFs.call(docEl).catch(err => {
+            console.warn('[LAIFT Fullscreen]', err);
+          });
+        }
       } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
+        if (exitFs) {
+          exitFs.call(doc).catch(err => console.warn('[LAIFT Fullscreen]', err));
         }
       }
-    }
+    };
 
     document.addEventListener('fullscreenchange', () => {
       const btn = document.getElementById('btnLabFullscreen');
-      if (btn) {
-        btn.textContent = document.fullscreenElement ? '⛶ Restaurar' : '⛶ Tela Cheia';
-        }
+      const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+      if (btn) btn.textContent = isFs ? '⛶ Restaurar' : '⛶ Tela Cheia';
+    });
   </script>
 
   <!-- Módulos de Execução Científica -->
