@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- =========================================================================
-       1. METADADOS, FONTES & VIEWPORT (COCKPIT LOCKED)
-       ========================================================================= -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>LAIFT — Laboratório Virtual de Bancada & Síntese Farmacêutica</title>
@@ -12,56 +9,39 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Urbanist:wght@400;600;700;800&display=swap" rel="stylesheet">
   
-  <!-- =========================================================================
-       2. BIBLIOTECAS GRÁFICAS EXTERNAS (2D VETORIAL & 3D WEBGL)
-       ========================================================================= -->
-  <!-- SmilesDrawer 2D: Renderização vetorial rápida a partir de SMILES -->
+  <!-- Visualizadores Moleculares: 2D (SmilesDrawer) & 3D WebGL (3Dmol.js) -->
   <script src="https://unpkg.com/smiles-drawer@2.1.7/dist/smiles-drawer.min.js"></script>
-  <!-- 3Dmol.js: Motor gráfico WebGL para conformações atômicas tridimensionais -->
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
   
-  <!-- Estilos Globais e Layout Cockpit -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="cockpit-locked">
 
-  <!-- =========================================================================
-       3. CABEÇALHO SUPERIOR (HEADER & CONTROLES GERAIS)
-       ========================================================================= -->
+  <!-- ==========================================
+       CABEÇALHO ULTRA-COMPACTO
+  ========================================== -->
   <header class="lab-header">
     <div class="header-left">
       <h1>LABORATÓRIO VIRTUAL DE SÍNTESE & ANÁLISE</h1>
       <span class="badge desktop-only">LAIFT • FIRST-PRINCIPLES</span>
     </div>
-    
     <div class="header-right">
-      <!-- Botão de Disparo do Estúdio 3D Multimodelo -->
-      <button class="manual-btn btn-studio-launch" id="btnOpenStudio" onclick="abrirStudioProjecao()" title="Abrir Estúdio de Projeção Molecular 3D">
-        🧬 Estúdio 3D
-      </button>
-
-      <!-- Botão de Abertura do Guia Operacional -->
-      <button class="manual-btn" id="btnManual" title="Manual e Guia de Bancada" onclick="abrirManual()">
-        📖 Guia
-      </button>
+      <button class="manual-btn" id="btnManual" title="Manual e Guia de Bancada" onclick="abrirManual()">📖 Guia</button>
     </div>
   </header>
 
-  <!-- =========================================================================
-       4. COCKPIT PRINCIPAL DA BANCADA (GRID 3 COLUNAS / 100dvh LOCKED)
-       ========================================================================= -->
+  <!-- ==========================================
+       GRID PRINCIPAL DA BANCADA (100dvh LOCKED)
+  ========================================== -->
   <main class="main-grid" id="mainGrid" data-mobile-view="bancada">
 
-    <!-- ---------------------------------------------------------------------
-         4.1. PAINEL ESQUERDO: CONTROLES, REAGENTES E TERMODINÂMICA
-         --------------------------------------------------------------------- -->
+    <!-- 1. PAINEL ESQUERDO: CONTROLES E REAGENTES -->
     <aside class="panel panel-controls" id="viewReagentes">
       <div class="panel-header-sticky">
         <h3><span class="icon-dot"></span> Reagentes & Bancada</h3>
       </div>
 
       <div class="controls-scroll">
-        <!-- Seleção do Tipo de Recipiente/Vidraria -->
         <div class="control-group">
           <label for="vidrariaSelect">Vidraria de Reação:</label>
           <select id="vidrariaSelect" onchange="trocarVidraria()">
@@ -72,13 +52,11 @@
           </select>
         </div>
 
-        <!-- Catálogo Expansível de Reagentes e Precursores -->
         <div class="control-group">
           <label>Catálogo de Precursores & Fármacos:</label>
           <div id="catalogContainer" class="reagent-catalog">Carregando catálogo...</div>
         </div>
 
-        <!-- Dosagem Quantitativa e Mecanismo de Adição -->
         <div class="control-group compact-row">
           <div style="flex: 1;">
             <label for="qtdInput">Quantidade:</label>
@@ -94,7 +72,6 @@
           </div>
         </div>
 
-        <!-- Botões de Ação de Despejo e Reversão -->
         <div class="btn-row">
           <button class="btn btn-play" id="btnStartAdd" onclick="iniciarAdicao()">▶ Adicionar</button>
           <button class="btn btn-stop" onclick="pararAdicao()">⏸ Pausar</button>
@@ -103,7 +80,6 @@
 
         <hr class="panel-divider">
 
-        <!-- Sistema de Aquecimento, Resfriamento e Termostato -->
         <div class="control-group">
           <label>Controle Térmico:</label>
           <div class="btn-row">
@@ -113,14 +89,12 @@
           </div>
         </div>
 
-        <!-- Ajuste Fino de Temperatura Alvo e Intensidade da Chama -->
         <div class="control-group compact-row" style="align-items: center;">
           <input type="number" id="tempAlvo" value="25" style="width: 65px;" title="Temperatura Alvo (°C)">
           <span class="sub-label">°C Alvo</span>
           <input type="range" id="heatSlider" min="1" max="10" value="5" oninput="ajustarPotenciaChama(this.value)" title="Intensidade da Chama" style="flex: 1;">
         </div>
 
-        <!-- Agitação Magnética e Higienização Geral da Bancada -->
         <div class="btn-row" style="margin-top: 6px;">
           <button class="btn btn-play" id="btnAgitador" onclick="toggleAgitador()">🌪️ Agitador</button>
           <button class="btn btn-reset" onclick="resetarLaboratorio()">🔄 Limpar</button>
@@ -128,12 +102,10 @@
       </div>
     </aside>
 
-    <!-- ---------------------------------------------------------------------
-         4.2. PAINEL CENTRAL: PALCO VISUAL, VIDRARIA & HUD EM TEMPO REAL
-         --------------------------------------------------------------------- -->
+    <!-- 2. PAINEL CENTRAL: VIDRARIA & PALCO -->
     <section class="visual-stage" id="viewBancada">
       
-      <!-- HUD Superior: Telemetria Físico-Química Instantânea -->
+      <!-- HUD Superior em Fita -->
       <div class="hud-overlay">
         <div class="hud-card">
           <div class="hud-label">Temperatura</div>
@@ -153,7 +125,7 @@
         </div>
       </div>
 
-      <!-- Termômetro de Mercúrio Dinâmico -->
+      <!-- Termômetro de Coluna -->
       <div class="thermo-column">
         <div class="thermo-stick">
           <div class="thermo-fill-bar" id="thermoFill"></div>
@@ -161,7 +133,7 @@
         <div class="thermo-bulb-circle" id="thermoBulb"></div>
       </div>
 
-      <!-- Zona de Renderização da Vidraria (Reações e Mudanças de Fase) -->
+      <!-- Vidraria de Reação -->
       <div class="glassware-zone" id="glasswareZone" onclick="toggleFoco()">
         <div class="glass-vessel vessel-beaker" id="vessel">
           <div class="stopper-cap" id="stopperCap"></div>
@@ -176,35 +148,32 @@
         </div>
       </div>
 
-      <!-- Camada de Efeitos Ambientais (Fogo do Bico de Bunsen e Gelo) -->
+      <!-- Efeitos Físicos -->
       <div class="flame-effect" id="flameFX">
         <div class="flame-core"></div>
         <div class="flame-base"></div>
       </div>
       <div class="ice-aura-effect" id="iceFX"></div>
 
-      <!-- Estrutura Física e Bancada de Apoio -->
+      <!-- Estrutura da Bancada -->
       <div class="tripod"></div>
       <div class="bench"></div>
 
-      <!-- Botão Flutuante de Acionamento do Preceptor IA -->
+      <!-- Botão do Preceptor Ancorado na Bancada -->
       <button id="labChatWidgetBtn" onclick="toggleLabChat()" title="Consultar o Preceptor da Bancada">
         💬 <span>Preceptor de Bancada</span>
       </button>
 
-      <!-- Assinatura Institucional -->
+      <!-- Assinatura Inferior -->
       <div class="signature desktop-only">LAIFT • SISTEMA DE SÍNTESE</div>
 
-      <!-- Botão de Escape para o Modo Foco Ampliado -->
       <button class="btn-close-focus" id="btnCloseFocus" onclick="toggleFoco()">✕ Sair do Foco</button>
     </section>
 
-    <!-- ---------------------------------------------------------------------
-         4.3. PAINEL DIREITO: ABAS DE ANÁLISE, PROJEÇÃO E ROTEIROS
-         --------------------------------------------------------------------- -->
+    <!-- 3. PAINEL DIREITO: ABAS DE ANÁLISE -->
     <aside class="side-panel-right" id="viewAnalise">
       
-      <!-- Seletor de Abas de Análise -->
+      <!-- Seletor de Abas Superiores -->
       <div class="right-tab-bar">
         <button class="rtab-btn active" data-tab="tabMol" onclick="switchRightTab('tabMol')">🔬 Molécula</button>
         <button class="rtab-btn" data-tab="tabPH" onclick="switchRightTab('tabPH')">📈 Curva pH</button>
@@ -214,7 +183,7 @@
 
       <div class="tab-content-container">
         
-        <!-- [ABA 1]: Projeção Molecular Híbrida (2D Vetorial & 3D Conformer) -->
+        <!-- Aba 1: Inspeção Molecular Híbrida (2D Vetorial + 3D Conformer WebGL) -->
         <div class="rtab-pane active" id="tabMol">
           <div class="panel mol-panel">
             <div class="panel-section-header">
@@ -225,7 +194,7 @@
               </div>
             </div>
             
-            <!-- Box do Visualizador Gráfico Molecular -->
+            <!-- Contêiner de Renderização Molecular (2D / 3D) -->
             <div class="mol-visualizer-box" id="molVisualizerBox">
               <canvas id="moleculeCanvas" width="280" height="150"></canvas>
               <img id="moleculeImg" src="" alt="Estrutura 2D da Molécula">
@@ -233,7 +202,7 @@
               <div id="molPlaceholder">Selecione ou sintetize uma molécula para exibir sua estrutura.</div>
             </div>
 
-            <!-- Ficha Analítica e Propriedades Químicas do Produto em Foco -->
+            <!-- Ficha Técnica e Propriedades Químicas -->
             <div class="mol-details-card">
               <div class="mol-data-row">
                 <span class="data-key">Espécie em Foco:</span>
@@ -270,7 +239,7 @@
           </div>
         </div>
 
-        <!-- [ABA 2]: Curva de Titulação e Gráfico Cinético de pH -->
+        <!-- Aba 2: Curva de Titulação / Monitoramento de pH -->
         <div class="rtab-pane" id="tabPH">
           <div class="panel" style="height: 100%; display: flex; flex-direction: column;">
             <div class="panel-section-header">
@@ -283,7 +252,7 @@
           </div>
         </div>
 
-        <!-- [ABA 3]: Espécies Químicas Ativas e Diário de Bordo do Vaso -->
+        <!-- Aba 3: Espécies Químicas & Diário de Bordo -->
         <div class="rtab-pane" id="tabLog">
           <div class="panel" style="height: 100%; display: flex; flex-direction: column;">
             <div class="panel-section-header">
@@ -295,7 +264,7 @@
           </div>
         </div>
 
-        <!-- [ABA 4]: Roteiros Práticos e Gamificação de Missões -->
+        <!-- Aba 4: Roteiros Práticos e Missões -->
         <div class="rtab-pane" id="tabMissao">
           <div class="panel mission-box" style="height: 100%; display: flex; flex-direction: column;">
             <div class="panel-section-header">
@@ -316,9 +285,9 @@
 
   </main>
 
-  <!-- =========================================================================
-       5. BARRA DE NAVEGAÇÃO INFERIOR NATIVA (MOBILE ONLY)
-       ========================================================================= -->
+  <!-- ==========================================
+       BARRA DE NAVEGAÇÃO INFERIOR NATIVA (MOBILE)
+  ========================================== -->
   <nav class="mobile-nav-bar" id="mobileNavBar">
     <button class="m-nav-btn active" data-target="bancada" onclick="setMobileView('bancada')">
       🧪 <span>Bancada</span>
@@ -334,9 +303,9 @@
     </button>
   </nav>
 
-  <!-- =========================================================================
-       6. GAVETA DE CHAT (PRECEPTOR DE BANCADA COM IA GROQ 120B)
-       ========================================================================= -->
+  <!-- ==========================================
+       DRAWER DO PRECEPTOR COM IA (GROQ 120B)
+  ========================================== -->
   <div id="labChatDrawer">
     <div class="lab-chat-header">
       <div style="display: flex; align-items: center; gap: 8px;">
@@ -357,17 +326,15 @@
     </div>
   </div>
 
-  <!-- =========================================================================
-       7. MODAIS DE SUPORTE: SEGURANÇA, MANUAIS E DOSSIÊ
-       ========================================================================= -->
-  <!-- Alerta de Biossegurança / Tela Cheia em caso de Explosão/Sobrepressão -->
+  <!-- ==========================================
+       MODAIS DE SEGURANÇA E GUIAS
+  ========================================== -->
   <div class="alert-fullscreen" id="alertOverlay" style="display: none;">
     <h2 id="alertTitle">INCIDENTE LABORATORIAL</h2>
     <div id="alertMsg"></div>
     <button class="btn btn-reset" style="margin-top: 18px; padding: 10px 24px;" onclick="resetarLaboratorio()">Restaurar Bancada</button>
   </div>
 
-  <!-- Manual e Instruções Práticas de Bancada -->
   <div class="manual-modal" id="manualModal" style="display: none;">
     <div class="manual-content">
       <h3>📖 Guia Técnico de Bancada & Síntese</h3>
@@ -381,7 +348,6 @@
     </div>
   </div>
 
-  <!-- Livro Geral de Missões e Roteiros Acadêmicos -->
   <div class="manual-modal" id="missionsModal" style="display: none;">
     <div class="manual-content">
       <h3 style="color: var(--neon-green, #4ade80);">📚 Roteiros Experimentais LAIFT</h3>
@@ -390,7 +356,6 @@
     </div>
   </div>
 
-  <!-- Dossiê Farmacológico Multibases (PubChem, ChEBI, Wikidata) -->
   <div class="manual-modal" id="dossieLabModal" style="display: none;">
     <div class="manual-content" style="max-width: 520px;">
       <h3 style="color: #38bdf8; margin-top: 0;">📋 Dossiê Quimioterápico</h3>
@@ -401,113 +366,7 @@
     </div>
   </div>
 
-  <!-- =========================================================================
-       8. ESTÚDIO DE PROJEÇÃO MOLECULAR 3D MULTIMODELO (MODAL FULLSCREEN)
-       ========================================================================= -->
-  <div id="studioProjecaoModal" class="studio-fullscreen-modal" style="display: none;">
-    <div class="studio-container">
-      
-      <!-- Cabeçalho do Estúdio 3D -->
-      <header class="studio-header">
-        <div class="studio-header-title">
-          <h2>🧬 ESTÚDIO DE PROJEÇÃO MOLECULAR</h2>
-          <span class="badge" id="studioTotalBadge">2.500+ Espécies Indexadas</span>
-        </div>
-        <div class="studio-header-actions">
-          <button class="btn btn-play" id="btnCarregarNaBancada" onclick="carregarCompostoDoStudioNaBancada()" style="display: none;">
-            🧪 Transferir para Bancada
-          </button>
-          <button class="btn-chat-close" onclick="fecharStudioProjecao()" title="Fechar Estúdio">&times;</button>
-        </div>
-      </header>
-
-      <!-- Corpo do Estúdio: Navegador Virtualizado + Viewport WebGL -->
-      <div class="studio-body">
-        
-        <!-- Sidebar de Compostos com Virtualização e Filtros de Busca -->
-        <aside class="studio-sidebar">
-          <div class="studio-search-box">
-            <input type="text" id="studioSearchInput" placeholder="Buscar por nome, fórmula ou SMILES..." oninput="filtrarCompostosStudio(this.value)">
-            <div class="studio-filter-tags">
-              <button class="filter-pill active" data-cat="todas" onclick="filtrarCategoriaStudio('todas')">Todas</button>
-              <button class="filter-pill" data-cat="farmacos" onclick="filtrarCategoriaStudio('farmacos')">Fármacos</button>
-              <button class="filter-pill" data-cat="reagentes" onclick="filtrarCategoriaStudio('reagentes')">Reagentes</button>
-              <button class="filter-pill" data-cat="solventes" onclick="filtrarCategoriaStudio('solventes')">Solventes</button>
-              <button class="filter-pill" data-cat="toxicos" onclick="filtrarCategoriaStudio('toxicos')">Toxinas</button>
-            </div>
-          </div>
-
-          <!-- Lista Virtualizada de Alta Performance (2.500+ itens em Chunks) -->
-          <div class="studio-compound-list" id="studioCompoundList" onscroll="handleStudioScroll()"></div>
-        </aside>
-
-        <!-- Viewport Tridimensional Interativo com Ferramentas -->
-        <section class="studio-viewport-section">
-          
-          <!-- Barra de Ferramentas de Representação e Medição Geométrica -->
-          <div class="studio-toolbar">
-            <div class="tool-group">
-              <span class="tool-label">Representação:</span>
-              <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')">Ball & Stick</button>
-              <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')">Space-Filling (CPK)</button>
-              <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')">Wireframe</button>
-              <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')">Superfície (SAS)</button>
-            </div>
-
-            <div class="tool-group">
-              <span class="tool-label">Geometria:</span>
-              <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()">
-                📏 Medição Ativa
-              </button>
-              <button class="tool-btn" onclick="limparMedicoes3D()">Limpar Medições</button>
-            </div>
-
-            <div class="tool-group">
-              <button class="tool-btn" id="btnAutoRotate" onclick="toggleAutoRotacao3D()">🔄 Rotação</button>
-              <button class="tool-btn" onclick="resetarCamera3D()">🎯 Centralizar</button>
-            </div>
-          </div>
-
-          <!-- Canvas Principal do 3Dmol.js com HUD de Medições Ativas -->
-          <div class="studio-canvas-wrapper" id="studioCanvasWrapper">
-            <div id="studioViewer3D" style="width: 100%; height: 100%; position: relative;"></div>
-            
-            <div class="measure-hud" id="measureHud" style="display: none;">
-              <span>MODO DE MEDIÇÃO ATIVO</span>
-              <small>Clique em 2 átomos para distância (Å) ou 3 para ângulo</small>
-            </div>
-
-            <div class="studio-watermark" id="studioWatermark">Selecione uma molécula para inspecionar</div>
-          </div>
-
-          <!-- Rodapé do Estúdio com Metadados da Conformação -->
-          <footer class="studio-footer-hud">
-            <div class="hud-stat-cell">
-              <span class="stat-label">Composto em Análise</span>
-              <strong class="stat-value" id="studioMolNome">--</strong>
-            </div>
-            <div class="hud-stat-cell">
-              <span class="stat-label">Fórmula Molecular</span>
-              <strong class="stat-value" id="studioMolFormula" style="color: #facc15;">--</strong>
-            </div>
-            <div class="hud-stat-cell">
-              <span class="stat-label">Massa Molar</span>
-              <strong class="stat-value" id="studioMolMassa" style="color: #4ade80;">-- g/mol</strong>
-            </div>
-            <div class="hud-stat-cell" style="flex: 2;">
-              <span class="stat-label">Última Medição Geométrica</span>
-              <strong class="stat-value" id="studioLastMeasurement" style="color: #38bdf8;">Nenhuma seleção</strong>
-            </div>
-          </footer>
-
-        </section>
-      </div>
-    </div>
-  </div>
-
-  <!-- =========================================================================
-       9. CONTROLADORES INLINE DA INTERFACE (ROTEAMENTO DE ABAS & MOBILE)
-       ========================================================================= -->
+  <!-- Controlador de Abas e Modo Mobile -->
   <script>
     function switchRightTab(tabId) {
       document.querySelectorAll('.rtab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
@@ -527,26 +386,12 @@
     }
   </script>
 
-  <!-- =========================================================================
-       10. MÓDULOS DE EXECUÇÃO CIENTÍFICA (ORDEM EM CASCATA OBRIGATÓRIA)
-       ========================================================================= -->
-  <!-- 1. Camada de Integração Científica com Bases Externas -->
+  <!-- Módulos de Execução Científica (Carregamento em Cascata Corrigido) -->
   <script src="js/lab-apis.js"></script>
-
-  <!-- 2. Bases de Dados Estruturais, Propriedades e Sínteses -->
   <script src="dados/lab-database.js"></script>
   <script src="dados/sinteses-database.js"></script>
-
-  <!-- 3. Camada de Persistência Offline e Cache IndexedDB -->
   <script src="js/lab-storage.js"></script>
-
-  <!-- 4. Motor Cognitivo do Preceptor de Bancada -->
   <script src="js/lab-preceptor.js"></script>
-
-  <!-- 5. Motor do Estúdio Tridimensional de Projeção Molecular -->
-  <script src="js/lab-projection.js"></script>
-
-  <!-- 6. Controlador Central da Bancada e Dinâmica Reacional -->
   <script src="js/script.js"></script>
 </body>
 </html>
