@@ -3,49 +3,48 @@
  * Arquivo: studio.js
  * 
  * Funcionalidades:
- * 1. Ingestão e virtualização de 2.500+ compostos químicos (Zero Lag/60 FPS).
- * 2. Pipeline quimioinformático: Cache IndexedDB -> RDKit.js WASM -> PubChem 3D -> CACTUS NIH.
- * 3. Renderização WebGL Multimodelo (Ball & Stick, CPK, Wireframe e Superfície SAS).
- * 4. Inspeção Geométrica Interativa: Cálculo euclidiano de distâncias (Å) e ângulos planares (°).
- * 5. Visualização Híbrida 2D Vetorial (SmilesDrawer) e 3D.
- * 6. Exportação para relatórios em PNG (alta resolução) e arquivo estrutural SDF.
- * 7. Sincronização bidirecional com a bancada do laboratório via LocalStorage e PostMessage.
+ * 1. Virtualização de 2.500+ compostos sem perda de frames.
+ * 2. Cálculo de descritores farmacocinéticos (LogP, TPSA, HBD, HBA, RotB) via RDKit.js WASM.
+ * 3. Validação instantânea da Regra dos Cinco de Lipinski (Drogabilidade Oral).
+ * 4. Sincronização em tempo real via BroadcastChannel API (laift_molecular_bus).
+ * 5. Visualizador 3D multimodelo (Ball & Stick, CPK, Wireframe, SAS) e medição geométrica (Å / °).
  */
 
 (function() {
   'use strict';
 
   // =========================================================================
-  // 1. ESTADO GLOBAL DO ESTÚDIO
+  // 1. ESTADO GLOBAL E BARRAMENTO BROADCASTCHANNEL
   // =========================================================================
+  const labBroadcast = (typeof BroadcastChannel !== 'undefined')
+    ? new BroadcastChannel('laift_molecular_bus')
+    : null;
+
   let studioViewer = null;
   let compostosIndexados = [];
   let compostosFiltrados = [];
   let compostoSelecionado = null;
 
-  let modoExibicaoAtual = '3D'; // '2D' | '3D'
-  let modeloAtual = 'ballstick'; // 'ballstick' | 'cpk' | 'wireframe' | 'surface'
+  let modoExibicaoAtual = '3D';
+  let modeloAtual = 'ballstick';
   let autoRotacaoAtiva = false;
   let modoMedicaoAtivo = false;
   let atomosSelecionadosParaMedicao = [];
   let sdfCacheLocal = null;
 
-  // Motor WebAssembly RDKit.js
   let RDKitModuleInstance = null;
   let rdkitCarregando = false;
 
-  // Paginação Virtual da Lista
   const ITEMS_PER_CHUNK = 40;
   let currentRenderedIndex = 0;
   let debounceBuscaTimer = null;
 
   // =========================================================================
-  // 2. INGESTÃO E CLASSIFICAÇÃO DOS COMPOSTOS
+  // 2. INGESTÃO DOS COMPOSTOS
   // =========================================================================
   function indexarAcervoCompleto() {
     const mapaUnico = new Map();
 
-    // 1. Base Primária da Bancada (LAB_DATABASE)
     if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
       Object.entries(LAB_DATABASE.species).forEach(([chave, dados]) => {
         const id = chave.replace(/_s|_l|_aq|_g/g, '');
@@ -62,7 +61,6 @@
       });
     }
 
-    // 2. Base de Sínteses e Fármacos Estruturados
     if (typeof window.BANCO_SINTESES_LAIFT !== 'undefined' && Array.isArray(window.BANCO_SINTESES_LAIFT)) {
       window.BANCO_SINTESES_LAIFT.forEach(synth => {
         if (!synth || !synth.nomeComposto) return;
@@ -83,7 +81,6 @@
       });
     }
 
-    // 3. Catálogo Químico Expandido (caso disponível no ambiente)
     if (typeof window.BANCO_COMPOSTOS_EXPANDIDO !== 'undefined' && Array.isArray(window.BANCO_COMPOSTOS_EXPANDIDO)) {
       window.BANCO_COMPOSTOS_EXPANDIDO.forEach(c => {
         if (!c || !c.nome) return;
@@ -116,21 +113,19 @@
 
   function classificarCategoria(formula, chave, label) {
     const txt = (chave + ' ' + (label || '')).toLowerCase();
-    if (txt.includes('sarin') || txt.includes('vx') || txt.includes('estricnina') || txt.includes('toxina') || txt.includes('mostarda')) return 'toxicos';
-    if (txt.includes('agua') || txt.includes('etanol') || txt.includes('metanol') || txt.includes('acetona') || txt.includes('hexano') || txt.includes('dmso') || txt.includes('thf')) return 'solventes';
-    if (txt.includes('acido') || txt.includes('hidroxido') || txt.includes('cloreto') || txt.includes('sulfato') || txt.includes('nitrato')) return 'reagentes';
+    if (txt.includes('sarin') || txt.includes('vx') || txt.includes('estricnina') || txt.includes('toxina')) return 'toxicos';
+    if (txt.includes('agua') || txt.includes('etanol') || txt.includes('metanol') || txt.includes('acetona') || txt.includes('hexano')) return 'solventes';
+    if (txt.includes('acido') || txt.includes('hidroxido') || txt.includes('cloreto') || txt.includes('sulfato')) return 'reagentes';
     return 'farmacos';
   }
 
   function atualizarContadorFiltrados() {
     const el = document.getElementById('studioFilteredCount');
-    if (el) {
-      el.textContent = `${compostosFiltrados.length} compostos visíveis`;
-    }
+    if (el) el.textContent = `${compostosFiltrados.length} compostos visíveis`;
   }
 
   // =========================================================================
-  // 3. VIRTUALIZAÇÃO DA LISTA DE COMPOSTOS (RENDERIZAÇÃO EM CHUNKS)
+  // 3. VIRTUALIZAÇÃO DA LISTA (SCROLL BUFFER)
   // =========================================================================
   function renderizarListaCompostos(reset = true) {
     const listContainer = document.getElementById('studioCompoundList');
@@ -143,13 +138,8 @@
     }
 
     const fatia = compostosFiltrados.slice(currentRenderedIndex, currentRenderedIndex + ITEMS_PER_CHUNK);
-    
     if (fatia.length === 0 && reset) {
-      listContainer.innerHTML = `
-        <div style="padding: 24px; color: #64748b; text-align: center; font-size: 0.75rem;">
-          Nenhum composto localizado com os critérios informados.
-        </div>
-      `;
+      listContainer.innerHTML = `<div style="padding: 24px; color: #64748b; text-align: center; font-size: 0.75rem;">Nenhum composto localizado.</div>`;
       return;
     }
 
@@ -160,7 +150,6 @@
       itemEl.onclick = () => selecionarCompostoStudio(comp, itemEl);
 
       const massaDisplay = comp.molarMass !== '--' ? `${parseFloat(comp.molarMass).toFixed(1)}` : '--';
-
       itemEl.innerHTML = `
         <div class="comp-info-main">
           <span class="comp-name" title="${comp.nome}">${comp.nome}</span>
@@ -179,8 +168,6 @@
   window.handleStudioScroll = function() {
     const listContainer = document.getElementById('studioCompoundList');
     if (!listContainer) return;
-    
-    // Dispara a carga do próximo bloco antes de atingir o rodapé
     if (listContainer.scrollTop + listContainer.clientHeight >= listContainer.scrollHeight - 70) {
       if (currentRenderedIndex < compostosFiltrados.length) {
         renderizarListaCompostos(false);
@@ -192,7 +179,6 @@
     clearTimeout(debounceBuscaTimer);
     debounceBuscaTimer = setTimeout(() => {
       const q = (termo || '').trim().toLowerCase();
-      
       const categoriaAtiva = document.querySelector('.category-pill.active')?.dataset.cat || 'todas';
 
       compostosFiltrados = compostosIndexados.filter(c => {
@@ -227,7 +213,7 @@
   };
 
   // =========================================================================
-  // 4. MOTOR QUIMIOINFORMÁTICO & RDKIT WEBASSEMBLY
+  // 4. RDKIT WEBASSEMBLY & CÁLCULO DE LIPINSKI (LogP, TPSA, HBD, HBA)
   // =========================================================================
   async function carregarRDKitSobDemanda() {
     if (RDKitModuleInstance) return RDKitModuleInstance;
@@ -240,19 +226,17 @@
     }
 
     rdkitCarregando = true;
-    exibirStatusRDKit(true, "Inicializando RDKit WebAssembly...");
+    exibirStatusRDKit(true, "Carregando RDKit WebAssembly...");
 
     try {
       if (typeof window.initRDKitModule === 'function') {
         RDKitModuleInstance = await window.initRDKitModule();
-        console.log("✅ [RDKit.js] Módulo WASM carregado com sucesso.");
-      } else {
-        throw new Error("initRDKitModule não está disponível no escopo.");
+        console.log("✅ [RDKit WASM] Motor de Quimiometria Ativo.");
       }
       exibirStatusRDKit(false);
       return RDKitModuleInstance;
     } catch (err) {
-      console.warn("⚠️ [RDKit.js] Falha ao iniciar WASM. Ativando fallbacks de rede:", err);
+      console.warn("⚠️ [RDKit WASM] Falha no carregamento:", err);
       exibirStatusRDKit(false);
       rdkitCarregando = false;
       return null;
@@ -267,24 +251,100 @@
   }
 
   /**
-   * Pipeline Quimiométrico 4 Níveis:
-   * IndexedDB -> RDKit (ETKDG local) -> PubChem 3D -> CACTUS NIH
+   * Extração de descritores farmacocinéticos e cálculo da Regra dos Cinco de Lipinski
    */
+  async function avaliarPerfilLipinski(smiles, molarMass) {
+    const elLogP = document.getElementById('descLogP');
+    const elTPSA = document.getElementById('descTPSA');
+    const elHBD_HBA = document.getElementById('descHBD_HBA');
+    const elRotB = document.getElementById('descRotB');
+    const elBadge = document.getElementById('lipinskiBadge');
+
+    if (!elLogP || !elTPSA || !elHBD_HBA || !elBadge) return;
+
+    if (!smiles || smiles === '--' || smiles.includes('.')) {
+      elLogP.textContent = '--';
+      elTPSA.textContent = '--';
+      elHBD_HBA.textContent = '-- / --';
+      elRotB.textContent = '--';
+      elBadge.className = 'lipinski-status-badge badge-pending';
+      elBadge.textContent = 'Inorgânico / Sal';
+      return;
+    }
+
+    const rdkit = await carregarRDKitSobDemanda();
+    if (!rdkit) {
+      elBadge.className = 'lipinski-status-badge badge-pending';
+      elBadge.textContent = 'Sem RDKit';
+      return;
+    }
+
+    try {
+      const mol = rdkit.get_mol(smiles);
+      if (!mol) throw new Error("SMILES inválido");
+
+      const desc = JSON.parse(mol.get_descriptors());
+      mol.delete();
+
+      const mw = (typeof molarMass === 'number' && molarMass > 0) 
+        ? molarMass 
+        : (desc.exactmw || desc.amw || 0);
+      const logp = desc.CrippenClogP !== undefined ? desc.CrippenClogP : (desc.clogp || 0);
+      const tpsa = desc.tpsa !== undefined ? desc.tpsa : 0;
+      const hbd = desc.lipinskiHBD !== undefined ? desc.lipinskiHBD : (desc.NumHBD !== undefined ? desc.NumHBD : 0);
+      const hba = desc.lipinskiHBA !== undefined ? desc.lipinskiHBA : (desc.NumHBA !== undefined ? desc.NumHBA : 0);
+      const rotb = desc.NumRotatableBonds !== undefined ? desc.NumRotatableBonds : 0;
+
+      elLogP.textContent = logp.toFixed(2);
+      elTPSA.textContent = `${tpsa.toFixed(1)} Å²`;
+      elHBD_HBA.textContent = `${hbd} / ${hba}`;
+      elRotB.textContent = rotb;
+
+      // Avaliação da Regra dos Cinco de Lipinski
+      let violacoes = 0;
+      const falhas = [];
+
+      if (mw > 500) { violacoes++; falhas.push("Massa > 500 Da"); }
+      if (logp > 5.0) { violacoes++; falhas.push("LogP > 5.0"); }
+      if (hbd > 5) { violacoes++; falhas.push("Doadores H > 5"); }
+      if (hba > 10) { violacoes++; falhas.push("Aceptores H > 10"); }
+
+      if (violacoes === 0) {
+        elBadge.className = 'lipinski-status-badge badge-approved';
+        elBadge.textContent = 'Lipinski: Aprovado (0 violações)';
+        elBadge.title = 'Em conformidade total com os critérios de biodisponibilidade oral.';
+      } else if (violacoes === 1) {
+        elBadge.className = 'lipinski-status-badge badge-warning';
+        elBadge.textContent = `Lipinski: 1 Violação (${falhas[0]})`;
+        elBadge.title = 'Critério aceitável para fármacos orais (tolerância de 1 violação).';
+      } else {
+        elBadge.className = 'lipinski-status-badge badge-rejected';
+        elBadge.textContent = `Lipinski: ${violacoes} Violações`;
+        elBadge.title = `Baixa probabilidade de absorção oral: ${falhas.join(', ')}`;
+      }
+    } catch (err) {
+      console.warn("[Lipinski Evaluation Error]", err);
+      elBadge.className = 'lipinski-status-badge badge-pending';
+      elBadge.textContent = 'Erro de Cálculo';
+    }
+  }
+
+  // =========================================================================
+  // 5. PIPELINE 3D E VIEWPORT
+  // =========================================================================
   async function resolverCoordenadas3D(smiles, termoBusca) {
     if (!smiles && !termoBusca) return null;
 
-    // Nível 1: Cache Local no IndexedDB
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
       const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
       if (cache && cache.sdf) return cache.sdf;
     }
 
-    // Nível 2: Computação In-Browser via RDKit.js (ETKDG)
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
         try {
-          exibirStatusRDKit(true, "Calculando geometria 3D (ETKDG)...");
+          exibirStatusRDKit(true, "Gerando 3D local (ETKDG)...");
           const mol = rdkit.get_mol(smiles);
           if (mol) {
             mol.add_hs();
@@ -304,19 +364,15 @@
               mol.delete();
             }
           }
-        } catch (e) {
-          console.warn("[RDKit Engine] Falha na conformação 3D:", e);
-        }
+        } catch (e) {}
         exibirStatusRDKit(false);
       }
     }
 
-    // Nível 3: PubChem PUG-REST 3D por Nome
     try {
       exibirStatusRDKit(true, "Consultando PubChem PUG-REST 3D...");
       const query = encodeURIComponent((termoBusca || smiles).trim());
-      const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`;
-      const res = await fetch(url);
+      const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`);
       if (res.ok) {
         const sdfText = await res.text();
         exibirStatusRDKit(false);
@@ -329,12 +385,10 @@
       }
     } catch (e) {}
 
-    // Nível 4: CACTUS (NIH) por SMILES
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Consultando CACTUS NIH...");
-        const urlCactus = `https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/file?format=sdf`;
-        const resC = await fetch(urlCactus);
+        const resC = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/file?format=sdf`);
         if (resC.ok) {
           const txtC = await resC.text();
           exibirStatusRDKit(false);
@@ -347,35 +401,25 @@
     return null;
   }
 
-  // =========================================================================
-  // 5. VIEWPORT TRIDIMENSIONAL (3DMOL.JS) & RENDERIZAÇÃO 2D
-  // =========================================================================
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
 
     const watermark = document.getElementById('studioWatermark');
     if (watermark) watermark.style.display = 'none';
 
-    // Atualiza Telemetria no Rodapé
     const elNome = document.getElementById('studioMolNome');
     const elFormula = document.getElementById('studioMolFormula');
     const elMassa = document.getElementById('studioMolMassa');
-    const elSmiles = document.getElementById('studioMolSmiles');
     const btnBench = document.getElementById('btnCarregarNaBancada');
 
     if (elNome) elNome.textContent = comp.nome;
     if (elFormula) elFormula.textContent = comp.formula;
     if (elMassa) elMassa.textContent = comp.molarMass !== '--' ? `${parseFloat(comp.molarMass).toFixed(2)} g/mol` : '-- g/mol';
-    if (elSmiles) {
-      elSmiles.textContent = comp.smiles || '--';
-      elSmiles.title = comp.smiles || '--';
-    }
     if (btnBench) btnBench.style.display = 'inline-flex';
 
-    // Renderiza a projeção 2D
     desenharEstrutura2DStudio(comp.smiles, comp.nome);
+    avaliarPerfilLipinski(comp.smiles, parseFloat(comp.molarMass));
 
-    // Resolve as coordenadas 3D no pipeline quimiométrico
     const sdf = await resolverCoordenadas3D(comp.smiles, comp.pubchemQuery || comp.nome);
     sdfCacheLocal = sdf;
 
@@ -386,8 +430,7 @@
       if (container3D) {
         container3D.innerHTML = `
           <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f87171; font-size: 0.8rem; text-align: center; max-width: 80%;">
-            ⚠️ Não foi possível obter ou calcular coordenadas 3D para <strong>${comp.nome}</strong>.<br>
-            A projeção plana 2D continua disponível no modo "2D Vetorial".
+            ⚠️ Coordenadas 3D indisponíveis. A projeção 2D continua ativa.
           </div>
         `;
       }
@@ -405,9 +448,7 @@
     aplicarEstiloVisual(modeloAtual);
 
     studioViewer.setClickable({}, true, function(atom) {
-      if (modoMedicaoAtivo) {
-        processarCliqueMedicao(atom);
-      }
+      if (modoMedicaoAtivo) processarCliqueMedicao(atom);
     });
 
     studioViewer.zoomTo();
@@ -429,19 +470,16 @@
           sphere: { scale: 0.28, colorscheme: 'Jmol' }
         });
         break;
-
       case 'cpk':
         studioViewer.setStyle({}, {
           sphere: { scale: 1.0, colorscheme: 'Jmol' }
         });
         break;
-
       case 'wireframe':
         studioViewer.setStyle({}, {
           line: { linewidth: 2.2, colorscheme: 'Jmol' }
         });
         break;
-
       case 'surface':
         studioViewer.setStyle({}, {
           stick: { radius: 0.12, colorscheme: 'Jmol' },
@@ -453,7 +491,6 @@
         });
         break;
     }
-
     studioViewer.render();
   }
 
@@ -496,25 +533,15 @@
   }
 
   // =========================================================================
-  // 6. CONTROLE DE MODOS, ROTAÇÃO E MEDIÇÃO GEOMÉTRICA (ÅNGSTRÖMS E ÂNGULOS)
+  // 6. CONTROLE DE MODOS & MEDIÇÃO GEOMÉTRICA (Å / °)
   // =========================================================================
   window.setModelo3D = function(modo) {
     modeloAtual = modo;
     document.querySelectorAll('#group3DStyles .tool-btn').forEach(btn => btn.classList.remove('active'));
-
-    const botoes = {
-      ballstick: 'btnModoBallStick',
-      cpk: 'btnModoCPK',
-      wireframe: 'btnModoWire',
-      surface: 'btnModoSurface'
-    };
-
-    const targetBtn = document.getElementById(botoes[modo]);
-    if (targetBtn) targetBtn.classList.add('active');
-
-    if (sdfCacheLocal && modoExibicaoAtual === '3D') {
-      aplicarEstiloVisual(modo);
-    }
+    const botoes = { ballstick: 'btnModoBallStick', cpk: 'btnModoCPK', wireframe: 'btnModoWire', surface: 'btnModoSurface' };
+    const target = document.getElementById(botoes[modo]);
+    if (target) target.classList.add('active');
+    if (sdfCacheLocal && modoExibicaoAtual === '3D') aplicarEstiloVisual(modo);
   };
 
   window.setStudioModoVisual = function(modo) {
@@ -533,10 +560,7 @@
       if (v2D) v2D.style.display = 'none';
       if (v3D) {
         v3D.style.display = 'block';
-        if (studioViewer) {
-          studioViewer.resize();
-          studioViewer.render();
-        }
+        if (studioViewer) { studioViewer.resize(); studioViewer.render(); }
       }
     } else {
       if (v3D) v3D.style.display = 'none';
@@ -547,21 +571,15 @@
   window.toggleModoMedicao = function() {
     modoMedicaoAtivo = !modoMedicaoAtivo;
     atomosSelecionadosParaMedicao = [];
-
     const btn = document.getElementById('btnToolMeasure');
     const hud = document.getElementById('measureHud');
-
     if (btn) btn.classList.toggle('active', modoMedicaoAtivo);
     if (hud) hud.style.display = modoMedicaoAtivo ? 'flex' : 'none';
-
-    if (!modoMedicaoAtivo) {
-      limparMedicoes3D();
-    }
+    if (!modoMedicaoAtivo) limparMedicoes3D();
   };
 
   function processarCliqueMedicao(atom) {
     if (!studioViewer || !atom) return;
-
     atomosSelecionadosParaMedicao.push(atom);
     studioViewer.addSphere({ center: { x: atom.x, y: atom.y, z: atom.z }, radius: 0.35, color: '#e11d48' });
 
@@ -570,12 +588,7 @@
     if (atomosSelecionadosParaMedicao.length === 2) {
       const a1 = atomosSelecionadosParaMedicao[0];
       const a2 = atomosSelecionadosParaMedicao[1];
-
-      // Distância Euclidiana em R³: d = √((x2-x1)² + (y2-y1)² + (z2-z1)²)
-      const dx = a2.x - a1.x;
-      const dy = a2.y - a1.y;
-      const dz = a2.z - a1.z;
-      const distancia = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const dist = Math.hypot(a2.x - a1.x, a2.y - a1.y, a2.z - a1.z);
 
       studioViewer.addLine({
         start: { x: a1.x, y: a1.y, z: a1.z },
@@ -584,44 +597,37 @@
         dashed: true
       });
 
-      studioViewer.addLabel(`${distancia.toFixed(3)} Å`, {
+      studioViewer.addLabel(`${dist.toFixed(3)} Å`, {
         position: { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2, z: (a1.z + a2.z) / 2 },
         backgroundColor: '#020617',
         fontColor: '#38bdf8',
         fontSize: 12
       });
 
-      if (hudLabel) {
-        hudLabel.textContent = `Distância (${a1.elem}-${a2.elem}): ${distancia.toFixed(3)} Ångströms`;
-      }
+      if (hudLabel) hudLabel.textContent = `Distância (${a1.elem}-${a2.elem}): ${dist.toFixed(3)} Å`;
       studioViewer.render();
 
     } else if (atomosSelecionadosParaMedicao.length === 3) {
       const a1 = atomosSelecionadosParaMedicao[0];
-      const a2 = atomosSelecionadosParaMedicao[1]; // Vértice
+      const a2 = atomosSelecionadosParaMedicao[1];
       const a3 = atomosSelecionadosParaMedicao[2];
 
       const u = { x: a1.x - a2.x, y: a1.y - a2.y, z: a1.z - a2.z };
       const v = { x: a3.x - a2.x, y: a3.y - a2.y, z: a3.z - a2.z };
 
       const dot = u.x * v.x + u.y * v.y + u.z * v.z;
-      const magU = Math.sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
-      const magV = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+      const magU = Math.hypot(u.x, u.y, u.z);
+      const magV = Math.hypot(v.x, v.y, v.z);
+      const ang = (Math.acos(Math.max(-1, Math.min(1, dot / (magU * magV)))) * 180) / Math.PI;
 
-      const anguloRad = Math.acos(Math.max(-1, Math.min(1, dot / (magU * magV))));
-      const anguloGraus = (anguloRad * 180) / Math.PI;
-
-      studioViewer.addLabel(`Ângulo: ${anguloGraus.toFixed(1)}°`, {
+      studioViewer.addLabel(`Ângulo: ${ang.toFixed(1)}°`, {
         position: { x: a2.x, y: a2.y + 0.35, z: a2.z },
         backgroundColor: '#020617',
         fontColor: '#facc15',
         fontSize: 12
       });
 
-      if (hudLabel) {
-        hudLabel.textContent = `Ângulo (${a1.elem}-${a2.elem}-${a3.elem}): ${anguloGraus.toFixed(1)}°`;
-      }
-
+      if (hudLabel) hudLabel.textContent = `Ângulo (${a1.elem}-${a2.elem}-${a3.elem}): ${ang.toFixed(1)}°`;
       studioViewer.render();
       atomosSelecionadosParaMedicao = [];
     }
@@ -631,22 +637,16 @@
     atomosSelecionadosParaMedicao = [];
     const hudLabel = document.getElementById('studioLastMeasurement');
     if (hudLabel) hudLabel.textContent = 'Medições redefinidas.';
-    if (sdfCacheLocal && studioViewer) {
-      construirCena3D(sdfCacheLocal);
-    }
+    if (sdfCacheLocal && studioViewer) construirCena3D(sdfCacheLocal);
   };
 
   window.toggleAutoRotacao3D = function() {
     autoRotacaoAtiva = !autoRotacaoAtiva;
     const btn = document.getElementById('btnAutoRotate');
     if (btn) btn.classList.toggle('active', autoRotacaoAtiva);
-
     if (studioViewer) {
-      if (autoRotacaoAtiva) {
-        studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
-      } else {
-        studioViewer.stopAnimate();
-      }
+      if (autoRotacaoAtiva) studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
+      else studioViewer.stopAnimate();
     }
   };
 
@@ -658,16 +658,14 @@
   };
 
   // =========================================================================
-  // 7. EXPORTAÇÃO CIENTÍFICA (PNG ALTA DEFINIÇÃO & ARQUIVO SDF 3D)
+  // 7. EXPORTAÇÃO (PNG & SDF)
   // =========================================================================
   window.exportarImagemPNG = function() {
     const nomeBase = (compostoSelecionado?.nome || 'molecula').replace(/\s+/g, '_');
-
     if (modoExibicaoAtual === '3D' && studioViewer) {
-      const dataUrl = studioViewer.pngURI();
       const link = document.createElement('a');
       link.download = `${nomeBase}_3D_LAIFT.png`;
-      link.href = dataUrl;
+      link.href = studioViewer.pngURI();
       link.click();
     } else {
       const canvas = document.getElementById('studioCanvas2D');
@@ -696,7 +694,7 @@
   };
 
   // =========================================================================
-  // 8. COMUNICAÇÃO BIDIRECIONAL COM A BANCADA & GANCHO DE EDIÇÃO
+  // 8. SINCRONIZAÇÃO VIA BROADCASTCHANNEL & CONTROLE DE SELEÇÃO
   // =========================================================================
   window.selecionarCompostoStudio = function(comp, el) {
     compostoSelecionado = comp;
@@ -711,30 +709,43 @@
     const payload = {
       chave: compostoSelecionado.chaveOriginal,
       nome: compostoSelecionado.nome,
+      smiles: compostoSelecionado.smiles,
+      formula: compostoSelecionado.formula,
+      molarMass: compostoSelecionado.molarMass,
       timestamp: Date.now()
     };
 
-    // 1. Sincronização via localStorage (se aberto em aba externa)
-    localStorage.setItem('laift_composto_transferido', JSON.stringify(payload));
-
-    // 2. Sincronização via postMessage (se aberto em modal iframe)
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ acao: 'carregarCompostoNaBancada', composto: payload }, '*');
+    // 1. Emissão Primária: BroadcastChannel API
+    if (labBroadcast) {
+      labBroadcast.postMessage({
+        tipo: 'CARREGAR_COMPOSTO_BANCADA',
+        composto: payload
+      });
     }
 
-    // Retorno ao laboratório
+    // 2. Emissão Secundária: PostMessage (se inserido em Iframe)
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        acao: 'carregarCompostoNaBancada',
+        composto: payload
+      }, '*');
+    }
+
+    // 3. Emissão Terciária: LocalStorage (para abas externas em navegadores legados)
+    localStorage.setItem('laift_composto_transferido', JSON.stringify(payload));
+
+    // Retorno ao ambiente principal
     if (window.opener) {
       window.close();
+    } else if (window.parent && window.parent !== window) {
+      // Solicita fechamento de modal se aplicável
+      window.parent.postMessage({ acao: 'fecharModalStudio' }, '*');
     } else {
       window.location.href = '../index.html';
     }
   };
 
-  /**
-   * Gancho para Futuras Edições Moleculares (In Silico Drug Design)
-   */
   window.onMoleculeEdited = function(novoSmiles, novoNome = "Composto Modificado") {
-    console.log(`🧬 [In Silico Design] Nova entidade química: ${novoSmiles}`);
     const novoComposto = {
       id: 'custom_' + Date.now(),
       chaveOriginal: 'custom_' + Date.now(),
@@ -753,13 +764,12 @@
   };
 
   // =========================================================================
-  // 9. INICIALIZAÇÃO SEQUENCIAL
+  // 9. INICIALIZAÇÃO
   // =========================================================================
   document.addEventListener('DOMContentLoaded', () => {
     indexarAcervoCompleto();
     renderizarListaCompostos(true);
 
-    // Carrega o primeiro composto por padrão
     if (compostosIndexados.length > 0) {
       selecionarCompostoStudio(compostosIndexados[0]);
     }
