@@ -745,4 +745,66 @@ input, button, select {
   .smiles-mono-text {
     max-width: 120px;
   }
+
+/* =========================================================
+   BLOCO DE FARMACOCINÉTICA & DESCRITORES LIPINSKI
+   ========================================================= */
+.lipinski-descriptors-block {
+  flex: 2;
+  min-width: 320px;
+}
+
+.lipinski-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.metric-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #94a3b8;
+}
+
+.metric-pill strong {
+  color: #f8fafc;
+}
+
+.lipinski-status-badge {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.badge-approved {
+  background: rgba(0, 255, 136, 0.15);
+  border: 1px solid var(--neon-green);
+  color: var(--neon-green);
+}
+
+.badge-warning {
+  background: rgba(250, 204, 21, 0.15);
+  border: 1px solid var(--neon-yellow);
+  color: var(--neon-yellow);
+}
+
+.badge-rejected {
+  background: rgba(225, 29, 72, 0.15);
+  border: 1px solid var(--neon-crimson);
+  color: var(--neon-rose);
+}
+
+.badge-pending {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid #475569;
+  color: #94a3b8;
 }
