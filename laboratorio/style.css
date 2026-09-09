@@ -1,20 +1,21 @@
 /* =========================================================
-   1. VARIÁVEIS GLOBAIS
+   1. VARIÁVEIS GLOBAIS E RESET DE HARD-LOCK (ZERO SCROLL)
 ========================================================= */
 :root {
   --bg-deep: #010510;
   --panel-bg: #0a0f1e;
+  --panel-inner-bg: rgba(2, 6, 23, 0.7);
   --neon-cyan: #00e5ff;
   --neon-green: #00ff88;
   --neon-magenta: #ff00aa;
   --alert-red: #ff1744;
-  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-subtle: rgba(255, 255, 255, 0.08);
   --border-active: #1e3a5f;
-  --text-primary: #e0e0e0;
-  --text-secondary: #90a4ae;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
   --font-mono: 'Fira Code', monospace;
   --font-ui: 'Urbanist', sans-serif;
-  --glow-cyan: 0 0 20px rgba(0, 229, 255, 0.3);
+  --glow-cyan: 0 0 18px rgba(0, 229, 255, 0.35);
   --transition-smooth: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -25,7 +26,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Trava absoluta de documento: impede rolagem da janela, elástico mobile e zoom */
+/* Trava absoluta: impede rolagem da janela, elástico mobile e zoom descontrolado */
 html, body.cockpit-locked {
   position: fixed !important;
   top: 0 !important;
@@ -119,14 +120,14 @@ input, select, textarea {
 }
 
 /* =========================================================
-   3. GRID PRINCIPAL (PREENCHIMENTO 100% DA ALTURA RESTANTE)
+   3. GRID PRINCIPAL (COCKPIT 100dvh)
 ========================================================= */
 .main-grid {
   flex: 1;
   height: calc(100dvh - 38px);
   max-height: calc(100dvh - 38px);
   display: grid; 
-  grid-template-columns: 290px 1fr 310px;
+  grid-template-columns: 290px 1fr 320px;
   gap: 8px; 
   width: 100%; 
   padding: 6px 8px;
@@ -138,17 +139,16 @@ input, select, textarea {
   background: var(--panel-bg); 
   border: 1px solid var(--border-subtle);
   border-radius: 8px; 
-  padding: 0.7rem; 
+  padding: 0.8rem; 
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
 }
 
 .panel h3 {
-  font-size: 0.72rem; 
+  font-size: 0.74rem; 
   text-transform: uppercase; 
   letter-spacing: 1.2px;
   color: var(--neon-cyan); 
-  margin-bottom: 0.5rem; 
   font-weight: 700;
   display: flex; 
   align-items: center; 
@@ -182,9 +182,32 @@ input, select, textarea {
 
 .panel-header-sticky {
   flex-shrink: 0;
+  margin-bottom: 8px;
 }
 
-/* Isolamento do scroll para nunca repassar atrito ao body */
+.control-group {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sub-label {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.panel-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Isolamento do scroll para impedir repasse de atrito ao body */
 .controls-scroll { 
   flex: 1;
   min-height: 0;
@@ -206,13 +229,13 @@ input, select, textarea {
 .reagent-catalog::-webkit-scrollbar-thumb,
 .log-stream::-webkit-scrollbar-thumb,
 .lab-chat-messages::-webkit-scrollbar-thumb { 
-  background: #1e3a5f; 
+  background: var(--border-active); 
   border-radius: 4px; 
 }
 
 select, input[type="number"] {
   width: 100%; 
-  padding: 0.35rem 0.5rem; 
+  padding: 0.4rem 0.55rem; 
   border-radius: 6px;
   border: 1px solid var(--border-active); 
   background: #020617; 
@@ -235,14 +258,13 @@ input[type="range"] {
 }
 
 label { 
-  font-size: 0.62rem; 
+  font-size: 0.64rem; 
   color: var(--text-secondary); 
   font-weight: 600; 
   text-transform: uppercase; 
-  letter-spacing: 0.6px; 
+  letter-spacing: 0.8px; 
   display: block; 
-  margin-bottom: 2px; 
-  margin-top: 4px; 
+  margin-bottom: 3px; 
 }
 
 .compact-row {
@@ -253,7 +275,7 @@ label {
 .panel-divider {
   border: 0;
   border-top: 1px solid var(--border-subtle);
-  margin: 6px 0;
+  margin: 8px 0;
 }
 
 .btn-row { 
@@ -265,7 +287,7 @@ label {
 .btn { 
   flex: 1; 
   min-width: 48px; 
-  padding: 0.4rem 0.3rem; 
+  padding: 0.42rem 0.3rem; 
   border: none; 
   border-radius: 6px; 
   font-weight: 700; 
@@ -383,7 +405,7 @@ summary:hover {
   box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
 }
 
-/* Bancada e Estrutura Física com Maior Presença */
+/* Bancada e Estrutura Física */
 .bench { 
   position: absolute; 
   bottom: 0; 
@@ -432,7 +454,6 @@ summary:hover {
   box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.5), 0 0 20px rgba(0, 229, 255, 0.08); 
 }
 
-/* Vidrarias 50% Maiores para Domínio Visual da Tela */
 .vessel-beaker { 
   width: 190px; 
   height: 230px; 
@@ -535,7 +556,7 @@ summary:hover {
   border-radius: inherit; 
 }
 
-/* Efeitos Térmicos Proporcionais */
+/* Efeitos Térmicos */
 .flame-effect { 
   position: absolute; 
   bottom: 54px; 
@@ -591,7 +612,7 @@ summary:hover {
   100% { transform: translateX(-50%) scale(1.15); opacity: 0.3; } 
 }
 
-/* HUD Superior em Fita Suspensa */
+/* HUD Superior em Fita */
 .hud-overlay { 
   position: absolute; 
   top: 8px; 
@@ -607,7 +628,7 @@ summary:hover {
 .hud-card { 
   background: rgba(2, 6, 23, 0.88); 
   border: 1px solid var(--border-active); 
-  padding: 6px 12px; 
+  padding: 5px 10px; 
   border-radius: 6px; 
   backdrop-filter: blur(8px); 
   flex: 1;
@@ -617,14 +638,14 @@ summary:hover {
 
 .hud-card .hud-val { 
   font-family: var(--font-mono); 
-  font-size: 0.92rem; 
+  font-size: 0.88rem; 
   font-weight: 700; 
   color: var(--neon-cyan); 
   text-shadow: 0 0 8px rgba(0, 229, 255, 0.45); 
 }
 
 .hud-card .hud-label { 
-  font-size: 0.58rem; 
+  font-size: 0.56rem; 
   color: var(--text-secondary); 
   text-transform: uppercase; 
   letter-spacing: 0.8px; 
@@ -692,14 +713,211 @@ summary:hover {
   right: 12px; 
   font-family: var(--font-mono); 
   font-size: 0.58rem; 
-  color: rgba(255, 255, 255, 0.18); 
+  color: rgba(255, 255, 255, 0.22); 
   letter-spacing: 1.5px; 
   z-index: 40; 
   pointer-events: none; 
 }
 
 /* =========================================================
-   6. PAINEL DIREITO: ABAS DE ANÁLISE COMPACTAS
+   6. WIDGET DE CHAT (PRECEPTOR DE BANCADA)
+========================================================= */
+/* Botão do Preceptor: posicionado acima da assinatura (bottom: 6px) */
+#labChatWidgetBtn {
+  position: absolute;
+  bottom: 28px;
+  right: 12px;
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 24px;
+  padding: 6px 14px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.45);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 45;
+  transition: var(--transition-smooth);
+}
+
+#labChatWidgetBtn:hover {
+  transform: translateY(-2px);
+  background: #0369a1;
+  box-shadow: 0 6px 20px rgba(2, 132, 199, 0.6);
+}
+
+/* Drawer do Chat */
+#labChatDrawer {
+  display: none;
+  position: absolute;
+  bottom: 62px;
+  right: 12px;
+  width: 350px;
+  max-width: calc(100% - 24px);
+  height: 460px;
+  max-height: calc(100% - 74px);
+  background: #0b1329;
+  border: 1px solid var(--border-active);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.85);
+  flex-direction: column;
+  z-index: 50;
+  overflow: hidden;
+}
+
+.lab-chat-header {
+  background: #1e293b;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #334155;
+}
+
+.lab-chat-header h4 { 
+  margin: 0; 
+  color: #38bdf8; 
+  font-size: 0.82rem; 
+}
+
+.lab-chat-messages {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.76rem;
+}
+
+.lab-chat-msg {
+  padding: 8px 12px;
+  border-radius: 6px;
+  line-height: 1.45;
+  max-width: 90%;
+}
+
+.msg-preceptor {
+  background: #1e293b;
+  color: #e2e8f0;
+  align-self: flex-start;
+  border-left: 3px solid #38bdf8;
+}
+
+.msg-aluno {
+  background: #0284c7;
+  color: #ffffff;
+  align-self: flex-end;
+}
+
+.lab-chat-input {
+  display: flex;
+  padding: 6px;
+  background: #1e293b;
+  border-top: 1px solid #334155;
+  gap: 6px;
+}
+
+.lab-chat-input input {
+  flex: 1;
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #fff;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.78rem !important;
+  outline: none;
+}
+
+.lab-chat-input button {
+  background: #0284c7;
+  border: none;
+  color: #fff;
+  border-radius: 6px;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+/* Complementos de Ação do Chat */
+.btn-chat-action {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-chat-action:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #f87171;
+}
+
+.btn-chat-close {
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0 4px;
+  transition: color 0.2s;
+}
+
+.btn-chat-close:hover {
+  color: #fff;
+}
+
+.chat-status-badge {
+  font-size: 0.58rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(0, 255, 136, 0.15);
+  border: 1px solid #00ff88;
+  color: #4ade80;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.chip-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.chat-chip {
+  background: rgba(2, 132, 199, 0.15);
+  border: 1px solid #0284c7;
+  color: #38bdf8;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  white-space: normal;
+  text-align: left;
+}
+
+.chat-chip:hover {
+  background: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+/* =========================================================
+   7. PAINEL DIREITO: ABAS DE ANÁLISE & PROJEÇÃO 2D
 ========================================================= */
 .side-panel-right { 
   height: 100%;
@@ -762,6 +980,108 @@ summary:hover {
   display: block;
 }
 
+/* Painel da Molécula 2D */
+.mol-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-color: #0284c7;
+}
+
+.mol-visualizer-box {
+  background: #020617;
+  border-radius: 8px;
+  border: 1px solid var(--border-active);
+  flex: 1;
+  min-height: 140px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  padding: 6px;
+}
+
+.mol-visualizer-box canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.mol-visualizer-box img {
+  max-width: 95%;
+  max-height: 95%;
+  object-fit: contain;
+  display: none;
+  filter: invert(0.92) hue-rotate(180deg) contrast(1.1);
+}
+
+#molPlaceholder {
+  position: absolute;
+  font-size: 0.7rem;
+  color: #64748b;
+  text-align: center;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+/* Ficha de Dados Estruturais */
+.mol-details-card {
+  margin-top: 8px;
+  background: var(--panel-inner-bg);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mol-data-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.3;
+}
+
+.mol-data-row-duo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.data-key {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.data-val-highlight {
+  font-size: 0.8rem;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.data-val-mono {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: #cbd5e1;
+  word-break: break-all;
+}
+
+.btn-dossie-full {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px;
+  font-size: 0.68rem;
+  text-align: center;
+}
+
+/* Log de Operações e Espécies */
 .log-stream { 
   flex: 1;
   min-height: 0;
@@ -823,122 +1143,6 @@ canvas {
   border: 1px solid var(--neon-green); 
   padding: 8px; 
   border-radius: 8px; 
-}
-
-/* =========================================================
-   7. WIDGET DE CHAT (PRECEPTOR DE BANCADA)
-========================================================= */
-#labChatWidgetBtn {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  background: #0284c7;
-  color: #fff;
-  border: none;
-  border-radius: 50px;
-  padding: 8px 16px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.45);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  z-index: 1000;
-  transition: transform 0.2s, background 0.2s;
-}
-
-#labChatWidgetBtn:hover {
-  transform: translateY(-2px);
-  background: #0369a1;
-}
-
-#labChatDrawer {
-  display: none;
-  position: fixed;
-  bottom: 60px;
-  right: 16px;
-  width: 340px;
-  max-width: calc(100vw - 32px);
-  height: 440px;
-  background: #0f172a;
-  border: 1px solid var(--border-active);
-  border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
-  flex-direction: column;
-  z-index: 1001;
-  overflow: hidden;
-}
-
-.lab-chat-header {
-  background: #1e293b;
-  padding: 8px 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #334155;
-}
-
-.lab-chat-header h4 { margin: 0; color: #38bdf8; font-size: 0.85rem; }
-
-.lab-chat-messages {
-  flex: 1;
-  padding: 10px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 0.78rem;
-}
-
-.lab-chat-msg {
-  padding: 7px 10px;
-  border-radius: 6px;
-  line-height: 1.35;
-  max-width: 88%;
-}
-
-.msg-preceptor {
-  background: #1e293b;
-  color: #e2e8f0;
-  align-self: flex-start;
-  border-left: 3px solid #38bdf8;
-}
-
-.msg-aluno {
-  background: #0284c7;
-  color: #ffffff;
-  align-self: flex-end;
-}
-
-.lab-chat-input {
-  display: flex;
-  padding: 6px;
-  background: #1e293b;
-  border-top: 1px solid #334155;
-  gap: 6px;
-}
-
-.lab-chat-input input {
-  flex: 1;
-  background: #0f172a;
-  border: 1px solid #334155;
-  color: #fff;
-  padding: 6px 8px;
-  border-radius: 6px;
-  font-size: 0.78rem !important;
-  outline: none;
-}
-
-.lab-chat-input button {
-  background: #0284c7;
-  border: none;
-  color: #fff;
-  border-radius: 6px;
-  padding: 0 10px;
-  cursor: pointer;
 }
 
 /* =========================================================
@@ -1007,7 +1211,7 @@ canvas {
   font-size: 0.8rem; 
   color: #b0bec5; 
   margin-bottom: 0.4rem; 
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .close-manual { 
@@ -1044,7 +1248,8 @@ canvas {
 .visual-stage.focus-active .thermo-column,
 .visual-stage.focus-active .bench,
 .visual-stage.focus-active .tripod,
-.visual-stage.focus-active .signature {
+.visual-stage.focus-active .signature,
+.visual-stage.focus-active #labChatWidgetBtn {
   display: none !important;
 }
 
@@ -1109,7 +1314,9 @@ canvas {
   100% { transform: translateX(-50%) scale(1); } 
 }
 
-/* Animações de Despejo */
+/* =========================================================
+   9. ANIMAÇÕES FÍSICAS DE DESPEJO
+========================================================= */
 .anim-drop {
   position: absolute; 
   top: -80px; 
@@ -1166,7 +1373,7 @@ canvas {
 }
 
 /* =========================================================
-   9. ADAPTAÇÃO NATIVA RESPONSIVA (< 1024px)
+   10. ADAPTAÇÃO NATIVA RESPONSIVA (< 1024px)
 ========================================================= */
 @media (max-width: 1023px) {
   .desktop-only {
@@ -1185,7 +1392,7 @@ canvas {
     letter-spacing: 1px;
   }
 
-  /* Em celulares o grid ocupa exatamente a tela descontando header e bottom-bar */
+  /* Em telas menores o grid se comporta como painel único controlado pelo menu */
   .main-grid {
     display: block;
     position: relative;
@@ -1263,6 +1470,7 @@ canvas {
     color: var(--neon-cyan);
   }
 
+  /* Oculta botão flutuante para dar espaço ao item na bottom-bar */
   #labChatWidgetBtn {
     display: none !important;
   }
@@ -1313,7 +1521,9 @@ canvas {
   }
 }
 
-/* Telas Ultrawide / TV (> 1600px) */
+/* =========================================================
+   11. TELAS ULTRAWIDE / TV (> 1600px)
+========================================================= */
 @media (min-width: 1600px) {
   .main-grid {
     grid-template-columns: 340px 1fr 360px;
@@ -1328,82 +1538,4 @@ canvas {
     width: 210px;
     height: 32px;
   }
-
-/* =========================================================
-   COMPLEMENTOS DE UI: BOTÃO LIMPAR CHAT & CHIPS DE SUGESTÃO
-========================================================= */
-.btn-chat-action {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid #334155;
-  color: #94a3b8;
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
-
-.btn-chat-action:hover {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: #ef4444;
-  color: #f87171;
-}
-
-.btn-chat-close {
-  cursor: pointer;
-  color: #94a3b8;
-  font-size: 1.3rem;
-  line-height: 1;
-  padding: 0 4px;
-  transition: color 0.2s;
-}
-
-.btn-chat-close:hover {
-  color: #fff;
-}
-
-.chat-status-badge {
-  font-size: 0.6rem;
-  padding: 2px 6px;
-  border-radius: 10px;
-  background: rgba(0, 255, 136, 0.15);
-  border: 1px solid #00ff88;
-  color: #4ade80;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-.chip-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
-}
-
-.chat-chip {
-  background: rgba(2, 132, 199, 0.15);
-  border: 1px solid #0284c7;
-  color: #38bdf8;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 0.68rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: normal;
-  text-align: left;
-}
-
-.chat-chip:hover {
-  background: #0284c7;
-  color: #ffffff;
-  transform: translateY(-1px);
-}
-
-}
-
-
