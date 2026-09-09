@@ -1984,10 +1984,6 @@ const BANCO_SINTESES_LAIFT = [
     "equacaoQuimica": "Na2CO3 + CaCO3 + SiO2 -> Na2O·CaO·6SiO2 + 2CO2",
     "descricao": "Fusão de areia, carbonato de sódio e calcário para formar vidro soda-cal."
   
-  }
-
-];
-
-f (typeof window !== 'undefined') {
+ if (typeof window !== 'undefined') {
   window.BANCO_SINTESES_LAIFT = BANCO_SINTESES_LAIFT;
 }
