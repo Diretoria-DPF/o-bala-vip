@@ -162,7 +162,7 @@
     <!-- 3. PAINEL DIREITO: ABAS MODULARES DE ANÁLISE -->
     <aside class="side-panel-right" id="viewAnalise">
       
-      <!-- Seletor de Abas Superiores (Evita rolagem vertical excessiva) -->
+      <!-- Seletor de Abas Superiores -->
       <div class="right-tab-bar">
         <button class="rtab-btn active" data-tab="tabMol" onclick="switchRightTab('tabMol')">🔬 Molécula</button>
         <button class="rtab-btn" data-tab="tabPH" onclick="switchRightTab('tabPH')">📈 Curva pH</button>
@@ -175,24 +175,27 @@
         <!-- Aba 1: Inspeção Molecular 2D -->
         <div class="rtab-pane active" id="tabMol">
           <div class="panel" style="border-color: #0284c7; height: 100%; box-sizing: border-box; display: flex; flex-direction: column;">
-            <h3 style="color: #38bdf8; margin: 0 0 8px;"><span class="icon-dot" style="background: #38bdf8;"></span> Projeção Estrutural 2D</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <h3 style="color: #38bdf8; margin: 0;"><span class="icon-dot" style="background: #38bdf8;"></span> Projeção Estrutural 2D</h3>
+              <button class="btn btn-clear" style="padding: 2px 6px; font-size: 0.6rem;" onclick="if(typeof atualizarInspecaoMolecular==='function') atualizarInspecaoMolecular();">Atualizar</button>
+            </div>
             
-            <div style="background: #020617; border-radius: 8px; border: 1px solid #1e3a5f; flex: 1; display: flex; justify-content: center; align-items: center; min-height: 160px; position: relative;">
-              <canvas id="moleculeCanvas" width="260" height="150" style="display: block; max-width: 100%;"></canvas>
-              <span id="molPlaceholder" style="position: absolute; font-size: 0.72rem; color: #64748b; text-align: center; padding: 10px;">
-                Aguardando síntese ou composto formado...
-              </span>
+            <div style="background: #020617; border-radius: 8px; border: 1px solid #1e3a5f; flex: 1; display: flex; justify-content: center; align-items: center; min-height: 160px; position: relative; overflow: hidden;">
+              <canvas id="moleculeCanvas" width="280" height="170" style="display: block; max-width: 100%; height: auto;"></canvas>
+              <div id="molPlaceholder" style="position: absolute; font-size: 0.72rem; color: #64748b; text-align: center; padding: 12px; line-height: 1.4;">
+                Selecione ou adicione um reagente no catálogo para visualizar a projeção 2D.
+              </div>
             </div>
 
             <div style="font-size: 0.75rem; line-height: 1.4; color: #cbd5e1; margin-top: 8px;">
-              <div>Produto: <strong id="molName" style="color: #38bdf8;">Nenhum</strong></div>
+              <div>Produto / Espécie: <strong id="molName" style="color: #38bdf8;">Aguardando adição</strong></div>
               <div style="margin-top: 2px;">IUPAC: <span id="molIupac" style="font-family: var(--font-mono, monospace); color: #94a3b8; word-break: break-all;">--</span></div>
               <div style="margin-top: 4px; display: flex; justify-content: space-between; font-family: var(--font-mono, monospace);">
                 <span>Fórmula: <strong id="molFormula" style="color: #facc15;">--</strong></span>
                 <span>Massa: <strong id="molWeight" style="color: #a7f3d0;">-- g/mol</strong></span>
               </div>
-              <button class="btn btn-clear" id="btnDossieLab" style="width: 100%; margin-top: 8px; font-size: 0.72rem; display: none;" onclick="abrirDossieCompostoAtual()">
-                📋 Dossiê Técnico (PubChem / ChEBI)
+              <button class="btn btn-clear" id="btnDossieLab" style="width: 100%; margin-top: 8px; font-size: 0.72rem;" onclick="abrirDossieCompostoAtual()">
+                📋 Dossiê Técnico Completo (PubChem / ChEBI)
               </button>
             </div>
           </div>
@@ -278,7 +281,7 @@
       <ul>
         <li><strong>Bancada Híbrida:</strong> Em celulares, utilize a barra inferior para navegar entre a Vidraria, Reagentes e Análise Molecular.</li>
         <li><strong>Abas de Análise:</strong> Alterne entre a molécula 2D, curva de titulação, espécies e roteiro no painel direito.</li>
-        <li><strong>Preceptor IA:</strong> Dúvidas estequiométricas e de segurança podem ser sanadas diretamente no chat flutuante.</li>
+        <li><strong>Preceptor IA:</strong> Dúvidas estequiométricas, mecanismos de reação e segurança são orientadas diretamente no chat.</li>
       </ul>
       <button class="close-manual" onclick="fecharManual()">Fechar Guia</button>
     </div>
@@ -302,28 +305,35 @@
     </div>
   </div>
 
-  <!-- Botão Flutuante e Drawer do Preceptor (Desktop) -->
+  <!-- Botão Flutuante do Preceptor (Desktop) -->
   <button id="labChatWidgetBtn" onclick="toggleLabChat()">
     💬 <span>Preceptor de Bancada</span>
   </button>
   
+  <!-- Drawer do Chat do Preceptor com Botão Limpar e Status -->
   <div id="labChatDrawer">
     <div class="lab-chat-header">
-      <h4>💬 Preceptor de Farmacotécnica</h4>
-      <span style="cursor: pointer; color: #94a3b8; font-size: 1.2rem;" onclick="toggleLabChat()">&times;</span>
-    </div>
-    <div class="lab-chat-messages" id="labChatMessages">
-      <div class="lab-chat-msg msg-preceptor">
-        Olá! Sou o Preceptor do Laboratório. Precisa de orientação sobre estequiometria, controle térmico ou riscos de bancada?
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <h4>💬 Preceptor LAIFT</h4>
+        <span class="chat-status-badge" id="preceptorStatusBadge">Pronto</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <button class="btn-chat-action" onclick="limparChatPreceptor()" title="Limpar histórico da conversa">🗑️ Limpar</button>
+        <span class="btn-chat-close" onclick="toggleLabChat()" title="Fechar chat">&times;</span>
       </div>
     </div>
+    
+    <div class="lab-chat-messages" id="labChatMessages">
+      <!-- Mensagem Inicial Injetada Automaticamente pelo lab-preceptor.js -->
+    </div>
+    
     <div class="lab-chat-input">
-      <input type="text" id="labChatInput" placeholder="Digite sua dúvida..." onkeydown="if(event.key==='Enter') enviarDuvidaLab()">
+      <input type="text" id="labChatInput" placeholder="Pergunte sobre síntese, riscos ou misturas..." onkeydown="if(event.key==='Enter') enviarDuvidaLab()">
       <button onclick="enviarDuvidaLab()">➔</button>
     </div>
   </div>
 
-  <!-- Controlador de Interface Híbrida (Abas e Mobile Switcher) -->
+  <!-- Controlador de Abas e Modo Mobile -->
   <script>
     function switchRightTab(tabId) {
       document.querySelectorAll('.rtab-btn').forEach(btn => {
@@ -335,6 +345,9 @@
       if (tabId === 'tabPH' && typeof desenharCurvaPH === 'function') {
         desenharCurvaPH();
       }
+      if (tabId === 'tabMol' && typeof atualizarInspecaoMolecular === 'function') {
+        atualizarInspecaoMolecular();
+      }
     }
 
     function setMobileView(viewName) {
@@ -345,16 +358,17 @@
         btn.classList.toggle('active', btn.dataset.target === viewName);
       });
 
-      if (viewName === 'analise' && typeof desenharCurvaPH === 'function') {
-        setTimeout(desenharCurvaPH, 100);
+      if (viewName === 'analise') {
+        if (typeof atualizarInspecaoMolecular === 'function') setTimeout(atualizarInspecaoMolecular, 50);
+        if (typeof desenharCurvaPH === 'function') setTimeout(desenharCurvaPH, 80);
       }
     }
   </script>
 
-  <!-- Módulos Científicos e Execução -->
+  <!-- Módulos de Execução Científica -->
   <script src="js/lab-apis.js"></script>
-  <script src="js/script.js"></script>
-  <script src="js/lab-preceptor.js"></script>
   <script src="data/lab-database.js"></script>
+  <script src="js/lab-preceptor.js"></script>
+  <script src="js/script.js"></script>
 </body>
 </html>
