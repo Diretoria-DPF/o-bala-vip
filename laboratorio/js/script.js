@@ -1797,4 +1797,98 @@
 
   timerLoop = setInterval(loopTermico, 200);
   log('🚀 LAIFT Engine Uninassau iniciado com Sucesso!', 'log-info');
+
+
+// =========================================================================
+  // 18. INTEGRAÇÃO BIDIRECIONAL COM O ESTÚDIO 3D (IFRAME & LOCALSTORAGE)
+  // =========================================================================
+
+  /**
+   * Abre o estúdio no modal interno ou em nova aba caso esteja em mobile
+   */
+  window.abrirStudio = function() {
+    const modal = document.getElementById('studioIframeModal');
+    const iframe = document.getElementById('studioIframe');
+
+    if (modal && iframe) {
+      // Carrega o arquivo isolado do estúdio
+      if (!iframe.src || !iframe.src.includes('studio/index.html')) {
+        iframe.src = 'studio/index.html';
+      }
+      modal.style.display = 'flex';
+    } else {
+      window.open('studio/index.html', '_blank');
+    }
+  };
+
+  /**
+   * Fecha o modal do estúdio
+   */
+  window.fecharStudio = function() {
+    const modal = document.getElementById('studioIframeModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  /**
+   * Processa o composto recebido do Estúdio (seja de 60 reagentes ou dos 2.500)
+   */
+  function processarCompostoDoStudio(dados) {
+    if (!dados || !dados.chave) return;
+
+    const chave = dados.chave;
+    const nome = dados.nome || chave;
+
+    // 1. Tenta selecionar no rádio de reagentes se ele já existir no catálogo
+    const radio = document.querySelector(`input[name="reagenteSel"][value="${chave}"]`);
+    if (radio) {
+      radio.checked = true;
+      const detailsPai = radio.closest('details');
+      if (detailsPai) detailsPai.open = true;
+      radio.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      // 2. Se for um dos 2.500 compostos expandidos, adiciona uma opção dinâmica no catálogo
+      const catContainer = document.querySelector('#catalogContainer .reagent-list');
+      if (catContainer) {
+        const novoLabel = document.createElement('label');
+        novoLabel.innerHTML = `<input type="radio" name="reagenteSel" value="${chave}" checked> 🧬 ${nome} (Estúdio 3D)`;
+        novoLabel.querySelector('input').addEventListener('change', () => {
+          atualizarInspecaoMolecular(chave);
+        });
+        catContainer.prepend(novoLabel);
+      }
+    }
+
+    // 3. Atualiza o painel de inspeção molecular da bancada
+    atualizarInspecaoMolecular(chave);
+
+    // 4. Emite feedback sonoro e no log
+    tocarSom('sucesso');
+    log(`🧬 Molécula [${nome}] carregada do Estúdio 3D para a bancada.`, 'log-info');
+
+    // 5. Fecha o modal se estiver ativo
+    window.fecharStudio();
+  }
+
+  // Ouvinte 1: Mensagens vindas do Iframe (postMessage)
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.acao === 'carregarCompostoNaBancada') {
+      processarCompostoDoStudio(event.data.composto);
+    }
+  });
+
+  // Ouvinte 2: Sincronização entre abas diferentes (localStorage)
+  window.addEventListener('storage', function(event) {
+    if (event.key === 'laift_composto_transferido' && event.newValue) {
+      try {
+        const payload = JSON.parse(event.newValue);
+        processarCompostoDoStudio(payload);
+        localStorage.removeItem('laift_composto_transferido');
+      } catch (e) {}
+    }
+  });
+
+  // Exportações para o escopo global
+  window.abrirStudio = window.abrirStudio;
+  window.fecharStudio = window.fecharStudio;
+  
 })();
