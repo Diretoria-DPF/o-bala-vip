@@ -1988,6 +1988,6 @@ const BANCO_SINTESES_LAIFT = [
 
 ];
 
-if (typeof window !== "undefined") {
+f (typeof window !== 'undefined') {
   window.BANCO_SINTESES_LAIFT = BANCO_SINTESES_LAIFT;
 }
