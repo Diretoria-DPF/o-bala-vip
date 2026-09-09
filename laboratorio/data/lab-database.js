@@ -1,139 +1,470 @@
 /**
- * REPOSITÓRIO CIENTÍFICO E FARMACOTÉCNICO DA BANCADA (LAIFT)
- * Base de espécies físico-químicas, precursores de síntese, constantes termodinâmicas e reações.
+ * LAIFT — BANCO DE DADOS QUIMIOMÉTRICO E ESTRUTURAL EXPANDIDO
+ * Metadados termodinâmicos, espectroscópicos, estequiométricos e rotas de bancada.
  */
 
 const LAB_DATABASE = {
-  // =========================================================================
-  // 1. ESPÉCIES MOLECULARES, PRECURSORES, SOLVENTES E REAGENTES DA BANCADA
-  // =========================================================================
+  // 1. ACERVO EXPANDIDO DE ESPÉCIES QUÍMICAS
   species: {
-    // ---------------------------------------------------------
-    // Solventes e Veículos
-    // ---------------------------------------------------------
+    // === SOLVENTES E ÁGUAS ===
     "H2O_l": {
       label: "Água Destilada",
       phase: "l",
       molarMass: 18.015,
       density: 1.0,
-      bp: 100,
-      fp: 0,
+      bp: 100.0,
+      fp: 0.0,
+      formula: "H2O",
       smiles: "O",
       iupac: "oxidane",
       pubchemQuery: "Water",
-      cid: 962
+      dissociation: null
+    },
+    "D2O_l": {
+      label: "Água Pesada (Óxido de Deutério)",
+      phase: "l",
+      molarMass: 20.03,
+      density: 1.107,
+      bp: 101.4,
+      fp: 3.8,
+      formula: "D2O",
+      smiles: "[2H]O[2H]",
+      iupac: "dideuteriooxidane",
+      pubchemQuery: "Deuterium oxide",
+      dissociation: null
+    },
+    "CH3OH_l": {
+      label: "Metanol",
+      phase: "l",
+      molarMass: 32.04,
+      density: 0.792,
+      bp: 64.7,
+      fp: -97.6,
+      formula: "CH4O",
+      smiles: "CO",
+      iupac: "methanol",
+      pubchemQuery: "Methanol",
+      dissociation: null
+    },
+    "Metanol_l": {
+      label: "Metanol (Solvente)",
+      phase: "l",
+      molarMass: 32.04,
+      density: 0.792,
+      bp: 64.7,
+      fp: -97.6,
+      formula: "CH4O",
+      smiles: "CO",
+      iupac: "methanol",
+      pubchemQuery: "Methanol",
+      dissociation: null
+    },
+    "C2H5OH_l": {
+      label: "Etanol Absoluto",
+      phase: "l",
+      molarMass: 46.07,
+      density: 0.789,
+      bp: 78.3,
+      fp: -114.1,
+      formula: "C2H6O",
+      smiles: "CCO",
+      iupac: "ethanol",
+      pubchemQuery: "Ethanol",
+      dissociation: null
     },
     "Etanol_l": {
       label: "Etanol Absoluto",
       phase: "l",
       molarMass: 46.07,
       density: 0.789,
-      bp: 78.4,
-      fp: -114,
+      bp: 78.3,
+      fp: -114.1,
+      formula: "C2H6O",
       smiles: "CCO",
       iupac: "ethanol",
       pubchemQuery: "Ethanol",
-      cid: 702
+      dissociation: null
+    },
+    "C3H7OH_l": {
+      label: "Isopropanol",
+      phase: "l",
+      molarMass: 60.1,
+      density: 0.786,
+      bp: 82.6,
+      fp: -89.5,
+      formula: "C3H8O",
+      smiles: "CC(C)O",
+      iupac: "propan-2-ol",
+      pubchemQuery: "Isopropyl alcohol",
+      dissociation: null
+    },
+    "C4H9OH_l": {
+      label: "n-Butanol",
+      phase: "l",
+      molarMass: 74.12,
+      density: 0.81,
+      bp: 117.7,
+      fp: -89.8,
+      formula: "C4H10O",
+      smiles: "CCCCO",
+      iupac: "butan-1-ol",
+      pubchemQuery: "n-Butanol",
+      dissociation: null
+    },
+    "HOCH2CH2OH_l": {
+      label: "Etilenoglicol",
+      phase: "l",
+      molarMass: 62.07,
+      density: 1.113,
+      bp: 197.3,
+      fp: -12.9,
+      formula: "C2H6O2",
+      smiles: "OCCO",
+      iupac: "ethane-1,2-diol",
+      pubchemQuery: "Ethylene glycol",
+      dissociation: null
+    },
+    "C3H5(OH)3_l": {
+      label: "Glicerol",
+      phase: "l",
+      molarMass: 92.09,
+      density: 1.261,
+      bp: 290.0,
+      fp: 17.8,
+      formula: "C3H8O3",
+      smiles: "OCC(O)CO",
+      iupac: "propane-1,2,3-triol",
+      pubchemQuery: "Glycerol",
+      dissociation: null
+    },
+    "CH3COCH3_l": {
+      label: "Acetona Pura",
+      phase: "l",
+      molarMass: 58.08,
+      density: 0.784,
+      bp: 56.1,
+      fp: -94.7,
+      formula: "C3H6O",
+      smiles: "CC(=O)C",
+      iupac: "propan-2-one",
+      pubchemQuery: "Acetone",
+      dissociation: null
     },
     "Acetona_l": {
       label: "Acetona Pura",
       phase: "l",
       molarMass: 58.08,
       density: 0.784,
-      bp: 56.0,
-      fp: -95,
+      bp: 56.1,
+      fp: -94.7,
+      formula: "C3H6O",
       smiles: "CC(=O)C",
       iupac: "propan-2-one",
       pubchemQuery: "Acetone",
-      cid: 180
+      dissociation: null
     },
-    "Metanol_l": {
-      label: "Metanol",
+    "C4H8O_l": {
+      label: "Tetraidrofurano (THF)",
       phase: "l",
-      molarMass: 32.04,
-      density: 0.792,
-      bp: 64.7,
-      fp: -98,
-      smiles: "CO",
-      iupac: "methanol",
-      pubchemQuery: "Methanol",
-      cid: 887
+      molarMass: 72.11,
+      density: 0.889,
+      bp: 66.0,
+      fp: -108.4,
+      formula: "C4H8O",
+      smiles: "C1CCOC1",
+      iupac: "oxolane",
+      pubchemQuery: "Tetrahydrofuran",
+      dissociation: null
     },
-    "Hexano_l": {
-      label: "Hexano",
+    "(C2H5)2O_l": {
+      label: "Éter Etílico",
       phase: "l",
-      molarMass: 86.18,
-      density: 0.655,
-      bp: 68.7,
-      fp: -95,
-      smiles: "CCCCCC",
-      iupac: "hexane",
-      pubchemQuery: "Hexane",
-      cid: 8058
+      molarMass: 74.12,
+      density: 0.713,
+      bp: 34.6,
+      fp: -116.3,
+      formula: "C4H10O",
+      smiles: "CCOCC",
+      iupac: "ethoxyethane",
+      pubchemQuery: "Diethyl ether",
+      dissociation: null
     },
-    "Benzeno_l": {
-      label: "Benzeno",
+    "(CH3)2SO_l": {
+      label: "Dimetilsulfóxido (DMSO)",
       phase: "l",
-      molarMass: 78.11,
-      density: 0.876,
-      bp: 80.1,
-      fp: 5.5,
-      smiles: "C1=CC=CC=C1",
-      iupac: "benzene",
-      pubchemQuery: "Benzene",
-      cid: 241
+      molarMass: 78.13,
+      density: 1.1,
+      bp: 189.0,
+      fp: 18.5,
+      formula: "C2H6OS",
+      smiles: "CS(=O)C",
+      iupac: "methylsulfinylmethane",
+      pubchemQuery: "Dimethyl sulfoxide",
+      dissociation: null
     },
-    "Tolueno_l": {
-      label: "Tolueno",
+    "CH3CN_l": {
+      label: "Acetonitrila",
       phase: "l",
-      molarMass: 92.14,
-      density: 0.867,
-      bp: 110.6,
-      fp: -95,
-      smiles: "CC1=CC=CC=C1",
-      iupac: "methylbenzene",
-      pubchemQuery: "Toluene",
-      cid: 1140
-    },
-    "Cloroformio_l": {
-      label: "Clorofórmio",
-      phase: "l",
-      molarMass: 119.38,
-      density: 1.489,
-      bp: 61.2,
-      fp: -63.5,
-      smiles: "ClC(Cl)Cl",
-      iupac: "trichloromethane",
-      pubchemQuery: "Chloroform",
-      cid: 6212
-    },
-    "AlcoolIsopentilico_l": {
-      label: "Álcool Isopentílico",
-      phase: "l",
-      molarMass: 88.15,
-      density: 0.81,
-      bp: 131.1,
-      fp: -117,
-      smiles: "CC(C)CCO",
-      iupac: "3-methylbutan-1-ol",
-      pubchemQuery: "Isoamyl alcohol",
-      cid: 31260
+      molarMass: 41.05,
+      density: 0.786,
+      bp: 81.6,
+      fp: -45.0,
+      formula: "C2H3N",
+      smiles: "CC#N",
+      iupac: "acetonitrile",
+      pubchemQuery: "Acetonitrile",
+      dissociation: null
     },
 
-    // ---------------------------------------------------------
-    // Precursores de Síntese Farmacêutica & Orgânicos
-    // ---------------------------------------------------------
+    // === ÁCIDOS E BASES (SOLUÇÕES AQUOSAS E PURAS) ===
+    "HCl_aq": {
+      label: "Ácido Clorídrico",
+      phase: "aq",
+      molarMass: 36.46,
+      density: 1.18,
+      bp: 110.0,
+      fp: -26.0,
+      formula: "HCl",
+      smiles: "Cl",
+      iupac: "chlorane",
+      pubchemQuery: "Hydrochloric acid",
+      dissociation: [["H+", 1], ["Cl-", 1]]
+    },
+    "H2SO4_aq": {
+      label: "Ácido Sulfúrico Concentrado",
+      phase: "aq",
+      molarMass: 98.08,
+      density: 1.84,
+      bp: 337.0,
+      fp: 10.0,
+      formula: "H2SO4",
+      smiles: "OS(=O)(=O)O",
+      iupac: "sulfuric acid",
+      pubchemQuery: "Sulfuric acid",
+      dissociation: [["H+", 2], ["SO4_2-", 1]]
+    },
+    "HNO3_aq": {
+      label: "Ácido Nítrico",
+      phase: "aq",
+      molarMass: 63.01,
+      density: 1.51,
+      bp: 83.0,
+      fp: -42.0,
+      formula: "HNO3",
+      smiles: "O[N+](=O)[O-]",
+      iupac: "nitric acid",
+      pubchemQuery: "Nitric acid",
+      dissociation: [["H+", 1], ["NO3-", 1]]
+    },
+    "H3PO4_aq": {
+      label: "Ácido Fosfórico",
+      phase: "aq",
+      molarMass: 98.0,
+      density: 1.88,
+      bp: 158.0,
+      fp: 42.0,
+      formula: "H3PO4",
+      smiles: "OP(=O)(O)O",
+      iupac: "phosphoric acid",
+      pubchemQuery: "Phosphoric acid",
+      dissociation: [["H+", 3], ["PO4_3-", 1]]
+    },
+    "HClO4_aq": {
+      label: "Ácido Perclórico",
+      phase: "aq",
+      molarMass: 100.46,
+      density: 1.67,
+      bp: 203.0,
+      fp: -17.0,
+      formula: "HClO4",
+      smiles: "OCl(=O)(=O)=O",
+      iupac: "perchloric acid",
+      pubchemQuery: "Perchloric acid",
+      dissociation: [["H+", 1], ["ClO4-", 1]]
+    },
+    "HF_aq": {
+      label: "Ácido Fluorídrico",
+      phase: "aq",
+      molarMass: 20.01,
+      density: 1.15,
+      bp: 19.5,
+      fp: -83.0,
+      formula: "HF",
+      smiles: "F",
+      iupac: "fluorane",
+      pubchemQuery: "Hydrofluoric acid",
+      dissociation: [["H+", 1], ["F-", 1]]
+    },
+    "HBr_aq": {
+      label: "Ácido Bromídrico",
+      phase: "aq",
+      molarMass: 80.91,
+      density: 1.49,
+      bp: 122.0,
+      fp: -87.0,
+      formula: "HBr",
+      smiles: "Br",
+      iupac: "bromane",
+      pubchemQuery: "Hydrobromic acid",
+      dissociation: [["H+", 1], ["Br-", 1]]
+    },
+    "HI_aq": {
+      label: "Ácido Iodídrico",
+      phase: "aq",
+      molarMass: 127.91,
+      density: 1.7,
+      bp: 127.0,
+      fp: -51.0,
+      formula: "HI",
+      smiles: "I",
+      iupac: "iodane",
+      pubchemQuery: "Hydroiodic acid",
+      dissociation: [["H+", 1], ["I-", 1]]
+    },
+    "CH3COOH_l": {
+      label: "Ácido Acético Glacial",
+      phase: "l",
+      molarMass: 60.05,
+      density: 1.05,
+      bp: 118.0,
+      fp: 16.6,
+      formula: "C2H4O2",
+      smiles: "CC(=O)O",
+      iupac: "acetic acid",
+      pubchemQuery: "Acetic acid",
+      dissociation: null
+    },
+    "AcidoAcetico_aq": {
+      label: "Ácido Acético (Solução)",
+      phase: "aq",
+      molarMass: 60.05,
+      density: 1.05,
+      bp: 118.0,
+      fp: 16.6,
+      formula: "C2H4O2",
+      smiles: "CC(=O)O",
+      iupac: "acetic acid",
+      pubchemQuery: "Acetic acid",
+      dissociation: [["H+", 0.1], ["CH3COO-", 0.1]]
+    },
+    "HCOOH_l": {
+      label: "Ácido Fórmico",
+      phase: "l",
+      molarMass: 46.03,
+      density: 1.22,
+      bp: 100.8,
+      fp: 8.4,
+      formula: "CH2O2",
+      smiles: "OC=O",
+      iupac: "formic acid",
+      pubchemQuery: "Formic acid",
+      dissociation: null
+    },
+    "HOOCCOOH_s": {
+      label: "Ácido Oxálico",
+      phase: "s",
+      molarMass: 90.03,
+      density: 1.9,
+      bp: 365.0,
+      fp: 189.5,
+      formula: "C2H2O4",
+      smiles: "OC(=O)C(=O)O",
+      iupac: "oxalic acid",
+      pubchemQuery: "Oxalic acid",
+      dissociation: null
+    },
+    "C6H8O7_s": {
+      label: "Ácido Cítrico",
+      phase: "s",
+      molarMass: 192.12,
+      density: 1.665,
+      bp: 310.0,
+      fp: 153.0,
+      formula: "C6H8O7",
+      smiles: "OC(=O)CC(O)(CC(=O)O)C(=O)O",
+      iupac: "2-hydroxypropane-1,2,3-tricarboxylic acid",
+      pubchemQuery: "Citric acid",
+      dissociation: null
+    },
+    "NaOH_aq": {
+      label: "Hidróxido de Sódio (Solução)",
+      phase: "aq",
+      molarMass: 40.0,
+      density: 2.13,
+      bp: 1388.0,
+      fp: 318.0,
+      formula: "NaOH",
+      smiles: "[Na+].[OH-]",
+      iupac: "sodium hydroxide",
+      pubchemQuery: "Sodium hydroxide",
+      dissociation: [["Na+", 1], ["OH-", 1]]
+    },
+    "NaOH_s": {
+      label: "Hidróxido de Sódio (Lentilhas)",
+      phase: "s",
+      molarMass: 40.0,
+      density: 2.13,
+      bp: 1388.0,
+      fp: 318.0,
+      formula: "NaOH",
+      smiles: "[Na+].[OH-]",
+      iupac: "sodium hydroxide",
+      pubchemQuery: "Sodium hydroxide",
+      dissociation: null
+    },
+    "KOH_aq": {
+      label: "Hidróxido de Potássio (Solução)",
+      phase: "aq",
+      molarMass: 56.11,
+      density: 2.04,
+      bp: 1327.0,
+      fp: 360.0,
+      formula: "KOH",
+      smiles: "[K+].[OH-]",
+      iupac: "potassium hydroxide",
+      pubchemQuery: "Potassium hydroxide",
+      dissociation: [["K+", 1], ["OH-", 1]]
+    },
+    "NH3_aq": {
+      label: "Amônia / Hidróxido de Amônio",
+      phase: "aq",
+      molarMass: 17.03,
+      density: 0.9,
+      bp: -33.3,
+      fp: -77.7,
+      formula: "NH3",
+      smiles: "N",
+      iupac: "ammonia",
+      pubchemQuery: "Ammonia",
+      dissociation: [["NH4+", 1], ["OH-", 0.1]]
+    },
+
+    // === PRECURSORES FARMACÊUTICOS & SÍNTESE ===
     "AcidoSalicilico_s": {
       label: "Ácido Salicílico",
       phase: "s",
       molarMass: 138.12,
+      density: 1.44,
+      bp: 211.0,
+      fp: 159.0,
       formula: "C7H6O3",
-      smiles: "C1=CC=C(C(=C1)C(=O)O)O",
+      smiles: "O=C(O)C1=CC=CC=C1O",
       iupac: "2-hydroxybenzoic acid",
       pubchemQuery: "Salicylic acid",
-      cid: 338,
-      chebiId: "CHEBI:16914",
-      papelBiologico: "Precursor de salicilatos e queratolítico tópico."
+      dissociation: null
+    },
+    "C7H6O3_s": {
+      label: "Ácido Salicílico",
+      phase: "s",
+      molarMass: 138.12,
+      density: 1.44,
+      bp: 211.0,
+      fp: 159.0,
+      formula: "C7H6O3",
+      smiles: "O=C(O)C1=CC=CC=C1O",
+      iupac: "2-hydroxybenzoic acid",
+      pubchemQuery: "Salicylic acid",
+      dissociation: null
     },
     "AnidridoAcetico_l": {
       label: "Anidrido Acético",
@@ -141,306 +472,280 @@ const LAB_DATABASE = {
       molarMass: 102.09,
       density: 1.08,
       bp: 139.8,
-      fp: -73,
+      fp: -73.0,
+      formula: "C4H6O3",
       smiles: "CC(=O)OC(=O)C",
-      iupac: "acetyl acetate",
+      iupac: "acetic anhydride",
       pubchemQuery: "Acetic anhydride",
-      cid: 7918
+      dissociation: null
     },
     "pAminofenol_s": {
       label: "4-Aminofenol",
       phase: "s",
       molarMass: 109.13,
+      density: 1.29,
+      bp: 284.0,
+      fp: 188.0,
       formula: "C6H7NO",
-      smiles: "C1=CC(=CC=C1N)O",
+      smiles: "NC1=CC=C(O)C=C1",
       iupac: "4-aminophenol",
       pubchemQuery: "4-Aminophenol",
-      cid: 403,
-      chebiId: "CHEBI:28566"
+      dissociation: null
     },
-    "AcidoAcetico_aq": {
-      label: "Ácido Acético (1M)",
-      phase: "aq",
-      conc: 1.0,
-      molarMass: 60.05,
-      smiles: "CC(=O)O",
-      iupac: "acetic acid",
-      pubchemQuery: "Acetic acid",
-      cid: 176,
-      dissociation: [["H+", 0.1], ["CH3COO-", 0.1]]
+    "AlcoolIsopentilico_l": {
+      label: "Álcool Isopentílico",
+      phase: "l",
+      molarMass: 88.15,
+      density: 0.81,
+      bp: 131.1,
+      fp: -117.0,
+      formula: "C5H12O",
+      smiles: "CC(C)CCO",
+      iupac: "3-methylbutan-1-ol",
+      pubchemQuery: "Isoamyl alcohol",
+      dissociation: null
     },
     "Anilina_l": {
       label: "Anilina",
       phase: "l",
       molarMass: 93.13,
-      density: 1.02,
-      bp: 184.1,
-      fp: -6,
-      smiles: "C1=CC=C(C=C1)N",
+      density: 1.022,
+      bp: 184.0,
+      fp: -6.3,
+      formula: "C6H7N",
+      smiles: "Nc1ccccc1",
       iupac: "aniline",
       pubchemQuery: "Aniline",
-      cid: 6115
+      dissociation: null
+    },
+    "C6H5NH2_l": {
+      label: "Anilina",
+      phase: "l",
+      molarMass: 93.13,
+      density: 1.022,
+      bp: 184.0,
+      fp: -6.3,
+      formula: "C6H7N",
+      smiles: "Nc1ccccc1",
+      iupac: "aniline",
+      pubchemQuery: "Aniline",
+      dissociation: null
     },
     "AcidoBenzoico_s": {
       label: "Ácido Benzóico",
       phase: "s",
       molarMass: 122.12,
+      density: 1.27,
+      bp: 249.0,
+      fp: 122.0,
       formula: "C7H6O2",
-      smiles: "C1=CC=C(C=C1)C(=O)O",
+      smiles: "O=C(O)C1=CC=CC=C1",
       iupac: "benzoic acid",
       pubchemQuery: "Benzoic acid",
-      cid: 243
+      dissociation: null
     },
 
-    // ---------------------------------------------------------
-    // Ácidos e Bases
-    // ---------------------------------------------------------
-    "HCl_aq": {
-      label: "Ácido Clorídrico (6M)",
-      phase: "aq",
-      conc: 6.0,
-      molarMass: 36.46,
-      dissociation: [["H+", 1], ["Cl-", 1]]
-    },
-    "H2SO4_aq": {
-      label: "Ácido Sulfúrico Concentrado (9M)",
-      phase: "aq",
-      conc: 9.0,
-      molarMass: 98.08,
-      dissociation: [["H+", 2], ["SO4_2-", 1]]
-    },
-    "HNO3_aq": {
-      label: "Ácido Nítrico (6M)",
-      phase: "aq",
-      conc: 6.0,
-      molarMass: 63.01,
-      dissociation: [["H+", 1], ["NO3-", 1]]
-    },
-    "HClO4_aq": {
-      label: "Ácido Perclórico (6M)",
-      phase: "aq",
-      conc: 6.0,
-      molarMass: 100.46,
-      dissociation: [["H+", 1], ["ClO4-", 1]]
-    },
-    "H3PO4_aq": {
-      label: "Ácido Fosfórico (4M)",
-      phase: "aq",
-      conc: 4.0,
-      molarMass: 98.00,
-      dissociation: [["H+", 3], ["PO4_3-", 1]]
-    },
-    "NaOH_aq": {
-      label: "Hidróxido de Sódio (6M)",
-      phase: "aq",
-      conc: 6.0,
-      molarMass: 40.0,
-      dissociation: [["Na+", 1], ["OH-", 1]]
-    },
-    "KOH_aq": {
-      label: "Hidróxido de Potássio (6M)",
-      phase: "aq",
-      conc: 6.0,
-      molarMass: 56.11,
-      dissociation: [["K+", 1], ["OH-", 1]]
-    },
-    "LiOH_aq": {
-      label: "Hidróxido de Lítio (5M)",
-      phase: "aq",
-      conc: 5.0,
-      molarMass: 23.95,
-      dissociation: [["Li+", 1], ["OH-", 1]]
-    },
-    "CaOH2_aq": {
-      label: "Água de Cal / Hidróxido de Cálcio (0.5M)",
-      phase: "aq",
-      conc: 0.5,
-      molarMass: 74.09,
-      dissociation: [["Ca2+", 1], ["OH-", 2]]
-    },
-    "NH3_aq": {
-      label: "Amônia em Solução (5M)",
-      phase: "aq",
-      conc: 5.0,
-      molarMass: 17.03,
-      dissociation: [["NH4+", 0.1], ["OH-", 0.1]]
-    },
-    "NaHCO3_aq": {
-      label: "Bicarbonato de Sódio (1M)",
-      phase: "aq",
-      conc: 1.0,
-      molarMass: 84.01,
-      dissociation: [["Na+", 1], ["HCO3-", 1]]
-    },
-    "Na2CO3_aq": {
-      label: "Carbonato de Sódio (1M)",
-      phase: "aq",
-      conc: 1.0,
-      molarMass: 105.99,
-      dissociation: [["Na+", 2], ["CO3_2-", 1]]
-    },
-    "K2CO3_aq": {
-      label: "Carbonato de Potássio (1M)",
-      phase: "aq",
-      conc: 1.0,
-      molarMass: 138.21,
-      dissociation: [["K+", 2], ["CO3_2-", 1]]
-    },
-    "NaClO_aq": {
-      label: "Hipoclorito de Sódio (2M)",
-      phase: "aq",
-      conc: 2.0,
-      molarMass: 74.44,
-      dissociation: [["Na+", 1], ["ClO-", 1]]
-    },
-
-    // ---------------------------------------------------------
-    // Sais e Soluções Metálicas
-    // ---------------------------------------------------------
-    "NaCl_s": { label: "Cloreto de Sódio Sólido", phase: "s", molarMass: 58.44 },
-    "CuSO4_s": { label: "Sulfato de Cobre II Anidro", phase: "s", molarMass: 159.61 },
-    "CaCO3_s": { label: "Carbonato de Cálcio Sólido", phase: "s", molarMass: 100.09 },
-    "NaHCO3_s": { label: "Bicarbonato de Sódio Sólido", phase: "s", molarMass: 84.01 },
-    "KI_aq": { label: "Iodeto de Potássio (1M)", phase: "aq", conc: 1.0, molarMass: 166.0, dissociation: [["K+", 1], ["I-", 1]] },
-    "AgNO3_aq": { label: "Nitrato de Prata (1M)", phase: "aq", conc: 1.0, molarMass: 169.87, dissociation: [["Ag+", 1], ["NO3-", 1]] },
-    "PbNO3_aq": { label: "Nitrato de Chumbo II (1M)", phase: "aq", conc: 1.0, molarMass: 331.2, dissociation: [["Pb2+", 1], ["NO3-", 2]] },
-    "CuSO4_aq": { label: "Sulfato de Cobre II (1M)", phase: "aq", conc: 1.0, molarMass: 159.61, dissociation: [["Cu2+", 1], ["SO4_2-", 1]] },
-    "FeCl3_aq": { label: "Cloreto de Ferro III (1M)", phase: "aq", conc: 1.0, molarMass: 162.2, dissociation: [["Fe3+", 1], ["Cl-", 3]] },
-    "ZnSO4_aq": { label: "Sulfato de Zinco (1M)", phase: "aq", conc: 1.0, molarMass: 161.47, dissociation: [["Zn2+", 1], ["SO4_2-", 1]] },
-    "NiCl2_aq": { label: "Cloreto de Níquel II (1M)", phase: "aq", conc: 1.0, molarMass: 129.60, dissociation: [["Ni2+", 1], ["Cl-", 2]] },
-    "CdNO3_aq": { label: "Nitrato de Cádmio (1M)", phase: "aq", conc: 1.0, molarMass: 236.42, dissociation: [["Cd2+", 1], ["NO3-", 2]] },
-    "BaCl2_aq": { label: "Cloreto de Bário (1M)", phase: "aq", conc: 1.0, molarMass: 208.23, dissociation: [["Ba2+", 1], ["Cl-", 2]] },
-    "CaCl2_aq": { label: "Cloreto de Cálcio (1M)", phase: "aq", conc: 1.0, molarMass: 110.98, dissociation: [["Ca2+", 1], ["Cl-", 2]] },
-    "CoCl2_aq": { label: "Cloreto de Cobalto II (1M)", phase: "aq", conc: 1.0, molarMass: 129.84, dissociation: [["Co2+", 1], ["Cl-", 2]] },
-    "SbCl3_aq": { label: "Cloreto de Antimônio III (1M)", phase: "aq", conc: 1.0, molarMass: 228.11, dissociation: [["Sb3+", 1], ["Cl-", 3]] },
-    "SCN_aq": { label: "Tiocianato de Potássio (1M)", phase: "aq", conc: 1.0, molarMass: 97.18, dissociation: [["K+", 1], ["SCN-", 1]] },
-    "NH42S_aq": { label: "Sulfeto de Amônio (1M)", phase: "aq", conc: 1.0, molarMass: 68.14, dissociation: [["NH4+", 2], ["S_2-", 1]] },
-    "H2O2_aq": { label: "Peróxido de Hidrogênio (3M)", phase: "aq", conc: 3.0, molarMass: 34.01, dissociation: [["H2O2", 1]] },
-
-    // ---------------------------------------------------------
-    // Metais e Substâncias Simples
-    // ---------------------------------------------------------
-    "Zn_s": { label: "Zinco Metálico", phase: "s", molarMass: 65.38 },
-    "Mg_s": { label: "Magnésio Metálico", phase: "s", molarMass: 24.31 },
-    "Al_s": { label: "Alumínio Metálico", phase: "s", molarMass: 26.98 },
-    "Na_s": { label: "Sódio Metálico", phase: "s", molarMass: 22.99 },
-    "Li_s": { label: "Lítio Metálico", phase: "s", molarMass: 6.94 },
-    "K_s": { label: "Potássio Metálico", phase: "s", molarMass: 39.10 },
-    "Ca_s": { label: "Cálcio Metálico", phase: "s", molarMass: 40.08 },
-    "Fe_s": { label: "Ferro Metálico", phase: "s", molarMass: 55.85 },
-    "Ni_s": { label: "Níquel Metálico", phase: "s", molarMass: 58.69 },
-    "Cu_s": { label: "Cobre Metálico", phase: "s", molarMass: 63.55 },
-    "Sn_s": { label: "Estanho Metálico", phase: "s", molarMass: 118.71 },
-    "Pb_s": { label: "Chumbo Metálico", phase: "s", molarMass: 207.20 },
-    "I2_s": { label: "Iodo Elementar", phase: "s", molarMass: 253.81 },
-    "S_s": { label: "Enxofre Elementar", phase: "s", molarMass: 32.06 },
-    "P_s": { label: "Fósforo Vermelho", phase: "s", molarMass: 30.97 },
-
-    // ---------------------------------------------------------
-    // Indicador
-    // ---------------------------------------------------------
-    "fenolftaleina": {
-      label: "Fenolftaleína",
-      phase: "s",
-      molarMass: 318.32,
-      smiles: "C1=CC=C2C(=C1)C(=O)OC2(C3=CC=C(C=C3)O)C4=CC=C(C=C4)O",
-      iupac: "3,3-bis(4-hydroxyphenyl)-2-benzofuran-1-one",
-      pubchemQuery: "Phenolphthalein",
-      cid: 4764
-    },
-
-    // ---------------------------------------------------------
-    // Fármacos e Produtos Sintetizados
-    // ---------------------------------------------------------
+    // === FÁRMACOS E TERAPÊUTICOS CONCLUÍDOS ===
     "AAS_s": {
       label: "Ácido Acetilsalicílico (Aspirina)",
       phase: "s",
       molarMass: 180.16,
+      density: 1.4,
+      bp: 140.0,
+      fp: 135.0,
       formula: "C9H8O4",
       smiles: "CC(=O)OC1=CC=CC=C1C(=O)O",
       iupac: "2-acetyloxybenzoic acid",
       pubchemQuery: "Aspirin",
-      cid: 2244,
-      chebiId: "CHEBI:15365",
-      cas: "50-78-2",
-      classe: "Anti-inflamatório Não Esteroidal (AINE)",
-      papelBiologico: "Inibidor irreversível da COX-1 (acetilação da Ser-529), reduzindo tromboxano A2 e prostaglandinas."
+      dissociation: null
+    },
+    "C9H8O4_s": {
+      label: "Ácido Acetilsalicílico (Aspirina)",
+      phase: "s",
+      molarMass: 180.16,
+      density: 1.4,
+      bp: 140.0,
+      fp: 135.0,
+      formula: "C9H8O4",
+      smiles: "CC(=O)OC1=CC=CC=C1C(=O)O",
+      iupac: "2-acetyloxybenzoic acid",
+      pubchemQuery: "Aspirin",
+      dissociation: null
     },
     "Paracetamol_s": {
       label: "Paracetamol (Acetaminofeno)",
       phase: "s",
       molarMass: 151.16,
+      density: 1.29,
+      bp: 420.0,
+      fp: 169.0,
       formula: "C8H9NO2",
       smiles: "CC(=O)NC1=CC=C(O)C=C1",
       iupac: "N-(4-hydroxyphenyl)acetamide",
       pubchemQuery: "Acetaminophen",
-      cid: 1983,
-      chebiId: "CHEBI:46195",
-      cas: "103-90-2",
-      classe: "Analgésico e Antipirético",
-      papelBiologico: "Inibição central da síntese de prostaglandinas e modulação da via canabinoide/serotoninérgica descendente."
+      dissociation: null
     },
-    "SalicilatoMetila_l": {
-      label: "Salicilato de Metila",
-      phase: "l",
-      molarMass: 152.15,
-      formula: "C8H8O3",
-      smiles: "COC(=O)C1=CC=CC=C1O",
-      iupac: "methyl 2-hydroxybenzoate",
-      pubchemQuery: "Methyl salicylate",
-      cid: 4133,
-      chebiId: "CHEBI:31844",
-      cas: "119-36-8",
-      classe: "Rubefaciente e Analgésico Tópico",
-      papelBiologico: "Pró-fármaco tópico que sofre hidrólise cutânea liberando ácido salicílico com ação anti-inflamatória local."
-    },
-    "Acetanilida_s": {
-      label: "Acetanilida",
+    "C8H9NO2_s": {
+      label: "Paracetamol (Acetaminofeno)",
       phase: "s",
-      molarMass: 135.17,
-      formula: "C8H9NO",
-      smiles: "CC(=O)NC1=CC=CC=C1",
-      iupac: "N-phenylacetamide",
-      pubchemQuery: "Acetanilide",
-      cid: 904,
-      chebiId: "CHEBI:28807",
-      cas: "103-84-4",
-      classe: "Analgésico Histórico (Precursor do Paracetamol)",
-      papelBiologico: "Metabolizada in vivo no fígado por hidroxilação em 4-aminofenol e acetaminofeno."
+      molarMass: 151.16,
+      density: 1.29,
+      bp: 420.0,
+      fp: 169.0,
+      formula: "C8H9NO2",
+      smiles: "CC(=O)NC1=CC=C(O)C=C1",
+      iupac: "N-(4-hydroxyphenyl)acetamide",
+      pubchemQuery: "Acetaminophen",
+      dissociation: null
     },
-    "AcetatoIsopentila_l": {
-      label: "Acetato de Isopentila (Aroma de Banana)",
-      phase: "l",
-      molarMass: 130.18,
-      formula: "C7H14O2",
-      smiles: "CC(=O)OCCC(C)C",
-      iupac: "3-methylbutyl acetate",
-      pubchemQuery: "Isoamyl acetate",
-      cid: 31276,
-      chebiId: "CHEBI:31725",
-      cas: "123-92-2",
-      classe: "Éster Aromatizante e Excipiente",
-      papelBiologico: "Excipiente flavorizante utilizado em formulações orais e feromônio de alarme biológico."
+    "C13H18O2_s": {
+      label: "Ibuprofeno",
+      phase: "s",
+      molarMass: 206.28,
+      density: 1.03,
+      bp: 157.0,
+      fp: 76.0,
+      formula: "C13H18O2",
+      smiles: "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O",
+      iupac: "2-(4-isobutylphenyl)propanoic acid",
+      pubchemQuery: "Ibuprofen",
+      dissociation: null
     },
-    "BenzoatoMetila_l": {
-      label: "Benzoato de Metila",
+    "C14H14N2O3_s": {
+      label: "Fenobarbital",
+      phase: "s",
+      molarMass: 232.24,
+      density: 1.34,
+      bp: null,
+      fp: 176.0,
+      formula: "C12H12N2O3",
+      smiles: "CCC1(CC)C(=O)NC(=O)NC1=O",
+      iupac: "5-ethyl-5-phenyl-1,3-diazinane-2,4,6-trione",
+      pubchemQuery: "Phenobarbital",
+      dissociation: null
+    },
+    "C17H19NO3_s": {
+      label: "Morfina",
+      phase: "s",
+      molarMass: 285.34,
+      density: 1.32,
+      bp: null,
+      fp: 254.0,
+      formula: "C17H19NO3",
+      smiles: "CN1C2CC3=C4C(C1C2)OC5=C4C(=CC(=C5)O)C3",
+      iupac: "(4R,4aR,7S,7aR,12bS)-3-methyl-2,4,4a,7,7a,13-hexahydro-1H-4,12-methanobenzofuro[3,2-e]isoquinoline-7,9-diol",
+      pubchemQuery: "Morphine",
+      dissociation: null
+    },
+    "C6H8O6_s": {
+      label: "Ácido Ascórbico (Vitamina C)",
+      phase: "s",
+      molarMass: 176.12,
+      density: 1.65,
+      bp: null,
+      fp: 190.0,
+      formula: "C6H8O6",
+      smiles: "OC1C(O)C(O)=C(O)C1=O",
+      iupac: "(2R)-2-[(1S)-1,2-dihydroxyethyl]-3,4-dihydroxy-2H-furan-5-one",
+      pubchemQuery: "Ascorbic acid",
+      dissociation: null
+    },
+
+    // === TOXICOLOGIA FORENSE E GASES DE GUERRA ===
+    "C4H10FO2P_l": {
+      label: "Sarin (GB)",
       phase: "l",
-      molarMass: 136.15,
-      formula: "C8H8O2",
-      smiles: "COC(=O)C1=CC=CC=C1",
-      iupac: "methyl benzoate",
-      pubchemQuery: "Methyl benzoate",
-      cid: 8050,
-      chebiId: "CHEBI:31839",
-      cas: "93-58-3",
-      classe: "Éster Aromático / Fragrância",
-      papelBiologico: "Solvente e aromatizante na indústria cosmética e farmacotécnica."
-    }
+      molarMass: 140.09,
+      density: 1.088,
+      bp: 158.0,
+      fp: -50.0,
+      formula: "C4H10FO2P",
+      smiles: "CC(C)OP(C)(=O)F",
+      iupac: "(RS)-propan-2-yl methylphosphonofluoridate",
+      pubchemQuery: "Sarin",
+      dissociation: null
+    },
+    "C11H26NO2PS_l": {
+      label: "Agente Nervoso VX",
+      phase: "l",
+      molarMass: 267.37,
+      density: 1.008,
+      bp: 298.0,
+      fp: -39.0,
+      formula: "C11H26NO2PS",
+      smiles: "O=P(CC)(OCC)SC(CN(C)C)C",
+      iupac: "O-ethyl S-[2-(diisopropylamino)ethyl] methylphosphonothioate",
+      pubchemQuery: "VX",
+      dissociation: null
+    },
+    "C4H8Cl2S_l": {
+      label: "Gás Mostarda (HD)",
+      phase: "l",
+      molarMass: 159.08,
+      density: 1.27,
+      bp: 217.0,
+      fp: 14.0,
+      formula: "C4H8Cl2S",
+      smiles: "ClCCSCCCl",
+      iupac: "1-chloro-2-(2-chloroethylsulfanyl)ethane",
+      pubchemQuery: "Sulfur mustard",
+      dissociation: null
+    },
+    "C20H22N2O2_s": {
+      label: "Estricnina",
+      phase: "s",
+      molarMass: 334.41,
+      density: 1.36,
+      bp: null,
+      fp: 284.0,
+      formula: "C21H22N2O2",
+      smiles: "C1CC2CC1C13CCN4C1(C2)C(=CC5=CC=CC=C53)COC4=O",
+      iupac": "strychnine",
+      pubchemQuery: "Strychnine",
+      dissociation: null
+    },
+    "C11H17N3O8_s": {
+      label: "Tetrodotoxina (TTX)",
+      phase: "s",
+      molarMass: 319.27,
+      density: 1.8,
+      bp: null,
+      fp: 225.0,
+      formula: "C11H17N3O8",
+      smiles: "O=C1NC(=O)C2=C(N1)C(NC(=O)C2)C3(O)CC4C(OC5C(O)C(O)C(N)CC5O4)C3O",
+      iupac": "tetrodotoxin",
+      pubchemQuery: "Tetrodotoxin",
+      dissociation: null
+    },
+    "C31H42N2O6_s": {
+      label: "Batracotoxina",
+      phase: "s",
+      molarMass: 538.68,
+      density: 1.3,
+      bp: null,
+      fp: 221.0,
+      formula: "C31H42N2O6",
+      smiles: "CC1=CC(=O)N(C1)C2CCC3C(C2)C4CCC5(C(C4CC3)OC5=O)O",
+      iupac": "batrachotoxin",
+      pubchemQuery: "Batrachotoxin",
+      dissociation: null
+    },
+
+    // === SAIS INORGÂNICOS E METAIS ===
+    "NaCl_s": { label: "Cloreto de Sódio", phase: "s", molarMass: 58.44, density: 2.16, bp: 1465.0, fp: 801.0, formula: "NaCl", smiles: "[Na+].[Cl-]", iupac: "sodium chloride", pubchemQuery: "Sodium chloride", dissociation: null },
+    "KCl_s": { label: "Cloreto de Potássio", phase: "s", molarMass: 74.55, density: 1.98, bp: 1420.0, fp: 770.0, formula: "KCl", smiles: "[K+].[Cl-]", iupac: "potassium chloride", pubchemQuery: "Potassium chloride", dissociation: null },
+    "KI_aq": { label: "Iodeto de Potássio (Solução)", phase: "aq", molarMass: 166.0, density: 1.7, bp: 1330.0, fp: 681.0, formula: "KI", smiles: "[K+].[I-]", iupac: "potassium iodide", pubchemQuery: "Potassium iodide", dissociation: [["K+", 1], ["I-", 1]] },
+    "AgNO3_aq": { label: "Nitrato de Prata (Solução)", phase: "aq", molarMass: 169.87, density: 4.35, bp: 440.0, fp: 212.0, formula: "AgNO3", smiles: "[Ag+].[O-][N+](=O)[O-]", iupac: "silver nitrate", pubchemQuery: "Silver nitrate", dissociation: [["Ag+", 1], ["NO3-", 1]] },
+    "PbNO3_aq": { label: "Nitrato de Chumbo II", phase: "aq", molarMass: 331.2, density: 4.53, bp: null, fp: 470.0, formula: "Pb(NO3)2", smiles: "[Pb+2].[O-][N+](=O)[O-].[O-][N+](=O)[O-]", iupac: "lead(2+) dinitrate", pubchemQuery: "Lead(II) nitrate", dissociation: [["Pb2+", 1], ["NO3-", 2]] },
+    "CuSO4_s": { label: "Sulfato de Cobre II", phase: "s", molarMass: 159.61, density: 3.6, bp: null, fp: 200.0, formula: "CuSO4", smiles: "[Cu+2].[O-]S(=O)(=O)[O-]", iupac: "copper(2+) sulfate", pubchemQuery: "Copper(II) sulfate", dissociation: null },
+    "CaCO3_s": { label: "Carbonato de Cálcio", phase: "s", molarMass: 100.09, density: 2.71, bp: 825.0, fp: 1339.0, formula: "CaCO3", smiles: "[Ca+2].[O-]C(=O)[O-]", iupac: "calcium carbonate", pubchemQuery: "Calcium carbonate", dissociation: null },
+    "NaHCO3_s": { label: "Bicarbonato de Sódio", phase: "s", molarMass: 84.01, density: 2.2, bp: 851.0, fp: 50.0, formula: "NaHCO3", smiles: "[Na+].OC(=O)[O-]", iupac: "sodium hydrogen carbonate", pubchemQuery: "Sodium bicarbonate", dissociation: null },
+    "Na_s": { label: "Sódio Metálico", phase: "s", molarMass: 22.99, density: 0.97, bp: 883.0, fp: 97.8, formula: "Na", smiles: "[Na]", iupac: "sodium", pubchemQuery: "Sodium", dissociation: null },
+    "K_s": { label: "Potássio Metálico", phase: "s", molarMass: 39.1, density: 0.89, bp: 759.0, fp: 63.5, formula: "K", smiles: "[K]", iupac: "potassium", pubchemQuery: "Potassium", dissociation: null },
+    "Mg_s": { label: "Magnésio Metálico", phase: "s", molarMass: 24.31, density: 1.74, bp: 1090.0, fp: 650.0, formula: "Mg", smiles: "[Mg]", iupac: "magnesium", pubchemQuery: "Magnesium", dissociation: null }
   },
 
-  // =========================================================================
-  // 2. REGRAS DE SÍNTESE, CINÉTICA E CONDIÇÕES DE REAÇÃO
-  // =========================================================================
+  // 2. ROTAS E REAÇÕES QUÍMICAS MAPEADAS
   reactions: [
     {
       id: "sintese_aspirina",
@@ -448,10 +753,10 @@ const LAB_DATABASE = {
       produtoId: "AAS_s",
       reagentesObrigatorios: ["AcidoSalicilico_s", "AnidridoAcetico_l"],
       catalisador: "H2SO4_aq",
-      tempMinima: 60,
+      tempMinima: 58,
       precisaAgitador: true,
       corPrecipitado: "#ffffff",
-      descricao: "Acetilação do grupamento hidroxila fenólico do Ácido Salicílico pelo Anidrido Acético com catálise ácida, formando Aspirina e Ácido Acético."
+      descricao: "Acetilação da hidroxila fenólica do ácido salicílico por catálise ácida com anidrido acético."
     },
     {
       id: "sintese_paracetamol",
@@ -462,7 +767,7 @@ const LAB_DATABASE = {
       tempMinima: 55,
       precisaAgitador: true,
       corPrecipitado: "#f8fafc",
-      descricao: "Acetilação seletiva da amina aromática primária do 4-aminofenol gerando ligação amídica estável e cristais de Paracetamol."
+      descricao: "Acilação nucleofílica seletiva do grupamento amino aromático do 4-aminofenol."
     },
     {
       id: "sintese_salicilato_metila",
@@ -472,8 +777,8 @@ const LAB_DATABASE = {
       catalisador: "H2SO4_aq",
       tempMinima: 65,
       precisaAgitador: false,
-      corLiquido: "rgba(254, 240, 138, 0.4)",
-      descricao: "Esterificação de Fischer: condensação do ácido carboxílico com metanol sob refluxo ácido produzindo óleo aromático rubefaciente."
+      corPrecipitado: null,
+      descricao: "Esterificação de Fischer entre ácido salicílico e metanol."
     },
     {
       id: "sintese_acetanilida",
@@ -483,8 +788,8 @@ const LAB_DATABASE = {
       catalisador: null,
       tempMinima: 20,
       precisaAgitador: true,
-      corPrecipitado: "#ffffff",
-      descricao: "Acetilação exotérmica de amina primária por ataque nucleofílico ao anidrido acético, precipitando lâminas brilhantes de acetanilida."
+      corPrecipitado: "#f1f5f9",
+      descricao: "Acetilação nucleofílica de amina primária aromática formando amida secundária."
     },
     {
       id: "sintese_aroma_banana",
@@ -494,24 +799,24 @@ const LAB_DATABASE = {
       catalisador: "H2SO4_aq",
       tempMinima: 70,
       precisaAgitador: false,
-      corLiquido: "rgba(253, 224, 71, 0.3)",
-      descricao: "Esterificação de Fischer entre ácido acético e álcool isopentílico formando éster volátil com odor marcante de fruta."
+      corPrecipitado: null,
+      descricao: "Esterificação com separação de fase orgânica frutal."
     },
     {
-      id: "sintese_benzoato_metila",
-      nomeComposto: "Benzoato de Metila",
-      produtoId: "BenzoatoMetila_l",
-      reagentesObrigatorios: ["AcidoBenzoico_s", "Metanol_l"],
-      catalisador: "H2SO4_aq",
-      tempMinima: 65,
+      id: "chuva_de_ouro",
+      nomeComposto: "Iodeto de Chumbo II",
+      produtoId: "PbI2_s",
+      reagentesObrigatorios: ["PbNO3_aq", "KI_aq"],
+      catalisador: null,
+      tempMinima: 15,
       precisaAgitador: false,
-      corLiquido: "rgba(241, 245, 249, 0.3)",
-      descricao: "Esterificação de Fischer do ácido benzóico com metanol catalisada por ácido inorgânico forte."
+      corPrecipitado: "#facc15",
+      descricao: "Reação de dupla troca com precipitação regida por Ksp (9.8 × 10⁻⁹)."
     }
   ]
 };
 
-// Exportação global resiliente para o ambiente do navegador
+// Exportação global
 if (typeof window !== "undefined") {
   window.LAB_DATABASE = LAB_DATABASE;
 }
