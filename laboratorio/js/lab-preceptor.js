@@ -1,10 +1,15 @@
 /**
  * LAIFT — MOTOR COGNITIVO DO PRECEPTOR VIRTUAL DE BANCADA
- * Arquitetura Híbrida: Sistema Especialista Local + Sugestões Interativas + Cache Quimiométrico
+ * Arquitetura em Cascata de 3 Camadas:
+ *   Camada 1: IndexedDB Local (Cache offline ultra-rápido, 0 tokens)
+ *   Camada 2: Cache Global Compartilhado (Planilha via Apps Script, 0 tokens)
+ *   Camada 3: Motor Cognitivo (Cluster Groq 120B com auto-aprendizado e destilação)
  */
 
+window.APPS_SCRIPT_GATEWAY = window.APPS_SCRIPT_GATEWAY || 'https://script.google.com/macros/s/AKfycbxbIrLKrfWjia_K-05aywbo9sou__8RW3MzIjeD3WoNc6CNJILXutTl93NfiBVwbDSM/exec';
+
 const LabPreceptorEngine = {
-  // 1. CACHE LOCAL PARA ECONOMIA DE REDE E TOKENS
+  // 1. CACHE LOCAL DE CONTINGÊNCIA RÁPIDA (FALLBACK)
   obterDoCache(termo) {
     try {
       const cache = JSON.parse(localStorage.getItem('laift_chem_cache') || '{}');
@@ -24,8 +29,24 @@ const LabPreceptorEngine = {
     }
   },
 
-  // 2. BASE LOCAL EXPANDIDA DE ROTAS DE SÍNTESE
+  // 2. BASE ESPECIALISTA DE ROTAS CURADAS (RESOLUÇÃO INSTANTÂNEA)
   ROTAS_SINTESE: {
+    "dipirona": {
+      nome: "Dipirona Sódica (Metamizol)",
+      reagentes: ["4-Aminoantipirina", "Formaldeído", "Bissulfito de Sódio"],
+      catalisador: "Meio aquoso sob pH controlado (6.0 - 7.0)",
+      vidraria: "Béquer ou Balão de Fundo Redondo (250 mL)",
+      tempIdeal: "50°C a 60°C",
+      passos: [
+        "Carregue a 4-aminoantipirina em água purificada sob agitação contínua.",
+        "Adicione solução de formaldeído para formar o intermediário metilênico de adição.",
+        "Adicione bissulfito de sódio aquoso para sulfonar a cadeia nitrogenada.",
+        "Mantenha o aquecimento a 55°C até que a precipitação dos cristais de Dipirona ocorra.",
+        "Resfrie em banho de gelo para cristalização do produto farmacêutico purificado."
+      ],
+      perigos: "Formaldeído emite vapores irritantes e voláteis. Manipular sob exaustão.",
+      mecanismo: "Condensação de amina primária com carbonila seguida por adição nucleofílica de bissulfito gerando aminometanossulfonato."
+    },
     "aspirina": {
       nome: "Ácido Acetilsalicílico (Aspirina)",
       reagentes: ["AcidoSalicilico_s", "AnidridoAcetico_l"],
@@ -118,7 +139,7 @@ const LabPreceptorEngine = {
     }
   },
 
-  // 3. ANALISADOR DO ESTADO FÍSICO DO VASO
+  // 3. ANALISADOR DINÂMICO DO VASO
   gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo) {
     const ph = calcularpH();
     const temp = sys.temp;
@@ -134,10 +155,10 @@ const LabPreceptorEngine = {
       };
     }
 
-    let caracteristicaPH = ph < 3 ? "Fortemente Ácida (Corrosiva)" : ph < 6.5 ? "Levemente Ácida" : ph <= 7.5 ? "Neutra" : ph < 11 ? "Levemente Básica" : "Fortemente Alcalina (Cáustica)";
-    let estadoTermico = temp < 10 ? "Resfriada (Banho de Gelo)" : temp <= 35 ? "Temperatura Ambiente" : temp < 70 ? "Aquecimento Moderado" : "Alta Temperatura";
+    const caracteristicaPH = ph < 3 ? "Fortemente Ácida (Corrosiva)" : ph < 6.5 ? "Levemente Ácida" : ph <= 7.5 ? "Neutra" : ph < 11 ? "Levemente Básica" : "Fortemente Alcalina (Cáustica)";
+    const estadoTermico = temp < 10 ? "Resfriada (Banho de Gelo)" : temp <= 35 ? "Temperatura Ambiente" : temp < 70 ? "Aquecimento Moderado" : "Alta Temperatura";
 
-    let especiesNomes = especies.map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`).join(', ');
+    const especiesNomes = especies.map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`).join(', ');
 
     return {
       estado: "Em Operação",
@@ -167,34 +188,59 @@ const LabPreceptorEngine = {
     return "A adição alterará a concentração de espécies e o pH. Monitore a curva gráfica e o HUD após o despejo.";
   },
 
-  // 5. MOTOR PRINCIPAL DE PROCESSAMENTO DE MENSAGENS
+  // 5. MOTOR PRINCIPAL: CASCATA DE TRÊS CAMADAS COM DESTILAÇÃO
   async processarMensagem(msgUsuario, sys, calcularpH, agitadorAtivo) {
     const texto = msgUsuario.toLowerCase().trim();
 
-    // A: Pedido de Guia Geral, Opções de Criação ou Combinações
+    // A. Comandos de Guia e Navegação Rápida
     if (texto.includes("como usar") || texto.includes("opcoes") || texto.includes("o que posso criar") || texto.includes("combinac") || texto.includes("o que fazer") || texto.includes("ajuda") || texto.includes("comecar")) {
       return `
 **👨‍🏫 Guia de Operações da Bancada LAIFT:**
 
 Você pode simular reações orgânicas, inorgânicas e fenômenos físico-químicos:
 
-**1. Sínteses Farmacêuticas Disponíveis:**
+**1. Sínteses Farmacêuticas Mapeadas:**
+* **Dipirona Sódica:** 4-Aminoantipirina + Formaldeído + Bissulfito de Sódio (55°C).
 * **Aspirina (AAS):** Ácido Salicílico + Anidrido Acético + gotas de H₂SO₄ (60°C a 70°C).
 * **Paracetamol:** 4-Aminofenol + Anidrido Acético (55°C a 65°C).
 * **Salicilato de Metila:** Ácido Salicílico + Metanol + H₂SO₄ (65°C a 75°C).
-* **Acetanilida:** Anilina + Anidrido Acético (ambiente, 25°C).
+* **Acetanilida:** Anilina + Anidrido Acético (25°C).
 * **Acetato de Isopentila (Banana):** Ácido Acético + Álcool Isopentílico + H₂SO₄ (> 70°C).
 
-**2. Fenômenos Inorgânicos:**
-* **Chuva de Ouro:** Nitrato de Chumbo II + Iodeto de Potássio (precipitado amarelo cintilante).
-* **Neutralizações:** HCl + NaOH (mudança de pH e curva de titulação na aba 📈 Curva pH).
-* **Efervescência:** Carbonatos (NaHCO₃ ou CaCO₃) + Ácido (liberação de CO₂).
+**2. Fenômenos Físico-Químicos:**
+* **Chuva de Ouro:** Nitrato de Chumbo II + Iodeto de Potássio (precipitado PbI₂ dourado).
+* **Curvas de Titulação:** HCl + NaOH com monitoramento dinâmico na aba 📈 Curva pH.
+* **Efervescência:** Carbonatos (NaHCO₃/CaCO₃) + Ácido (desprendimento de CO₂).
 
-*Dica: Clique na aba **🔬 Molécula** no painel direito para ver a projeção estrutural 2D e o dossiê da molécula em foco!*
+*Dica: Alterne entre as visualizações 2D e 3D WebGL na aba **🔬 Molécula**!*
       `.trim();
     }
 
-    // B: Rota de Síntese Específica
+    // B. Diagnóstico da Vidraria Atual
+    if (texto.includes("o que tem") || texto.includes("acontecendo") || texto.includes("analis") || texto.includes("diagnostico") || texto.includes("status")) {
+      const diag = this.gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo);
+      return `
+**🔬 Diagnóstico da Vidraria Atual:**
+${diag.resumo}
+
+${diag.detalhes}
+
+**⚠️ Avaliação:** ${diag.alerta}
+      `.trim();
+    }
+
+    // C. Predição de Incompatibilidades Químicas
+    if (texto.includes("acontece se") || texto.includes("misturar") || texto.includes("adicionar") || texto.includes("colocar")) {
+      if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
+        for (const [reag, info] of Object.entries(LAB_DATABASE.species)) {
+          if (texto.includes(reag.toLowerCase()) || texto.includes(info.label.toLowerCase())) {
+            return this.predizerMistura(reag, sys);
+          }
+        }
+      }
+    }
+
+    // D. Verificação de Rotas Curadas Locais
     for (const [chave, rota] of Object.entries(this.ROTAS_SINTESE)) {
       if (texto.includes(chave) || (chave === "aspirina" && (texto.includes("aas") || texto.includes("acetilsalicilico")))) {
         return `
@@ -202,7 +248,7 @@ Você pode simular reações orgânicas, inorgânicas e fenômenos físico-quím
 
 **1. Parâmetros Ideais:**
 * **Precursores:** ${rota.reagentes.join(' + ')}
-* **Catalisador:** ${rota.catalisador}
+* **Catalisador/Meio:** ${rota.catalisador}
 * **Faixa Térmica:** ${rota.tempIdeal}
 * **Vidraria Indicada:** ${rota.vidraria}
 
@@ -216,32 +262,66 @@ ${rota.passos.map((p, idx) => `* **Passo ${idx + 1}:** ${p}`).join('\n')}
       }
     }
 
-    // C: Diagnóstico do Vaso Atual
-    if (texto.includes("o que tem") || texto.includes("acontecendo") || texto.includes("analis") || texto.includes("diagnostico") || texto.includes("status")) {
-      const diag = this.gerarDiagnosticoVaso(sys, calcularpH, agitadorAtivo);
-      return `
-**🔬 Diagnóstico da Vidraria Atual:**
-${diag.resumo}
+    // ==========================================
+    // CASCATA DE 3 CAMADAS (AUTO-APRENDIZADO)
+    // ==========================================
+    const termoComposto = texto
+      .replace(/como sintetizar|como fazer|rota de sintese de|sintese de|sintetizar|como preparar|preparo de|reacao de|fazer/gi, '')
+      .replace(/[?.,!]/g, '')
+      .trim();
 
-${diag.detalhes}
+    const chaveConsulta = termoComposto.length >= 3 ? termoComposto : texto;
 
-**⚠️ Avaliação:** ${diag.alerta}
-      `.trim();
-    }
-
-    // D: Predição de Misturas e Incompatibilidades
-    if (texto.includes("acontece se") || texto.includes("misturar") || texto.includes("adicionar") || texto.includes("colocar")) {
-      if (typeof LAB_DATABASE !== 'undefined' && LAB_DATABASE.species) {
-        for (const [reag, info] of Object.entries(LAB_DATABASE.species)) {
-          if (texto.includes(reag.toLowerCase()) || texto.includes(info.label.toLowerCase())) {
-            return this.predizerMistura(reag, sys);
-          }
+    // --- CAMADA 1: IndexedDB Local (0 ms / 0 tokens) ---
+    if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterRotaSinteseLocal === 'function') {
+      try {
+        const rotaLocal = await LabStorageEngine.obterRotaSinteseLocal(chaveConsulta);
+        if (rotaLocal) {
+          return `${rotaLocal}\n\n*(⚡ Resposta recuperada instantaneamente da memória local IndexedDB)*`;
         }
+      } catch (errLocal) {
+        console.warn('[Preceptor Camada 1] Falha ao consultar IndexedDB:', errLocal);
       }
     }
 
-    // E: Dúvida Livre / Farmacológica -> Envia ao Apps Script (Groq 120B) se configurado
-    const gateway = window.APPS_SCRIPT_GATEWAY || (typeof LAIFT_CONFIG !== 'undefined' ? LAIFT_CONFIG.GATEWAY_URL : null);
+    const fallbackMem = this.obterDoCache(chaveConsulta);
+    if (fallbackMem) {
+      return `${fallbackMem}\n\n*(⚡ Resposta recuperada do cache rápido)*`;
+    }
+
+    // --- CAMADA 2: Cache Global Compartilhado (Apps Script / Planilha — 0 tokens) ---
+    const gateway = window.APPS_SCRIPT_GATEWAY;
+    if (gateway && chaveConsulta.length >= 3) {
+      try {
+        const resGlobal = await fetch(gateway, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            acao: 'consultarCacheGlobal',
+            termo: chaveConsulta
+          })
+        });
+
+        if (resGlobal.ok) {
+          const dataGlobal = await resGlobal.json();
+          if (dataGlobal && dataGlobal.sucesso && dataGlobal.sinteseCurada) {
+            const rotaCurada = dataGlobal.sinteseCurada.respostaFormatada || dataGlobal.sinteseCurada;
+
+            // Alimenta a Camada 1 (IndexedDB) para acessos subsequentes locais
+            if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarRotaSinteseLocal === 'function') {
+              await LabStorageEngine.salvarRotaSinteseLocal(chaveConsulta, rotaCurada);
+            }
+            this.salvarNoCache(chaveConsulta, rotaCurada);
+
+            return `${rotaCurada}\n\n*(🌐 Resposta recuperada do Acervo Global LAIFT)*`;
+          }
+        }
+      } catch (errGlobal) {
+        console.warn('[Preceptor Camada 2] Cache global indisponível:', errGlobal);
+      }
+    }
+
+    // --- CAMADA 3: Motor Cognitivo Groq 120B (Geração e Destilação Contínua) ---
     if (gateway) {
       try {
         const especiesVaso = Array.from(sys.especies.entries())
@@ -249,9 +329,9 @@ ${diag.detalhes}
           .map(([esp, q]) => `${esp.replace(/_s|_g|_l|_aq/g, '')} (${q.toFixed(1)} mmol)`)
           .join(', ') || 'Vaso vazio';
 
-        const contextoBancada = `T:${sys.temp.toFixed(1)}C; Pressao:${sys.pressao.toFixed(2)}atm; pH:${calcularpH().toFixed(2)}; Vol:${sys.vol.toFixed(1)}mL; Vidraria:${sys.isClosed ? 'Fechada' : 'Aberta'}; Agitador:${agitadorAtivo ? 'Ligado' : 'Parado'}; Especies:${especiesVaso}.`;
+        const contextoBancada = `T:${sys.temp.toFixed(1)}°C; Pressao:${sys.pressao.toFixed(2)}atm; pH:${calcularpH().toFixed(2)}; Vol:${sys.vol.toFixed(1)}mL; Vidraria:${sys.isClosed ? 'Fechada' : 'Aberta'}; Agitador:${agitadorAtivo ? 'Ligado' : 'Parado'}; Especies:[${especiesVaso}].`;
 
-        const res = await fetch(gateway, {
+        const resIA = await fetch(gateway, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({
@@ -261,39 +341,65 @@ ${diag.detalhes}
           })
         });
 
-        const data = await res.json();
-        if (data && data.resposta) {
-          return data.resposta;
+        if (resIA.ok) {
+          const dataIA = await resIA.json();
+          if (dataIA && dataIA.resposta) {
+            const respostaFormatada = dataIA.resposta;
+
+            // Destilação do aprendizado: persiste na Camada 1 (IndexedDB Local)
+            if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarRotaSinteseLocal === 'function') {
+              await LabStorageEngine.salvarRotaSinteseLocal(chaveConsulta, respostaFormatada);
+            }
+            this.salvarNoCache(chaveConsulta, respostaFormatada);
+
+            // Destilação do aprendizado: sincroniza na Camada 2 (Planilha Global)
+            fetch(gateway, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({
+                acao: 'salvarCacheGlobal',
+                termo: chaveConsulta,
+                dados: {
+                  nome: chaveConsulta.toUpperCase(),
+                  sintese: { respostaFormatada: respostaFormatada }
+                }
+              })
+            }).catch(() => {});
+
+            return respostaFormatada;
+          }
         }
-      } catch (e) {
-        console.warn('[Preceptor] Falha no gateway remoto, mantendo modo local:', e);
+      } catch (errIA) {
+        console.warn('[Preceptor Camada 3] Falha na chamada da IA Groq 120B:', errIA);
       }
     }
 
-    // Fallback Pedagógico Informativo Local
+    // Fallback didático caso não haja conexão de rede
     return `
-**👨‍🏫 Orientação do Preceptor:**
-Sua vidraria está a **${sys.temp.toFixed(1)}°C** com **pH ${calcularpH().toFixed(2)}** e volume de **${sys.vol.toFixed(1)} mL**.
+**👨‍🏫 Orientação do Preceptor LAIFT:**
+Sua bancada opera a **${sys.temp.toFixed(1)}°C** com **pH ${calcularpH().toFixed(2)}** e volume de **${sys.vol.toFixed(1)} mL**.
 
 Você pode me perguntar:
-* *"Como sintetizar Aspirina?"* ou *"Como fazer Paracetamol?"*
-* *"O que posso criar aqui?"* para ver a lista de rotas de bancada.
-* *"O que tem no meu vaso?"* para uma leitura analítica completa.
+* *"Como sintetizar Dipirona?"*, *"Como sintetizar Aspirina?"* ou *"Rota do Paracetamol"*.
+* *"O que posso criar aqui?"* para inspecionar os reagentes da bancada.
+* *"O que tem no meu vaso?"* para obter um diagnóstico físico-químico imediato.
     `.trim();
   }
 };
 
-// Funções Utilitárias Globais do Chat
+// ==========================================
+// FUNÇÕES UTILITÁRIAS GLOBAIS DO CHAT
+// ==========================================
 window.limparChatPreceptor = function() {
   const chatBox = document.getElementById('labChatMessages');
   if (!chatBox) return;
 
   chatBox.innerHTML = `
     <div class="lab-chat-msg msg-preceptor">
-      Conversa reiniciada. Sou o <strong>Preceptor Virtual LAIFT</strong>. Como posso orientar sua bancada agora?
+      Conversa reiniciada. Sou o <strong>Preceptor Virtual LAIFT</strong> (conectado ao cluster Groq 120B e com aprendizado de bancada ativo). Como posso orientar sua síntese agora?
       <div class="chip-container">
-        <button class="chat-chip" onclick="enviarDuvidaRapida('O que posso criar aqui?')">🧪 O que posso criar aqui?</button>
-        <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Aspirina?')">💊 Rota da Aspirina</button>
+        <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Dipirona?')">💊 Síntese de Dipirona</button>
+        <button class="chat-chip" onclick="enviarDuvidaRapida('Como sintetizar Aspirina?')">🧪 Rota da Aspirina</button>
         <button class="chat-chip" onclick="enviarDuvidaRapida('Como fazer Paracetamol?')">🔬 Rota do Paracetamol</button>
         <button class="chat-chip" onclick="enviarDuvidaRapida('O que tem no meu vaso?')">🌡️ Diagnóstico do Vaso</button>
       </div>
@@ -312,7 +418,6 @@ window.enviarDuvidaRapida = function(pergunta) {
   }
 };
 
-// Inicializa o chat ao carregar a página
 if (typeof document !== 'undefined') {
   document.addEventListener('DOMContentLoaded', () => {
     window.limparChatPreceptor();
