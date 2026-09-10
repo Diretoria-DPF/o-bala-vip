@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- =========================================================================
-       1. METADADOS, FONTES & ENGENHARIA DE VIEWPORT (FULLSCREEN COCKPIT) 
-       ========================================================================= -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>LAIFT — Estúdio de Projeção & Modelagem Molecular 3D</title>
@@ -12,9 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Urbanist:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- =========================================================================
-       2. MOTORES GRÁFICOS & QUIMIOINFORMÁTICA
-       ========================================================================= -->
+  <!-- Motores gráficos e quimioinformática -->
   <script src="https://unpkg.com/smiles-drawer@2.1.7/dist/smiles-drawer.min.js"></script>
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
   <script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
@@ -23,9 +18,7 @@
 </head>
 <body class="studio-cockpit-locked">
 
-  <!-- =========================================================================
-       3. CABEÇALHO DO ESTÚDIO
-       ========================================================================= -->
+  <!-- Cabeçalho -->
   <header class="studio-main-header">
     <div class="header-branding">
       <div class="studio-logo-icon">🧬</div>
@@ -41,7 +34,7 @@
         ⛶ Tela Cheia
       </button>
 
-      <button class="studio-btn btn-action-transfer" id="btnCarregarNaBancada" onclick="carregarCompostoDoStudioNaBancada()" style="display: none;" title="Transferir molécula ativa diretamente para a vidraria da bancada">
+      <button class="studio-btn btn-action-transfer" id="btnCarregarNaBancada" onclick="carregarCompostoDoStudioNaBancada()" style="display: none;" title="Transferir molécula ativa para a bancada">
         🧪 Transferir para Bancada
       </button>
 
@@ -51,12 +44,10 @@
     </div>
   </header>
 
-  <!-- =========================================================================
-       4. WORKSPACE EM GRADE
-       ========================================================================= -->
+  <!-- Workspace -->
   <main class="studio-workspace-grid">
 
-    <!-- 4.1. NAVEGADOR VIRTUALIZADO DE COMPOSTOS -->
+    <!-- Sidebar de compostos -->
     <aside class="studio-sidebar-panel">
       <div class="sidebar-search-container">
         <div class="search-input-wrapper">
@@ -64,6 +55,16 @@
           <input type="text" id="studioSearchInput" placeholder="Buscar por nome, fórmula ou SMILES..." oninput="filtrarCompostosStudio(this.value)" autocomplete="off" spellcheck="false">
         </div>
 
+        <!-- Busca avançada por SMARTS -->
+        <div class="advanced-search-toggle">
+          <button class="studio-btn btn-advanced" onclick="toggleAdvancedSearch()">🔎 Busca Avançada</button>
+        </div>
+        <div id="advancedSearchPanel" style="display:none;">
+          <input type="text" id="smartsInput" placeholder="Padrão SMARTS (ex.: c1ccccc1)" onkeydown="if(event.key === 'Enter') executarBuscaSMARTS()">
+          <button class="studio-btn" onclick="executarBuscaSMARTS()">Buscar</button>
+        </div>
+
+        <!-- Filtros por categoria -->
         <div class="category-filters-scroll">
           <button class="category-pill active" data-cat="todas" onclick="filtrarCategoriaStudio('todas')">Todas</button>
           <button class="category-pill" data-cat="farmacos" onclick="filtrarCategoriaStudio('farmacos')">Fármacos</button>
@@ -73,6 +74,7 @@
         </div>
       </div>
 
+      <!-- Lista virtualizada -->
       <div class="compound-virtual-list" id="studioCompoundList" onscroll="handleStudioScroll()"></div>
 
       <div class="sidebar-footer-counter">
@@ -80,10 +82,8 @@
       </div>
     </aside>
 
-    <!-- 4.2. VIEWPORT 3D / 2D & TELEMETRIA -->
+    <!-- Viewport 3D/2D -->
     <section class="studio-viewport-panel">
-      
-      <!-- Barra de Ferramentas -->
       <nav class="studio-toolbar-ribbon">
         <div class="toolbar-cluster">
           <span class="cluster-label">Modo:</span>
@@ -101,9 +101,7 @@
 
         <div class="toolbar-cluster">
           <span class="cluster-label">Geometria:</span>
-          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()">
-            📏 Medir (Å / °)
-          </button>
+          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()">📏 Medir (Å / °)</button>
           <button class="tool-btn" onclick="limparMedicoes3D()">Limpar</button>
         </div>
 
@@ -112,10 +110,12 @@
           <button class="tool-btn" onclick="resetarCamera3D()">🎯 Centro</button>
           <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()">📷 PNG</button>
           <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()">💾 SDF</button>
+          <button class="tool-btn" onclick="document.getElementById('fileInput').click()">📁 Abrir</button>
+          <input type="file" id="fileInput" accept=".mol,.sdf,.pdb" style="display:none" onchange="carregarArquivoEstrutura(event)">
+          <button class="tool-btn" onclick="abrirEditorKetcher()">✏️ Editar</button>
         </div>
       </nav>
 
-      <!-- Viewports de Renderização -->
       <div class="studio-canvas-stage" id="studioCanvasWrapper">
         <div id="studioViewer3D" class="viewer-surface-3d"></div>
 
@@ -141,7 +141,6 @@
         </div>
       </div>
 
-      <!-- Fita Inferior: Telemetria Físico-Química & Dossiê Lipinski -->
       <footer class="studio-telemetry-hud">
         <div class="hud-item-block">
           <span class="hud-title">Espécie</span>
@@ -156,14 +155,13 @@
           </span>
         </div>
 
-        <!-- Descritores de Lipinski / Farmacocinética In Silico -->
         <div class="hud-item-block lipinski-descriptors-block">
           <span class="hud-title">Perfil Farmacocinético (RDKit / Lipinski Ro5)</span>
           <div class="lipinski-metrics-row">
-            <span class="metric-pill" title="LogP de Crippen (Lipofilicidade) &le; 5">LogP: <strong id="descLogP">--</strong></span>
-            <span class="metric-pill" title="Área de Superfície Polar Topológica (TPSA) &le; 140 Å²">TPSA: <strong id="descTPSA">-- Å²</strong></span>
-            <span class="metric-pill" title="Doadores de H (&le; 5) / Aceptores de H (&le; 10)">HBD/HBA: <strong id="descHBD_HBA">-- / --</strong></span>
-            <span class="metric-pill" title="Ligações Rotacionáveis (Flexibilidade) &le; 10">RotB: <strong id="descRotB">--</strong></span>
+            <span class="metric-pill" title="LogP de Crippen (Lipofilicidade) ≤ 5">LogP: <strong id="descLogP">--</strong></span>
+            <span class="metric-pill" title="Área de Superfície Polar Topológica (TPSA) ≤ 140 Å²">TPSA: <strong id="descTPSA">-- Å²</strong></span>
+            <span class="metric-pill" title="Doadores de H (≤ 5) / Aceptores de H (≤ 10)">HBD/HBA: <strong id="descHBD_HBA">-- / --</strong></span>
+            <span class="metric-pill" title="Ligações Rotacionáveis (Flexibilidade) ≤ 10">RotB: <strong id="descRotB">--</strong></span>
             <span class="lipinski-status-badge badge-pending" id="lipinskiBadge">Avaliando</span>
           </div>
         </div>
@@ -173,22 +171,22 @@
           <strong class="hud-value measure-value" id="studioLastMeasurement">Nenhum átomo selecionado</strong>
         </div>
       </footer>
-
     </section>
   </main>
 
-  <!-- =========================================================================
-       5. SCRIPTS E INTEGRAÇÃO
-       ========================================================================= -->
-  <!-- Bases de Dados Compartilhadas (subindo para a pasta data) -->
+  <!-- Modal do editor Ketcher -->
+  <div id="ketcherModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000;">
+    <div style="background:white; width:90%; height:85%; margin:5% auto; position:relative;">
+      <button onclick="fecharEditorKetcher()" style="position:absolute; top:10px; right:10px; z-index:10; padding:6px 12px;">Fechar</button>
+      <iframe id="ketcherFrame" src="https://lifescience.opensource.epam.com/ketcher/index.html" style="width:100%; height:100%; border:none;"></iframe>
+    </div>
+  </div>
+
+  <!-- Scripts -->
   <script src="../data/lab-database.js"></script>
   <script src="../data/sinteses-database.js"></script>
-  
-  <!-- Utilitários Compartilhados (subindo para a pasta js) -->
   <script src="../js/lab-apis.js"></script>
   <script src="../js/lab-storage.js"></script>
-
-  <!-- Script do Próprio Estúdio (mesma pasta) -->
   <script src="studio.js"></script>
 
   <script>
