@@ -24,7 +24,7 @@
       <div class="studio-logo-icon">🧬</div>
       <div class="studio-titles">
         <h1>ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR</h1>
-        <span class="studio-sub-badge">LAIFT • CADD & PLANEJAMENTO ESTRUTURAL DE FÁRMACOS</span>
+        <span class="studio-sub-badge">LAIFT • CADD, BIOISOSTERISMO & TABELA PERIÓDICA INTERATIVA</span>
       </div>
       <span class="badge badge-counter" id="studioTotalBadge">Indexando catálogo...</span>
     </div>
@@ -91,10 +91,13 @@
           <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')">Superfície SAS</button>
         </div>
 
-        <!-- Botão Destaque de Drug Design & Bioisosterismo -->
+        <!-- Botão da Tabela Periódica Interativa -->
         <div class="toolbar-cluster">
-          <button class="tool-btn btn-bioisostere-trigger" onclick="window.abrirPainelBioisosterismo()" title="Modificar grupos funcionais da molécula ativa e analisar variações farmacocinéticas">
-            🧬 Bioisosterismo & Design
+          <button class="tool-btn btn-ptable-trigger" onclick="window.abrirTabelaPeriodica(null)" title="Consultar Tabela Periódica Interativa com propriedades físico-químicas e regras de valência">
+            ⚛️ Tabela Periódica
+          </button>
+          <button class="tool-btn btn-bioisostere-trigger" onclick="window.abrirPainelBioisosterismo()" title="Substituições bioisostéricas clássicas de grupos funcionais">
+            🧬 Bioisosterismo
           </button>
         </div>
 
@@ -130,6 +133,37 @@
           </div>
         </div>
 
+        <!-- HUD FLUTUANTE DE INSPEÇÃO DO ÁTOMO CLICADO -->
+        <div class="atom-inspector-hud" id="atomInspectorHud" style="display: none;">
+          <div class="atom-inspector-header">
+            <div class="atom-elem-badge" id="hudAtomBadge">C</div>
+            <div class="atom-inspector-meta">
+              <strong id="hudAtomTitle">Carbono (C) — Átomo #1</strong>
+              <small id="hudAtomSub">Coord: (0.00, 0.00, 0.00) • 4 Ligações</small>
+            </div>
+            <button class="atom-inspector-close" onclick="window.fecharInspectorAtomo()">&times;</button>
+          </div>
+          <div class="atom-inspector-body">
+            <div class="atom-inspector-row">
+              <span>Eletronegatividade:</span>
+              <strong id="hudAtomEletron">2.55 (Pauling)</strong>
+            </div>
+            <div class="atom-inspector-row">
+              <span>Raio Atômico:</span>
+              <strong id="hudAtomRaio">77 pm</strong>
+            </div>
+            <div class="atom-inspector-row">
+              <span>Vizinhos Conectados:</span>
+              <strong id="hudAtomNeighbors">C2, O3, H5, H6</strong>
+            </div>
+          </div>
+          <div class="atom-inspector-actions">
+            <button class="btn-hud-replace" onclick="window.substituirAtomoClicadoViaTabela()">
+              ⚛️ Substituir Átomo via Tabela Periódica
+            </button>
+          </div>
+        </div>
+
         <div class="rdkit-engine-status" id="rdkitIndicator" style="display: none;">
           <span class="spinner-inline"></span>
           <span id="rdkitIndicatorText">Processando quimiometria...</span>
@@ -155,7 +189,6 @@
           </span>
         </div>
 
-        <!-- Cockpit CADD -->
         <div class="hud-item-block cadd-hud-block">
           <div class="cadd-hud-header">
             <span class="hud-title">Drogabilidade Computacional (CADD)</span>
@@ -172,15 +205,57 @@
         </div>
 
         <div class="hud-item-block measurement-readout-block">
-          <span class="hud-title">Geometria</span>
-          <strong class="hud-value measure-value" id="studioLastMeasurement">Nenhum átomo selecionado</strong>
+          <span class="hud-title">Geometria / Inspeção</span>
+          <strong class="hud-value measure-value" id="studioLastMeasurement">Clique em um átomo para inspecionar ou medir</strong>
         </div>
       </footer>
 
     </section>
   </main>
 
-  <!-- MODAL DE DOSSIÊ CADD DETALHADO -->
+  <!-- MODAL: TABELA PERIÓDICA INTERATIVA & SUBSTITUIÇÃO DE ELEMENTOS -->
+  <div class="cadd-modal" id="periodicTableModal" style="display: none;">
+    <div class="cadd-modal-content ptable-modal-content">
+      <div class="cadd-modal-header ptable-header">
+        <div>
+          <h3>⚛️ Tabela Periódica Interativa & Planejamento Atômico</h3>
+          <span class="cadd-subtitle" id="ptableSubHeader">Consulte propriedades físico-químicas e substitua átomos respeitando a regra do octeto</span>
+        </div>
+        <button class="btn-close-modal" onclick="window.fecharTabelaPeriodica()">&times;</button>
+      </div>
+
+      <div class="ptable-modal-layout">
+        <!-- Lado Esquerdo: Grade da Tabela Periódica -->
+        <div class="ptable-grid-column">
+          <!-- Barra de Filtros da Tabela -->
+          <div class="ptable-filters-bar">
+            <button class="ptable-pill active" data-cat="todas" onclick="filtrarElementosPTable('todas')">Todos</button>
+            <button class="ptable-pill" data-cat="nao-metal" onclick="filtrarElementosPTable('nao-metal')">Não-Metais (C, N, O, S, P)</button>
+            <button class="ptable-pill" data-cat="halogenio" onclick="filtrarElementosPTable('halogenio')">Halogênios (F, Cl, Br, I)</button>
+            <button class="ptable-pill" data-cat="metaloide" onclick="filtrarElementosPTable('metaloide')">Metaloides (B, Si)</button>
+            <button class="ptable-pill" data-cat="metal-transicao" onclick="filtrarElementosPTable('metal-transicao')">Metais Transição</button>
+            <button class="ptable-pill" data-cat="alcalino" onclick="filtrarElementosPTable('alcalino')">Alcalinos</button>
+          </div>
+
+          <!-- Matriz 18 x 7 -->
+          <div class="ptable-matrix-scroll">
+            <div class="ptable-matrix" id="ptableMatrix"></div>
+          </div>
+        </div>
+
+        <!-- Lado Direito: Dossiê Químico do Elemento Selecionado -->
+        <aside class="ptable-inspector-sidebar" id="ptableInspectorSidebar">
+          <div class="ptable-detail-card" id="ptableDetailContent">
+            <div style="text-align: center; color: #64748b; padding: 40px 10px;">
+              Clique em qualquer elemento da Tabela Periódica para analisar propriedades e valências.
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DOSSIÊ CADD DETALHADO -->
   <div class="cadd-modal" id="caddModal" style="display: none;">
     <div class="cadd-modal-content">
       <div class="cadd-modal-header">
@@ -194,20 +269,17 @@
     </div>
   </div>
 
-  <!-- MODAL DE BIOISOSTERISMO & DERIVATIZAÇÃO QUÍMICA -->
+  <!-- MODAL: BIOISOSTERISMO DE GRUPOS FUNCIONAIS -->
   <div class="cadd-modal" id="bioisostereModal" style="display: none;">
     <div class="cadd-modal-content bioisostere-modal-content">
       <div class="cadd-modal-header bioisostere-header">
         <div>
-          <h3 id="bioModalTitle">🧬 Módulo de Bioisosterismo & Derivatização Farmacêutica</h3>
-          <span class="cadd-subtitle" id="bioModalSubtitle">Modificação orientada por estrutura com avaliação comparativa de propriedades</span>
+          <h3 id="bioModalTitle">🧬 Bioisosterismo de Grupos Farmacofóricos</h3>
+          <span class="cadd-subtitle" id="bioModalSubtitle">Modificação orientada por estrutura</span>
         </div>
         <button class="btn-close-modal" onclick="window.fecharPainelBioisosterismo()">&times;</button>
       </div>
-
-      <div class="cadd-modal-body bioisostere-body" id="bioisostereModalBody">
-        <!-- Renderizado dinamicamente pelo studio.js -->
-      </div>
+      <div class="cadd-modal-body bioisostere-body" id="bioisostereModalBody"></div>
     </div>
   </div>
 
