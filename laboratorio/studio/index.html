@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <!-- =========================================================================
-       1. METADADOS, FONTES & ENGENHARIA DE VIEWPORT (FULLSCREEN COCKPIT)
-       ========================================================================= -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>LAIFT — Estúdio de Projeção & Modelagem Molecular 3D</title>
@@ -12,9 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Urbanist:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- =========================================================================
-       2. MOTORES GRÁFICOS & QUIMIOINFORMÁTICA
-       ========================================================================= -->
+  <!-- Motores Gráficos e RDKit WebAssembly -->
   <script src="https://unpkg.com/smiles-drawer@2.1.7/dist/smiles-drawer.min.js"></script>
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
   <script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
@@ -23,21 +18,19 @@
 </head>
 <body class="studio-cockpit-locked">
 
-  <!-- =========================================================================
-       3. CABEÇALHO DO ESTÚDIO
-       ========================================================================= -->
+  <!-- CABEÇALHO DO ESTÚDIO -->
   <header class="studio-main-header">
     <div class="header-branding">
       <div class="studio-logo-icon">🧬</div>
       <div class="studio-titles">
         <h1>ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR</h1>
-        <span class="studio-sub-badge">LAIFT • ANÁLISE CONFORMACIONAL & QUÍMICA MEDICINAL</span>
+        <span class="studio-sub-badge">LAIFT • CADD & PLANEJAMENTO ESTRUTURAL DE FÁRMACOS</span>
       </div>
       <span class="badge badge-counter" id="studioTotalBadge">Indexando catálogo...</span>
     </div>
 
     <div class="header-control-actions">
-      <button class="studio-btn btn-fullscreen-toggle" id="btnToggleNativeFullscreen" onclick="toggleNativeFullscreen()" title="Alternar modo Tela Cheia">
+      <button class="studio-btn btn-fullscreen-toggle" id="btnToggleNativeFullscreen" onclick="toggleNativeFullscreen()" title="Alternar Tela Cheia">
         ⛶ Tela Cheia
       </button>
 
@@ -51,12 +44,10 @@
     </div>
   </header>
 
-  <!-- =========================================================================
-       4. WORKSPACE EM GRADE
-       ========================================================================= -->
+  <!-- WORKSPACE EM GRADE -->
   <main class="studio-workspace-grid">
 
-    <!-- 4.1. NAVEGADOR VIRTUALIZADO DE COMPOSTOS -->
+    <!-- NAVEGADOR LATERAL -->
     <aside class="studio-sidebar-panel">
       <div class="sidebar-search-container">
         <div class="search-input-wrapper">
@@ -67,9 +58,10 @@
         <div class="category-filters-scroll">
           <button class="category-pill active" data-cat="todas" onclick="filtrarCategoriaStudio('todas')">Todas</button>
           <button class="category-pill" data-cat="farmacos" onclick="filtrarCategoriaStudio('farmacos')">Fármacos</button>
+          <button class="category-pill" data-cat="custom" onclick="filtrarCategoriaStudio('custom')">Projetadas</button>
           <button class="category-pill" data-cat="reagentes" onclick="filtrarCategoriaStudio('reagentes')">Reagentes</button>
           <button class="category-pill" data-cat="solventes" onclick="filtrarCategoriaStudio('solventes')">Solventes</button>
-          <button class="category-pill" data-cat="toxicos" onclick="filtrarCategoriaStudio('toxicos')">Toxinas & Agentes</button>
+          <button class="category-pill" data-cat="toxicos" onclick="filtrarCategoriaStudio('toxicos')">Toxinas</button>
         </div>
       </div>
 
@@ -80,10 +72,10 @@
       </div>
     </aside>
 
-    <!-- 4.2. VIEWPORT 3D / 2D & TELEMETRIA -->
+    <!-- VIEWPORT CENTRAL -->
     <section class="studio-viewport-panel">
       
-      <!-- Barra de Ferramentas -->
+      <!-- Fita Superior de Ferramentas -->
       <nav class="studio-toolbar-ribbon">
         <div class="toolbar-cluster">
           <span class="cluster-label">Modo:</span>
@@ -94,9 +86,16 @@
         <div class="toolbar-cluster" id="group3DStyles">
           <span class="cluster-label">Representação:</span>
           <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')">Ball & Stick</button>
-          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')">CPK (VDW)</button>
+          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')">CPK</button>
           <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')">Wireframe</button>
           <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')">Superfície SAS</button>
+        </div>
+
+        <!-- Botão Destaque de Drug Design & Bioisosterismo -->
+        <div class="toolbar-cluster">
+          <button class="tool-btn btn-bioisostere-trigger" onclick="window.abrirPainelBioisosterismo()" title="Modificar grupos funcionais da molécula ativa e analisar variações farmacocinéticas">
+            🧬 Bioisosterismo & Design
+          </button>
         </div>
 
         <div class="toolbar-cluster">
@@ -126,7 +125,7 @@
         <div class="measure-indicator-pill" id="measureHud" style="display: none;">
           <div class="indicator-dot-pulse"></div>
           <div class="indicator-texts">
-            <strong>MODO DE MEDIÇÃO GEOMÉTRICA ATIVO</strong>
+            <strong>MODO DE MEDIÇÃO ATIVO</strong>
             <small>Clique em 2 átomos para distância (Å) ou 3 para ângulo planar (°)</small>
           </div>
         </div>
@@ -141,7 +140,7 @@
         </div>
       </div>
 
-      <!-- Fita Inferior: Telemetria & Cockpit CADD (Lipinski, Veber, Ghose, PAINS) -->
+      <!-- Fita Inferior: Telemetria & Cockpit CADD -->
       <footer class="studio-telemetry-hud">
         <div class="hud-item-block">
           <span class="hud-title">Espécie</span>
@@ -156,19 +155,19 @@
           </span>
         </div>
 
-        <!-- Cockpit CADD & Drogabilidade -->
+        <!-- Cockpit CADD -->
         <div class="hud-item-block cadd-hud-block">
           <div class="cadd-hud-header">
-            <span class="hud-title">Quimiometria & Drogabilidade (CADD)</span>
+            <span class="hud-title">Drogabilidade Computacional (CADD)</span>
             <button class="btn-open-cadd-modal" onclick="window.abrirModalCADD()" title="Abrir Dossiê Quimiométrico e Farmacocinético Detalhado">
               📊 Dossiê CADD
             </button>
           </div>
           <div class="lipinski-metrics-row">
             <span class="cadd-badge badge-pending" id="badgeLipinski" title="Regra de Lipinski (Ro5)">Lipinski: --</span>
-            <span class="cadd-badge badge-pending" id="badgeVeber" title="Critério de Biodisponibilidade Oral de Veber">Veber: --</span>
-            <span class="cadd-badge badge-pending" id="badgeGhose" title="Critério Drug-like de Ghose">Ghose: --</span>
-            <span class="cadd-badge badge-pending" id="badgePAINS" title="Filtro de Compostos de Interferência Pan-Ensaio (PAINS)">PAINS: --</span>
+            <span class="cadd-badge badge-pending" id="badgeVeber" title="Biodisponibilidade Oral de Veber">Veber: --</span>
+            <span class="cadd-badge badge-pending" id="badgeGhose" title="Drogabilidade Filtrada de Ghose">Ghose: --</span>
+            <span class="cadd-badge badge-pending" id="badgePAINS" title="Filtro de Falsos Positivos (PAINS)">PAINS: --</span>
           </div>
         </div>
 
@@ -181,28 +180,38 @@
     </section>
   </main>
 
-  <!-- =========================================================================
-       5. MODAL DE DOSSIÊ QUIMIOMÉTRICO DETALHADO (CADD & FARMACOCINÉTICA)
-       ========================================================================= -->
+  <!-- MODAL DE DOSSIÊ CADD DETALHADO -->
   <div class="cadd-modal" id="caddModal" style="display: none;">
     <div class="cadd-modal-content">
       <div class="cadd-modal-header">
         <div>
           <h3 id="caddModalTitle">📊 Dossiê de Drogabilidade & Quimiometria In Silico</h3>
-          <span class="cadd-subtitle" id="caddModalSubtitle">Avaliação computacional de propriedades farmacocinéticas</span>
+          <span class="cadd-subtitle" id="caddModalSubtitle">Avaliação de propriedades físico-químicas</span>
         </div>
         <button class="btn-close-modal" onclick="window.fecharModalCADD()">&times;</button>
       </div>
+      <div class="cadd-modal-body" id="caddModalBody"></div>
+    </div>
+  </div>
 
-      <div class="cadd-modal-body" id="caddModalBody">
-        <!-- Conteúdo gerado dinamicamente via JavaScript -->
+  <!-- MODAL DE BIOISOSTERISMO & DERIVATIZAÇÃO QUÍMICA -->
+  <div class="cadd-modal" id="bioisostereModal" style="display: none;">
+    <div class="cadd-modal-content bioisostere-modal-content">
+      <div class="cadd-modal-header bioisostere-header">
+        <div>
+          <h3 id="bioModalTitle">🧬 Módulo de Bioisosterismo & Derivatização Farmacêutica</h3>
+          <span class="cadd-subtitle" id="bioModalSubtitle">Modificação orientada por estrutura com avaliação comparativa de propriedades</span>
+        </div>
+        <button class="btn-close-modal" onclick="window.fecharPainelBioisosterismo()">&times;</button>
+      </div>
+
+      <div class="cadd-modal-body bioisostere-body" id="bioisostereModalBody">
+        <!-- Renderizado dinamicamente pelo studio.js -->
       </div>
     </div>
   </div>
 
-  <!-- =========================================================================
-       6. SCRIPTS E INTEGRAÇÃO
-       ========================================================================= -->
+  <!-- SCRIPTS E INTEGRAÇÃO -->
   <script src="../data/lab-database.js"></script>
   <script src="../data/sinteses-database.js"></script>
   <script src="../js/lab-apis.js"></script>
@@ -212,9 +221,7 @@
   <script>
     function toggleNativeFullscreen() {
       if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-          console.warn(`[Studio Fullscreen] Erro: ${err.message}`);
-        });
+        document.documentElement.requestFullscreen().catch(err => console.warn(`[Studio Fullscreen] Erro: ${err.message}`));
       } else {
         if (document.exitFullscreen) document.exitFullscreen();
       }
