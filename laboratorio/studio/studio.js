@@ -1,7 +1,7 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
  * Arquivo: studio/studio.js
- * Módulo CADD: Lipinski, Veber, Ghose, PAINS & Bioisosterismo / Derivatização
+ * Quimiometria, Inspeção Atômica, Tabela Periódica Interativa e Bioisosterismo
  */
 
 (function() {
@@ -33,30 +33,60 @@
   let rdkitPromise = null;
   let ultimoDossieCADD = null;
 
+  // Estado de Inspeção e Substituição Atômica
+  let atomoAtivoInspecionado = null;
+  let elementoPTableSelecionado = null;
+  let atomHighlightShape = null;
+
   const ITEMS_PER_CHUNK = 40;
   let currentRenderedIndex = 0;
   let debounceBuscaTimer = null;
 
   // =========================================================================
-  // 1. SUBESTRUTURAS SMARTS DE PAINS (BAELL ET AL., 2010)
+  // 1. DATASET COMPLETO DA TABELA PERIÓDICA INTERATIVA (IUPAC)
   // =========================================================================
-  const PAINS_SUBSTRUCTURES = [
-    { id: 'quinona', nome: 'Quinona / Di-ona Cíclica', smarts: 'O=C1[#6]=,:[#6]C(=O)[#6]=,:[#6]1', risco: 'Agente oxidante com alto potencial redox e alquilação inespecífica de tióis proteicos.' },
-    { id: 'catecol', nome: 'Catecol (1,2-Benzenodiol)', smarts: 'c1c(O)c(O)ccc1', risco: 'Quelante metálico promíscuo e precursor oxidável de orto-quinona reativa.' },
-    { id: 'rhodanina', nome: 'Rodanina (2-Tioxotiazolidin-4-ona)', smarts: 'O=C1CSC(=S)N1', risco: 'Molécula agregadora coloidal, causa inibição enzimática artefatual em ensaios.' },
-    { id: 'michael_acceptor', nome: 'Aceptor de Michael (Enona Conjugada)', smarts: 'C=CC(=O)[#6,#8,#7]', risco: 'Eletrófilo forte capaz de formar ligações covalentes inespecíficas com cisteínas.' },
-    { id: 'alquil_haleto', nome: 'Haleto Alifático Reativo', smarts: '[CX4][Cl,Br,I]', risco: 'Agente alquilante inespecífico, incompatível com seletividade farmacológica.' },
-    { id: 'aldeido', nome: 'Aldeído Livre', smarts: '[CX3H1](=O)[#6,H]', risco: 'Reage covalentemente com resíduos de lisina via formação de base de Schiff.' },
-    { id: 'epoxido', nome: 'Epóxido / Oxirano', smarts: 'C1OC1', risco: 'Anel tensionado altamente reativo a nucleófilos intracelulares e DNA.' },
-    { id: 'aziridina', nome: 'Aziridina', smarts: 'C1NC1', risco: 'Eletrófilo potente com potencial genotóxico por alquilação direta.' },
-    { id: 'tiocarbonila', nome: 'Tiocarbonila Livre (C=S)', smarts: '[#6]=S', risco: 'Interferência espectroscópica e desnaturação inespecífica de sítios proteicos.' },
-    { id: 'hidrazona', nome: 'Hidrazona Fenólica Ativada', smarts: 'c1ccc(O)cc1NN=C', risco: 'Interferência de fluorescência e afinidade promíscua a metais de transição.' },
-    { id: 'nitroso', nome: 'Grupo Nitroso', smarts: '[#6]-[N;X2]=O', risco: 'Espécie reativa de nitrogênio com instabilidade redox e risco de toxicidade.' },
-    { id: 'haloacetamida', nome: 'Haloacetamida Alquilante', smarts: 'NC(=O)C[Cl,Br,I]', risco: 'Inibidor covalente indiscriminado de enzimas tiólicas.' }
+  const TABELA_PERIODICA = [
+    { z: 1, sym: 'H', nome: 'Hidrogênio', massa: 1.008, eletron: 2.20, raio: 37, valPadrao: 1, valencias: [1], cat: 'nao-metal', grupo: 1, periodo: 1, pharma: 'Essencial em pontes de hidrogênio; passível de bioisosterismo com Flúor (-H ➔ -F) para bloquear o metabolismo oxidativo de CYP450.' },
+    { z: 2, sym: 'He', nome: 'Hélio', massa: 4.003, eletron: null, raio: 32, valPadrao: 0, valencias: [0], cat: 'gas-nobre', grupo: 18, periodo: 1, pharma: 'Gás nobre inerte quimicamente sob condições biológicas normais.' },
+    { z: 3, sym: 'Li', nome: 'Lítio', massa: 6.94, eletron: 0.98, raio: 152, valPadrao: 1, valencias: [1], cat: 'alcalino', grupo: 1, periodo: 2, pharma: 'Íon terapêutico monofásico no transtorno bipolar; inibe fosfatases de inositol (IMPase) e GSK-3beta.' },
+    { z: 4, sym: 'Be', nome: 'Berílio', massa: 9.012, eletron: 1.57, raio: 112, valPadrao: 2, valencias: [2], cat: 'alcalino-terroso', grupo: 2, periodo: 2, pharma: 'Altamente tóxico; mimetiza magnésio mas causa inibição enzimática irreversível e beriliose.' },
+    { z: 5, sym: 'B', nome: 'Boro', massa: 10.81, eletron: 2.04, raio: 85, valPadrao: 3, valencias: [3, 4], cat: 'metaloide', grupo: 13, periodo: 2, pharma: 'Ácido borônico (-B(OH)₂) atua como inibidor de proteassoma reversível de transição covalente (ex: Bortezomibe).' },
+    { z: 6, sym: 'C', nome: 'Carbono', massa: 12.011, eletron: 2.55, raio: 77, valPadrao: 4, valencias: [4], cat: 'nao-metal', grupo: 14, periodo: 2, pharma: 'Espinha dorsal da química farmacêutica; permite hibridizações sp³, sp² e sp com quiralidade tridimensional tetraédrica.' },
+    { z: 7, sym: 'N', nome: 'Nitrogênio', massa: 14.007, eletron: 3.04, raio: 75, valPadrao: 3, valencias: [3, 4], cat: 'nao-metal', grupo: 15, periodo: 2, pharma: 'Componente crucial de centros básicos protonáveis (aminas) e anéis heterocíclicos (piridinas, piperazinas).' },
+    { z: 8, sym: 'O', nome: 'Oxigênio', massa: 15.999, eletron: 3.44, raio: 73, valPadrao: 2, valencias: [2], cat: 'nao-metal', grupo: 16, periodo: 2, pharma: 'Aceptor forte de ligações de hidrogênio (carbonilas, éteres, ésteres) e doador em hidroxilas (-OH).' },
+    { z: 9, sym: 'F', nome: 'Flúor', massa: 18.998, eletron: 3.98, raio: 71, valPadrao: 1, valencias: [1], cat: 'halogenio', grupo: 17, periodo: 2, pharma: 'Bioisóstero clássico de hidrogênio; aumenta a lipofilicidade, reduz a basicidade de aminas vizinhas e bloqueia CYP450.' },
+    { z: 10, sym: 'Ne', nome: 'Neônio', massa: 20.18, eletron: null, raio: 69, valPadrao: 0, valencias: [0], cat: 'gas-nobre', grupo: 18, periodo: 2, pharma: 'Gás nobre quimicamente inerte.' },
+    { z: 11, sym: 'Na', nome: 'Sódio', massa: 22.99, eletron: 0.93, raio: 186, valPadrao: 1, valencias: [1], cat: 'alcalino', grupo: 1, periodo: 3, pharma: 'Contraiôn primordial para formulação de sais hidrossolúveis de fármacos ácidos (ex: Dipirona Sódica, Diclofenaco Sódico).' },
+    { z: 12, sym: 'Mg', nome: 'Magnésio', massa: 24.305, eletron: 1.31, raio: 160, valPadrao: 2, valencias: [2], cat: 'alcalino-terroso', grupo: 2, periodo: 3, pharma: 'Cofator de quinases e estabilizador de ATP e DNA polimerases.' },
+    { z: 13, sym: 'Al', nome: 'Alumínio', massa: 26.982, eletron: 1.61, raio: 143, valPadrao: 3, valencias: [3], cat: 'metal-pos-transicao', grupo: 13, periodo: 3, pharma: 'Antiácido gástrico e adjuvante imunológico em vacinas via precipitação coloidal.' },
+    { z: 14, sym: 'Si', nome: 'Silício', massa: 28.085, eletron: 1.90, raio: 111, valPadrao: 4, valencias: [4], cat: 'metaloide', grupo: 14, periodo: 3, pharma: 'Bioisóstero tetravalente de Carbono (sila-substituição: C ➔ Si); aumenta o raio covalente e eleva significativamente o LogP.' },
+    { z: 15, sym: 'P', nome: 'Fósforo', massa: 30.974, eletron: 2.19, raio: 106, valPadrao: 3, valencias: [3, 5], cat: 'nao-metal', grupo: 15, periodo: 3, pharma: 'Presente em profármacos fosfatados polares para injeção parenteral e em antivirais nucleotídeos (ex: Sofosbuvir).' },
+    { z: 16, sym: 'S', nome: 'Enxofre', massa: 32.06, eletron: 2.58, raio: 102, valPadrao: 2, valencias: [2, 4, 6], cat: 'nao-metal', grupo: 16, periodo: 3, pharma: 'Bioisóstero divalente de oxigênio em tioéteres; atua em sulfonamidas antibacterianas (-SO₂NH₂) e pontes dissulfeto.' },
+    { z: 17, sym: 'Cl', nome: 'Cloro', massa: 35.45, eletron: 3.16, raio: 99, valPadrao: 1, valencias: [1], cat: 'halogenio', grupo: 17, periodo: 3, pharma: 'Preenche bolsões hidrofóbicos estreitos em alvos enzimáticos e atua como formador de cloridratos solúveis.' },
+    { z: 18, sym: 'Ar', nome: 'Argônio', massa: 39.948, eletron: null, raio: 97, valPadrao: 0, valencias: [0], cat: 'gas-nobre', grupo: 18, periodo: 3, pharma: 'Gás nobre inerte; protetor de reações sensíveis ao oxigênio e umidade.' },
+    { z: 19, sym: 'K', nome: 'Potássio', massa: 39.098, eletron: 0.82, raio: 227, valPadrao: 1, valencias: [1], cat: 'alcalino', grupo: 1, periodo: 4, pharma: 'Principal cátion intracelular; forma sais de rápida dissolução oral (ex: Diclofenaco Potássico).' },
+    { z: 20, sym: 'Ca', nome: 'Cálcio', massa: 40.078, eletron: 1.00, raio: 197, valPadrao: 2, valencias: [2], cat: 'alcalino-terroso', grupo: 2, periodo: 4, pharma: 'Segundo mensageiro celular e alvo de bloqueadores de canais de cálcio di-hidropiridínicos (ex: Amlodipino).' },
+    { z: 26, sym: 'Fe', nome: 'Ferro', massa: 55.845, eletron: 1.83, raio: 126, valPadrao: 2, valencias: [2, 3], cat: 'metal-transicao', grupo: 8, periodo: 4, pharma: 'Centro redox da hemoglobina e de enzimas da família CYP450 hepáticas.' },
+    { z: 29, sym: 'Cu', nome: 'Cobre', massa: 63.546, eletron: 1.90, raio: 128, valPadrao: 2, valencias: [1, 2], cat: 'metal-transicao', grupo: 11, periodo: 4, pharma: 'Cofator da citocromo c oxidase e superóxido dismutase.' },
+    { z: 30, sym: 'Zn', nome: 'Zinco', massa: 65.38, eletron: 1.65, raio: 134, valPadrao: 2, valencias: [2], cat: 'metal-transicao', grupo: 12, periodo: 4, pharma: 'Cátion catalítico da Anidrase Carbônica; quelado por ácidos hidroxâmicos e sulfonamidas inibidoras.' },
+    { z: 33, sym: 'As', nome: 'Arsênio', massa: 74.922, eletron: 2.18, raio: 119, valPadrao: 3, valencias: [3, 5], cat: 'metaloide', grupo: 15, periodo: 4, pharma: 'Compostos organoarsenicais históricos (Salvarsan de Paul Ehrlich); agente antileucêmico (Trisulfeto de Arsênio).' },
+    { z: 34, sym: 'Se', nome: 'Selênio', massa: 78.96, eletron: 2.55, raio: 116, valPadrao: 2, valencias: [2, 4], cat: 'nao-metal', grupo: 16, periodo: 4, pharma: 'Bioisóstero de enxofre em selenoaminoácidos (selenocisteína) com elevado poder antioxidante.' },
+    { z: 35, sym: 'Br', nome: 'Bromo', massa: 79.904, eletron: 2.96, raio: 114, valPadrao: 1, valencias: [1], cat: 'halogenio', grupo: 17, periodo: 4, pharma: 'Halogênio volumoso e polarizável; estabelece ligações de halogênio direcionadas com carbonilas de proteínas.' },
+    { z: 53, sym: 'I', nome: 'Iodo', massa: 126.9, eletron: 2.66, raio: 133, valPadrao: 1, valencias: [1], cat: 'halogenio', grupo: 17, periodo: 5, pharma: 'Constituinte dos hormônios tireoidianos (T3/T4) e contrastes radiológicos iodados (ex: Io-hexol).' },
+    { z: 78, sym: 'Pt', nome: 'Platina', massa: 195.08, eletron: 2.28, raio: 139, valPadrao: 2, valencias: [2, 4], cat: 'metal-transicao', grupo: 10, periodo: 6, pharma: 'Complexos antitumorais de coordenação que realizam cross-linking covalente no DNA (ex: Cisplatina, Oxaliplatina).' }
   ];
 
+  // Posições de exibição na matriz 18x7
+  const POSICOES_PTABLE = {
+    'H': { r: 1, c: 1 }, 'He': { r: 1, c: 18 },
+    'Li': { r: 2, c: 1 }, 'Be': { r: 2, c: 2 }, 'B': { r: 2, c: 13 }, 'C': { r: 2, c: 14 }, 'N': { r: 2, c: 15 }, 'O': { r: 2, c: 16 }, 'F': { r: 2, c: 17 }, 'Ne': { r: 2, c: 18 },
+    'Na': { r: 3, c: 1 }, 'Mg': { r: 3, c: 2 }, 'Al': { r: 3, c: 13 }, 'Si': { r: 3, c: 14 }, 'P': { r: 3, c: 15 }, 'S': { r: 3, c: 16 }, 'Cl': { r: 3, c: 17 }, 'Ar': { r: 3, c: 18 },
+    'K': { r: 4, c: 1 }, 'Ca': { r: 4, c: 2 }, 'Fe': { r: 4, c: 8 }, 'Cu': { r: 4, c: 11 }, 'Zn': { r: 4, c: 12 }, 'As': { r: 4, c: 15 }, 'Se': { r: 4, c: 16 }, 'Br': { r: 4, c: 17 },
+    'I': { r: 5, c: 17 }, 'Pt': { r: 6, c: 10 }
+  };
+
   // =========================================================================
-  // 2. CATÁLOGO DE REAÇÕES BIOISOSTÉRICAS & DERIVATIZAÇÃO QUÍMICA
+  // 2. REAÇÕES BIOISOSTÉRICAS CLÁSSICAS
   // =========================================================================
   const REACOES_BIOISOSTERISMO = [
     {
@@ -114,7 +144,7 @@
       nome: 'N-Acetilação de Amina',
       tag: 'Otimização Analgésica',
       esquema: 'Ar-NH₂ ➔ Ar-NHCOCH₃',
-      descricao: 'Conversão bioisostérica de 4-aminofenol em Paracetamol (Acetaminofeno): atenua toxicidade de aminas livres e potencializa propriedades analgésicas.',
+      descricao: 'Conversão bioisostérica de 4-aminofenol em Paracetamol: atenua toxicidade de aminas livres e potencializa propriedades analgésicas.',
       alvoSmarts: '[NH2]',
       detectar: (s) => /N/i.test(s) && !/N\(=O\)/i.test(s),
       transformar: (s) => s.replace(/NC/i, 'N(C(=O)C)C').replace(/\[NH2\]/i, 'NC(=O)C').replace(/N(?=[^(=O)])/i, 'NC(=O)C')
@@ -124,20 +154,10 @@
       nome: 'Fluorização Aromática (Bloqueio CYP)',
       tag: 'Bioisóstero H ➔ F',
       esquema: 'Ar-H ➔ Ar-F',
-      descricao: 'O flúor mimetiza o hidrogênio espacialmente, porém o forte efeito retirador de elétrons desativa o anel aromático contra a hidroxilação por CYP450, aumentando a meia-vida.',
+      descricao: 'O flúor mimetiza o hidrogênio espacialmente, porém o forte efeito indutivo retirador de elétrons desativa o anel aromático contra a oxidação por CYP450.',
       alvoSmarts: 'c1ccccc1',
       detectar: (s) => /c1ccccc1/i.test(s) || /c[0-9]ccc/i.test(s),
       transformar: (s) => s.replace(/c1ccccc1/i, 'c1ccc(F)cc1').replace(/c1/i, 'c1(F)')
-    },
-    {
-      id: 'trifluorometilacao',
-      nome: 'Trifluorometilação Lipofílica',
-      tag: 'Bioisóstero CH₃ ➔ CF₃',
-      esquema: 'R-CH₃ ➔ R-CF₃',
-      descricao: 'Amplia a lipofilicidade local e proporciona extrema resistência química e metabólica à oxidação alifática.',
-      alvoSmarts: '[CH3]',
-      detectar: (s) => /C(?![=O#])/i.test(s),
-      transformar: (s) => s.replace(/C$/i, 'C(F)(F)F').replace(/\(C\)/i, '(C(F)(F)F)')
     }
   ];
 
@@ -212,7 +232,7 @@
             formula: c.formula || '--',
             molarMass: c.molarMass || '--',
             smiles: c.smiles || '--',
-            categoria: c.categoria || 'reagentes',
+            categoria: 'reagentes',
             pubchemQuery: c.pubchemQuery || c.nome
           });
         }
@@ -234,9 +254,7 @@
       { id: "Acetona", chaveOriginal: "Acetona_l", nome: "Acetona Pura", formula: "C3H6O", molarMass: 58.08, smiles: "CC(=O)C", categoria: "solventes", pubchemQuery: "Acetone" },
       { id: "Hexano", chaveOriginal: "Hexano_l", nome: "Hexano", formula: "C6H14", molarMass: 86.18, smiles: "CCCCCC", categoria: "solventes", pubchemQuery: "Hexane" },
       { id: "Cloroformio", chaveOriginal: "Cloroformio_l", nome: "Clorofórmio", formula: "CHCl3", molarMass: 119.38, smiles: "ClC(Cl)Cl", categoria: "solventes", pubchemQuery: "Chloroform" },
-      { id: "Na", chaveOriginal: "Na_s", nome: "Sódio Metálico", formula: "Na", molarMass: 22.99, smiles: "[Na]", categoria: "reagentes", pubchemQuery: "Sodium" },
-      { id: "Sarin", chaveOriginal: "C4H10FO2P_l", nome: "Sarin (GB)", formula: "C4H10FO2P", molarMass: 140.09, smiles: "CC(C)OP(=O)(C)F", categoria: "toxicos", pubchemQuery: "Sarin" },
-      { id: "Estricnina", chaveOriginal: "C20H22N2O2_s", nome: "Estricnina", formula: "C20H22N2O2", molarMass: 334.41, smiles: "O=C1CC2OCC=C3CN4CCC56C4CC3C2C5=CC=CC61", categoria: "toxicos", pubchemQuery: "Strychnine" }
+      { id: "Na", chaveOriginal: "Na_s", nome: "Sódio Metálico", formula: "Na", molarMass: 22.99, smiles: "[Na]", categoria: "reagentes", pubchemQuery: "Sodium" }
     ];
 
     acervoReserva.forEach(comp => {
@@ -425,7 +443,7 @@
         }
       } catch (e) {}
 
-      // Alertas PAINS
+      // Varredura PAINS
       const alertasPAINS = [];
       for (const p of PAINS_SUBSTRUCTURES) {
         try {
@@ -497,7 +515,6 @@
       return;
     }
 
-    // Lipinski
     if (props.falhasLipinski.length === 0) {
       bLipinski.className = 'cadd-badge badge-approved';
       bLipinski.textContent = 'Lipinski: Aprovado (0 viol.)';
@@ -509,7 +526,6 @@
       bLipinski.textContent = `Lipinski: ${props.falhasLipinski.length} Violações`;
     }
 
-    // Veber
     if (props.falhasVeber.length === 0) {
       bVeber.className = 'cadd-badge badge-approved';
       bVeber.textContent = 'Veber: Aprovado';
@@ -518,7 +534,6 @@
       bVeber.textContent = `Veber: ${props.falhasVeber.length} Violações`;
     }
 
-    // Ghose
     if (props.falhasGhose.length === 0) {
       bGhose.className = 'cadd-badge badge-approved';
       bGhose.textContent = 'Ghose: Aprovado';
@@ -530,7 +545,6 @@
       bGhose.textContent = `Ghose: ${props.falhasGhose.length} Violações`;
     }
 
-    // PAINS
     if (props.alertasPAINS.length === 0) {
       bPAINS.className = 'cadd-badge badge-approved';
       bPAINS.textContent = 'PAINS: Limpo (0 Alertas)';
@@ -543,7 +557,349 @@
   }
 
   // =========================================================================
-  // 6. MOTOR DE BIOISOSTERISMO & DERIVATIZAÇÃO
+  // 6. INSPEÇÃO ATÔMICA & SELEÇÃO DIRETA NO MODELO 3D
+  // =========================================================================
+  function selecionarEInspecionarAtomo(atom) {
+    if (!studioViewer || !atom) return;
+    atomoAtivoInspecionado = atom;
+
+    // Destacar átomo com uma esfera sutil sem quebrar o modelo
+    try {
+      if (atomHighlightShape) {
+        studioViewer.removeShape(atomHighlightShape);
+        atomHighlightShape = null;
+      }
+      atomHighlightShape = studioViewer.addSphere({
+        center: { x: atom.x, y: atom.y, z: atom.z },
+        radius: 0.42,
+        color: '#00e5ff',
+        opacity: 0.55
+      });
+      studioViewer.render();
+    } catch (e) {}
+
+    // Resgata os dados físico-químicos do elemento
+    const elemSym = (atom.elem || 'C').toUpperCase();
+    const elemData = TABELA_PERIODICA.find(e => e.sym.toUpperCase() === elemSym) || {
+      z: '?', sym: elemSym, nome: 'Elemento', massa: '--', eletron: '--', raio: '--', valPadrao: 1, valencias: [1]
+    };
+
+    // Identifica ligações e vizinhos
+    const vizinhosArray = [];
+    const numLigacoes = atom.bonds ? atom.bonds.length : 0;
+    if (atom.bonds && Array.isArray(atom.bonds)) {
+      const todosAtomos = studioViewer.selectedAtoms({}) || [];
+      atom.bonds.forEach(bIdx => {
+        const vAt = todosAtomos.find(a => (a.serial === bIdx || a.index === bIdx));
+        if (vAt) vizinhosArray.push(`${vAt.elem}#${(vAt.serial || vAt.index || 0) + 1}`);
+      });
+    }
+
+    // Preenche e exibe o HUD Flutuante
+    const hud = document.getElementById('atomInspectorHud');
+    const hBadge = document.getElementById('hudAtomBadge');
+    const hTitle = document.getElementById('hudAtomTitle');
+    const hSub = document.getElementById('hudAtomSub');
+    const hEletron = document.getElementById('hudAtomEletron');
+    const hRaio = document.getElementById('hudAtomRaio');
+    const hNeighbors = document.getElementById('hudAtomNeighbors');
+
+    if (hud) {
+      if (hBadge) hBadge.textContent = elemData.sym;
+      if (hTitle) hTitle.textContent = `${elemData.nome} (${elemData.sym}) — Átomo #${(atom.serial || atom.index || 0) + 1}`;
+      if (hSub) hSub.textContent = `Coord: (${atom.x.toFixed(2)}, ${atom.y.toFixed(2)}, ${atom.z.toFixed(2)}) • ${numLigacoes} Ligação(ões)`;
+      if (hEletron) hEletron.textContent = elemData.eletron ? `${elemData.eletron} (Pauling)` : 'Inerte / Sem dado';
+      if (hRaio) hRaio.textContent = elemData.raio ? `${elemData.raio} pm` : '--';
+      if (hNeighbors) hNeighbors.textContent = vizinhosArray.length > 0 ? vizinhosArray.join(', ') : 'Átomo isolado';
+      hud.style.display = 'flex';
+    }
+
+    const hudLabel = document.getElementById('studioLastMeasurement');
+    if (hudLabel) {
+      hudLabel.textContent = `Átomo Selecionado: ${elemData.nome} (${elemData.sym}) com ${numLigacoes} ligações.`;
+    }
+  }
+
+  window.fecharInspectorAtomo = function() {
+    const hud = document.getElementById('atomInspectorHud');
+    if (hud) hud.style.display = 'none';
+    if (studioViewer && atomHighlightShape) {
+      try {
+        studioViewer.removeShape(atomHighlightShape);
+        atomHighlightShape = null;
+        studioViewer.render();
+      } catch (e) {}
+    }
+  };
+
+  window.substituirAtomoClicadoViaTabela = function() {
+    if (!atomoAtivoInspecionado) return;
+    window.abrirTabelaPeriodica(atomoAtivoInspecionado);
+  };
+
+  // =========================================================================
+  // 7. TABELA PERIÓDICA INTERATIVA: RENDERIZAÇÃO & SUBSTITUIÇÃO QUÍMICA
+  // =========================================================================
+  window.abrirTabelaPeriodica = function(atomoContexto) {
+    if (atomoContexto) {
+      atomoAtivoInspecionado = atomoContexto;
+    }
+    const modal = document.getElementById('periodicTableModal');
+    const matrix = document.getElementById('ptableMatrix');
+    const sub = document.getElementById('ptableSubHeader');
+    if (!modal || !matrix) return;
+
+    if (sub) {
+      if (atomoAtivoInspecionado) {
+        const nLig = atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : 0;
+        sub.innerHTML = `Substituindo Átomo <strong>${atomoAtivoInspecionado.elem}#${(atomoAtivoInspecionado.serial || atomoAtivoInspecionado.index || 0) + 1}</strong> (${nLig} ligação(ões) ativas). Elementos compatíveis destacados em verde.`;
+      } else {
+        sub.textContent = 'Consulte parâmetros físico-químicos e regras de valência para planejamento farmacêutico.';
+      }
+    }
+
+    renderizarMatrizTabelaPeriodica('todas');
+
+    // Se houver elemento atual no átomo, seleciona ele automaticamente
+    if (atomoAtivoInspecionado) {
+      const eMatch = TABELA_PERIODICA.find(e => e.sym.toUpperCase() === (atomoAtivoInspecionado.elem || '').toUpperCase());
+      if (eMatch) selecionarElementoNaTabela(eMatch);
+    } else if (TABELA_PERIODICA.length > 0) {
+      selecionarElementoNaTabela(TABELA_PERIODICA[5]); // Carbono por padrão
+    }
+
+    modal.style.display = 'flex';
+  };
+
+  window.fecharTabelaPeriodica = function() {
+    const modal = document.getElementById('periodicTableModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  window.filtrarElementosPTable = function(cat) {
+    document.querySelectorAll('.ptable-pill').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.cat === cat);
+    });
+    renderizarMatrizTabelaPeriodica(cat);
+  };
+
+  function renderizarMatrizTabelaPeriodica(filtroCat) {
+    const matrix = document.getElementById('ptableMatrix');
+    if (!matrix) return;
+    matrix.innerHTML = '';
+
+    const nLigacoesAlvo = atomoAtivoInspecionado && atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : null;
+
+    TABELA_PERIODICA.forEach(elem => {
+      const pos = POSICOES_PTABLE[elem.sym];
+      if (!pos) return;
+
+      const tile = document.createElement('div');
+      tile.className = `ptable-tile cat-${elem.cat}`;
+      tile.style.gridRow = pos.r;
+      tile.style.gridColumn = pos.c;
+
+      // Validação de compatibilidade se houver átomo no contexto
+      let isCompativel = true;
+      if (nLigacoesAlvo !== null) {
+        const valMax = Math.max(...elem.valencias);
+        isCompativel = (nLigacoesAlvo <= valMax && valMax > 0);
+        if (isCompativel) tile.classList.add('compatible');
+        else tile.classList.add('incompatible');
+      }
+
+      if (filtroCat !== 'todas' && elem.cat !== filtroCat) {
+        tile.style.opacity = '0.15';
+      }
+
+      if (elementoPTableSelecionado?.sym === elem.sym) {
+        tile.classList.add('selected');
+      }
+
+      tile.onclick = () => selecionarElementoNaTabela(elem, tile);
+
+      tile.innerHTML = `
+        <span class="ptable-z">${elem.z}</span>
+        <span class="ptable-sym">${elem.sym}</span>
+        <span class="ptable-mass">${elem.massa < 100 ? elem.massa.toFixed(1) : Math.round(elem.massa)}</span>
+      `;
+
+      matrix.appendChild(tile);
+    });
+  }
+
+  function selecionarElementoNaTabela(elem, tileEl) {
+    elementoPTableSelecionado = elem;
+    document.querySelectorAll('.ptable-tile').forEach(t => t.classList.remove('selected'));
+    if (tileEl) tileEl.classList.add('selected');
+
+    const sidebar = document.getElementById('ptableDetailContent');
+    if (!sidebar) return;
+
+    // Checagem de valência pedagógica
+    const nLigacoesAlvo = atomoAtivoInspecionado && atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : null;
+    let htmlValenceCheck = '';
+    let podeSubstituir = false;
+
+    if (atomoAtivoInspecionado && nLigacoesAlvo !== null) {
+      const valMax = Math.max(...elem.valencias);
+      if (elem.sym === atomoAtivoInspecionado.elem) {
+        htmlValenceCheck = `<div class="ptable-valence-check valence-valid">ℹ️ O átomo já é do elemento <strong>${elem.nome}</strong>.</div>`;
+      } else if (valMax === 0) {
+        htmlValenceCheck = `<div class="ptable-valence-check valence-invalid">⚠️ Gases nobres possuem camada de valência completa e não realizam ligações covalentes estáveis nesta posição.</div>`;
+      } else if (nLigacoesAlvo > valMax) {
+        htmlValenceCheck = `<div class="ptable-valence-check valence-invalid">
+          ⚠️ <strong>Incompatibilidade de Valência (Regra do Octeto):</strong><br>
+          O átomo alvo possui <strong>${nLigacoesAlvo} ligação(ões) ativas</strong>, mas o elemento <strong>${elem.nome} (${elem.sym})</strong> suporta no máximo <strong>${valMax} ligação(ões)</strong> sem violar a estabilidade química.
+        </div>`;
+      } else {
+        podeSubstituir = true;
+        htmlValenceCheck = `<div class="ptable-valence-check valence-valid">
+          ✅ <strong>Substituição Quimicamente Estável:</strong><br>
+          O elemento ${elem.nome} suporta valência ${elem.valencias.join('/')}, comportando perfeitamente as ${nLigacoesAlvo} ligação(ões) existentes no sítio.
+        </div>`;
+      }
+    } else {
+      htmlValenceCheck = `<div class="ptable-valence-check" style="background:rgba(255,255,255,0.04); color:#94a3b8;">
+        Dica: Clique diretamente em um átomo no visualizador 3D para ativar o botão de substituição in loco.
+      </div>`;
+    }
+
+    sidebar.innerHTML = `
+      <div class="ptable-hero-card">
+        <div class="ptable-hero-badge">
+          <span class="hero-z">${elem.z}</span>
+          <span class="hero-sym">${elem.sym}</span>
+        </div>
+        <div class="ptable-hero-info">
+          <span class="ptable-hero-name">${elem.nome}</span>
+          <span class="ptable-hero-family">${elem.cat.replace('-', ' ')} • Grupo ${elem.grupo}</span>
+        </div>
+      </div>
+
+      <div class="ptable-params-list">
+        <div class="ptable-param-row">
+          <span>Número Atômico (Z):</span>
+          <strong>${elem.z}</strong>
+        </div>
+        <div class="ptable-param-row">
+          <span>Massa Atômica:</span>
+          <strong>${elem.massa} g/mol</strong>
+        </div>
+        <div class="ptable-param-row">
+          <span>Eletronegatividade (Pauling):</span>
+          <strong>${elem.eletron ? elem.eletron : 'Inerte / N/A'}</strong>
+        </div>
+        <div class="ptable-param-row">
+          <span>Raio Covalente:</span>
+          <strong>${elem.raio} pm</strong>
+        </div>
+        <div class="ptable-param-row">
+          <span>Valências Padrão:</span>
+          <strong>${elem.valencias.join(', ')}</strong>
+        </div>
+      </div>
+
+      <div class="ptable-pharma-box">
+        <strong style="color:var(--neon-cyan); display:block; margin-bottom:3px;">Papel na Química Medicinal:</strong>
+        ${elem.pharma}
+      </div>
+
+      ${htmlValenceCheck}
+
+      ${atomoAtivoInspecionado ? `
+        <button class="btn-execute-atom-swap" id="btnApplySwap" ${!podeSubstituir ? 'disabled' : ''} onclick="window.executarSubstituicaoElementar('${elem.sym}')">
+          ⚡ Substituir Átomo #${(atomoAtivoInspecionado.serial || atomoAtivoInspecionado.index || 0) + 1} (${atomoAtivoInspecionado.elem} ➔ ${elem.sym})
+        </button>
+      ` : ''}
+    `;
+  }
+
+  /**
+   * Substituição Química Direta no Grafo Molecular com Validação RDKit
+   */
+  window.executarSubstituicaoElementar = async function(novoSimbolo) {
+    if (!atomoAtivoInspecionado || !compostoSelecionado || !sdfCacheLocal) return;
+
+    const elemAntigo = atomoAtivoInspecionado.elem;
+    const atomIdx = atomoAtivoInspecionado.index !== undefined ? atomoAtivoInspecionado.index : (atomoAtivoInspecionado.serial - 1);
+
+    // Substituição cirúrgica no Molblock / SDF
+    const linhas = sdfCacheLocal.split('\n');
+    let linhaAtomoIdx = -1;
+    let contadorAtomos = 0;
+
+    for (let i = 4; i < linhas.length; i++) {
+      const l = linhas[i];
+      if (l.includes('M  END') || l.includes('$$$$')) break;
+      if (l.length >= 31) {
+        if (contadorAtomos === atomIdx) {
+          linhaAtomoIdx = i;
+          break;
+        }
+        contadorAtomos++;
+      }
+    }
+
+    if (linhaAtomoIdx === -1) {
+      alert("Não foi possível mapear a posição atômica no arquivo tridimensional.");
+      return;
+    }
+
+    // Substitui o símbolo atômico preservando as colunas exatas da especificação V2000
+    const linhaOriginal = linhas[linhaAtomoIdx];
+    const prefixoCoords = linhaOriginal.substring(0, 31);
+    const sufixoPropriedades = linhaOriginal.substring(34);
+    const novaLinhaAtomo = prefixoCoords + novoSimbolo.padEnd(3) + sufixoPropriedades;
+    linhas[linhaAtomoIdx] = novaLinhaAtomo;
+
+    const novoSdfModificado = linhas.join('\n');
+
+    // Validação estrita de valência via RDKit WebAssembly
+    const rdkit = await carregarRDKitSobDemanda();
+    if (rdkit) {
+      try {
+        const molValidado = rdkit.get_mol(novoSdfModificado);
+        if (!molValidado) {
+          alert(`Violação Química: A substituição de ${elemAntigo} por ${novoSimbolo} nesta posição gera uma estrutura instável.`);
+          return;
+        }
+
+        const novoSmiles = molValidado.get_smiles();
+        molValidado.delete();
+
+        // Cria o derivado sintetizado in loco
+        const idDerivado = 'sub_' + Date.now();
+        const nomeDerivado = `${compostoSelecionado.nome} (${elemAntigo}${atomIdx + 1}➔${novoSimbolo})`;
+
+        const novoComposto = {
+          id: idDerivado,
+          chaveOriginal: idDerivado,
+          nome: nomeDerivado,
+          formula: 'Modificação Atômica',
+          molarMass: '--',
+          smiles: novoSmiles,
+          categoria: 'custom',
+          pubchemQuery: nomeDerivado
+        };
+
+        compostosIndexados.unshift(novoComposto);
+        compostosFiltrados.unshift(novoComposto);
+
+        renderizarListaCompostos(true);
+        selecionarCompostoStudio(novoComposto);
+
+        window.fecharTabelaPeriodica();
+        window.fecharInspectorAtomo();
+
+      } catch (err) {
+        alert(`Erro de Valência RDKit: ${err.message || 'Valência inconsistente para o elemento selecionado.'}`);
+      }
+    }
+  };
+
+  // =========================================================================
+  // 8. BIOISOSTERISMO DE GRUPOS FUNCIONAIS
   // =========================================================================
   window.abrirPainelBioisosterismo = function() {
     const modal = document.getElementById('bioisostereModal');
@@ -551,19 +907,13 @@
     if (!modal || !body) return;
 
     if (!compostoSelecionado || !compostoSelecionado.smiles || compostoSelecionado.smiles === '--') {
-      body.innerHTML = `
-        <div style="text-align:center; padding:30px; color:#94a3b8;">
-          Selecione uma molécula orgânica estruturada no catálogo lateral para planejar modificações bioisostéricas.
-        </div>
-      `;
+      body.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8;">Selecione uma molécula orgânica estruturada no catálogo lateral.</div>`;
       modal.style.display = 'flex';
       return;
     }
 
     const smiles = compostoSelecionado.smiles;
     const nome = compostoSelecionado.nome;
-
-    // Detectar grupos funcionais compatíveis com as reações
     const reacoesDisponiveis = REACOES_BIOISOSTERISMO.filter(rx => rx.detectar(smiles));
 
     let htmlGrupos = '';
@@ -571,7 +921,7 @@
       const tagsDetectadas = new Set(reacoesDisponiveis.map(r => r.alvoSmarts));
       htmlGrupos = Array.from(tagsDetectadas).map(t => `<span class="bio-group-chip">Alvo detectado: ${t}</span>`).join('');
     } else {
-      htmlGrupos = '<span style="color:#f87171; font-size:0.75rem;">Nenhum grupo farmacofórico padrão elegível para substituição bioisostérica direta neste composto.</span>';
+      htmlGrupos = '<span style="color:#f87171; font-size:0.75rem;">Nenhum grupo farmacofórico clássico elegível para substituição direta neste composto.</span>';
     }
 
     let htmlCards = '';
@@ -597,13 +947,9 @@
         <div style="font-family:var(--font-mono); font-size:0.7rem; color:#cbd5e1; word-break:break-all;">SMILES: ${smiles}</div>
         <div class="bio-groups-chips" style="margin-top:6px;">${htmlGrupos}</div>
       </div>
-
       <div id="bioComparisonArea"></div>
-
-      <h4 style="color:#f8fafc; font-size:0.82rem; margin-top:6px; margin-bottom:2px;">Transformações Moleculares & Bioisosterismo Disponíveis:</h4>
-      <div class="bio-transforms-grid">
-        ${htmlCards}
-      </div>
+      <h4 style="color:#f8fafc; font-size:0.82rem; margin-top:8px; margin-bottom:2px;">Transformações Bioisostéricas Disponíveis:</h4>
+      <div class="bio-transforms-grid">${htmlCards}</div>
     `;
 
     modal.style.display = 'flex';
@@ -614,9 +960,6 @@
     if (modal) modal.style.display = 'none';
   };
 
-  /**
-   * Executa a transformação química, calcula o Delta CADD e injeta o derivado no catálogo
-   */
   window.executarTransformacaoBioisosterica = async function(idReacao) {
     if (!compostoSelecionado) return;
     const reacao = REACOES_BIOISOSTERISMO.find(r => r.id === idReacao);
@@ -646,7 +989,6 @@
       }
     }
 
-    // Cálculos comparativos (Antes vs Depois)
     const propsAntes = await calcularPropriedadesMoleculares(smilesOriginal, parseFloat(compostoSelecionado.molarMass));
     const propsDepois = await calcularPropriedadesMoleculares(novoSmiles, 0);
 
@@ -655,63 +997,46 @@
       const deltaMW = propsDepois.mw - propsAntes.mw;
       const deltaLogP = propsDepois.logp - propsAntes.logp;
       const deltaTPSA = propsDepois.tpsa - propsAntes.tpsa;
-      const deltaHBD = propsDepois.hbd - propsAntes.hbd;
-      const deltaHBA = propsDepois.hba - propsAntes.hba;
 
       compArea.innerHTML = `
         <div class="bio-comparison-container">
           <div class="bio-comparison-header">
-            <span class="bio-comparison-title">✨ Análogo Gerado: ${reacao.nome}</span>
+            <span class="bio-comparison-title">✨ Análogo: ${reacao.nome}</span>
             <button class="studio-btn btn-action-transfer" onclick="window.adicionarDerivadoAoCatalogo('${reacao.nome}', '${novoSmiles}', ${propsDepois.mw.toFixed(2)})">
               📥 Injetar no Catálogo & Visualizar 3D
             </button>
           </div>
-
           <table class="delta-table">
             <thead>
               <tr>
-                <th>Propriedade Farmacocinética</th>
-                <th>Original (${nomeOriginal})</th>
-                <th>Derivado (${reacao.nome})</th>
+                <th>Propriedade</th>
+                <th>Original</th>
+                <th>Derivado</th>
                 <th>Variação (Δ)</th>
                 <th>Impacto Biofarmacêutico</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td><strong>Massa Molar (MW)</strong></td>
+                <td><strong>Massa Molar</strong></td>
                 <td>${propsAntes.mw.toFixed(1)} Da</td>
                 <td>${propsDepois.mw.toFixed(1)} Da</td>
                 <td>${deltaMW >= 0 ? '+' : ''}${deltaMW.toFixed(1)} Da</td>
                 <td>${propsDepois.mw <= 500 ? '✅ Dentro da Ro5' : '⚠️ Violação Lipinski (>500)'}</td>
               </tr>
               <tr>
-                <td><strong>LogP de Crippen</strong></td>
+                <td><strong>LogP Crippen</strong></td>
                 <td>${propsAntes.logp.toFixed(2)}</td>
                 <td>${propsDepois.logp.toFixed(2)}</td>
                 <td class="${deltaLogP > 0 ? 'delta-pos' : 'delta-neg'}">${deltaLogP >= 0 ? '+' : ''}${deltaLogP.toFixed(2)}</td>
-                <td>${deltaLogP > 0 ? 'Maior lipofilicidade / permeabilidade' : 'Maior hidrossolubilidade'}</td>
+                <td>${deltaLogP > 0 ? 'Maior permeabilidade' : 'Maior hidrossolubilidade'}</td>
               </tr>
               <tr>
                 <td><strong>Área Polar (TPSA)</strong></td>
                 <td>${propsAntes.tpsa.toFixed(1)} Å²</td>
                 <td>${propsDepois.tpsa.toFixed(1)} Å²</td>
                 <td class="${deltaTPSA < 0 ? 'delta-good' : 'delta-neg'}">${deltaTPSA >= 0 ? '+' : ''}${deltaTPSA.toFixed(1)} Å²</td>
-                <td>${propsDepois.tpsa <= 140 ? '✅ Adequada p/ absorção oral' : '⚠️ Baixa permeabilidade (>140)'}</td>
-              </tr>
-              <tr>
-                <td><strong>Doadores de H (HBD)</strong></td>
-                <td>${propsAntes.hbd}</td>
-                <td>${propsDepois.hbd}</td>
-                <td>${deltaHBD >= 0 ? '+' : ''}${deltaHBD}</td>
-                <td>${propsDepois.hbd <= 5 ? '✅ Conforme Lipinski' : '⚠️ Excesso de doadores'}</td>
-              </tr>
-              <tr>
-                <td><strong>Aceptores de H (HBA)</strong></td>
-                <td>${propsAntes.hba}</td>
-                <td>${propsDepois.hba}</td>
-                <td>${deltaHBA >= 0 ? '+' : ''}${deltaHBA}</td>
-                <td>${propsDepois.hba <= 10 ? '✅ Conforme Lipinski' : '⚠️ Excesso de aceptores'}</td>
+                <td>${propsDepois.tpsa <= 140 ? '✅ Adequada p/ via oral' : '⚠️ Baixa permeabilidade (>140)'}</td>
               </tr>
             </tbody>
           </table>
@@ -720,9 +1045,6 @@
     }
   };
 
-  /**
-   * Registra o novo derivado no catálogo do Studio e seleciona para projeção 3D
-   */
   window.adicionarDerivadoAoCatalogo = function(nomeTransformacao, novoSmiles, novoMW) {
     const idUnico = 'deriv_' + Date.now();
     const nomeDerivado = `${compostoSelecionado.nome} [${nomeTransformacao}]`;
@@ -747,7 +1069,7 @@
   };
 
   // =========================================================================
-  // 7. MODAL DE DOSSIÊ CADD (LIPINSKI, VEBER, GHOSE, PAINS)
+  // 9. MODAL CADD
   // =========================================================================
   window.abrirModalCADD = function() {
     const modal = document.getElementById('caddModal');
@@ -757,7 +1079,7 @@
 
     if (!modal || !body) return;
     if (!ultimoDossieCADD) {
-      body.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 30px;">Selecione um composto farmacêutico orgânico para visualizar o perfil de drogabilidade in silico.</div>`;
+      body.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 30px;">Selecione um composto orgânico para avaliar drogabilidade in silico.</div>`;
       modal.style.display = 'flex';
       return;
     }
@@ -768,7 +1090,6 @@
 
     body.innerHTML = `
       <div class="cadd-cards-grid">
-        
         <div class="cadd-card">
           <div class="cadd-card-title-row">
             <span class="cadd-card-title">💊 Regra de Lipinski (Ro5 - 1997)</span>
@@ -777,22 +1098,10 @@
             </span>
           </div>
           <div class="cadd-param-list">
-            <div class="cadd-param-item ${d.mw > 500 ? 'violated' : ''}">
-              <span>Massa Molar (≤ 500 Da):</span>
-              <strong>${d.mw.toFixed(2)} Da</strong>
-            </div>
-            <div class="cadd-param-item ${d.logp > 5.0 ? 'violated' : ''}">
-              <span>LogP Crippen (≤ 5.0):</span>
-              <strong>${d.logp.toFixed(2)}</strong>
-            </div>
-            <div class="cadd-param-item ${d.hbd > 5 ? 'violated' : ''}">
-              <span>Doadores de H - HBD (≤ 5):</span>
-              <strong>${d.hbd}</strong>
-            </div>
-            <div class="cadd-param-item ${d.hba > 10 ? 'violated' : ''}">
-              <span>Aceptores de H - HBA (≤ 10):</span>
-              <strong>${d.hba}</strong>
-            </div>
+            <div class="cadd-param-item ${d.mw > 500 ? 'violated' : ''}"><span>Massa Molar (≤ 500 Da):</span><strong>${d.mw.toFixed(2)} Da</strong></div>
+            <div class="cadd-param-item ${d.logp > 5.0 ? 'violated' : ''}"><span>LogP Crippen (≤ 5.0):</span><strong>${d.logp.toFixed(2)}</strong></div>
+            <div class="cadd-param-item ${d.hbd > 5 ? 'violated' : ''}"><span>Doadores de H - HBD (≤ 5):</span><strong>${d.hbd}</strong></div>
+            <div class="cadd-param-item ${d.hba > 10 ? 'violated' : ''}"><span>Aceptores de H - HBA (≤ 10):</span><strong>${d.hba}</strong></div>
           </div>
         </div>
 
@@ -804,18 +1113,9 @@
             </span>
           </div>
           <div class="cadd-param-list">
-            <div class="cadd-param-item ${d.rotb > 10 ? 'violated' : ''}">
-              <span>Ligações Rotacionáveis (≤ 10):</span>
-              <strong>${d.rotb}</strong>
-            </div>
-            <div class="cadd-param-item ${d.tpsa > 140 ? 'violated' : ''}">
-              <span>Área Polar TPSA (≤ 140 Å²):</span>
-              <strong>${d.tpsa.toFixed(1)} Å²</strong>
-            </div>
-            <div class="cadd-param-item">
-              <span>Fração Carbonos sp³ (Fsp³):</span>
-              <strong>${d.csp3.toFixed(2)}</strong>
-            </div>
+            <div class="cadd-param-item ${d.rotb > 10 ? 'violated' : ''}"><span>Ligações Rotacionáveis (≤ 10):</span><strong>${d.rotb}</strong></div>
+            <div class="cadd-param-item ${d.tpsa > 140 ? 'violated' : ''}"><span>Área Polar TPSA (≤ 140 Å²):</span><strong>${d.tpsa.toFixed(1)} Å²</strong></div>
+            <div class="cadd-param-item"><span>Fração Carbonos sp³ (Fsp³):</span><strong>${d.csp3.toFixed(2)}</strong></div>
           </div>
         </div>
 
@@ -827,22 +1127,10 @@
             </span>
           </div>
           <div class="cadd-param-list">
-            <div class="cadd-param-item ${d.mw < 160 || d.mw > 480 ? 'violated' : ''}">
-              <span>Massa Molar (160 - 480 Da):</span>
-              <strong>${d.mw.toFixed(2)} Da</strong>
-            </div>
-            <div class="cadd-param-item ${d.logp < -0.4 || d.logp > 5.6 ? 'violated' : ''}">
-              <span>LogP (-0.4 a 5.6):</span>
-              <strong>${d.logp.toFixed(2)}</strong>
-            </div>
-            <div class="cadd-param-item ${d.mr < 40 || d.mr > 130 ? 'violated' : ''}">
-              <span>Refração Molar - MR (40 - 130):</span>
-              <strong>${d.mr.toFixed(2)}</strong>
-            </div>
-            <div class="cadd-param-item ${d.totalAtoms < 20 || d.totalAtoms > 70 ? 'violated' : ''}">
-              <span>Total de Átomos (20 - 70):</span>
-              <strong>${d.totalAtoms} átomos</strong>
-            </div>
+            <div class="cadd-param-item ${d.mw < 160 || d.mw > 480 ? 'violated' : ''}"><span>Massa Molar (160 - 480 Da):</span><strong>${d.mw.toFixed(2)} Da</strong></div>
+            <div class="cadd-param-item ${d.logp < -0.4 || d.logp > 5.6 ? 'violated' : ''}"><span>LogP (-0.4 a 5.6):</span><strong>${d.logp.toFixed(2)}</strong></div>
+            <div class="cadd-param-item ${d.mr < 40 || d.mr > 130 ? 'violated' : ''}"><span>Refração Molar - MR (40 - 130):</span><strong>${d.mr.toFixed(2)}</strong></div>
+            <div class="cadd-param-item ${d.totalAtoms < 20 || d.totalAtoms > 70 ? 'violated' : ''}"><span>Total de Átomos (20 - 70):</span><strong>${d.totalAtoms} átomos</strong></div>
           </div>
         </div>
 
@@ -855,7 +1143,7 @@
           </div>
           ${d.alertasPAINS.length === 0 ? `
             <div class="pains-clean-box">
-              ✅ <strong>Nenhum grupo promíscuo detectado:</strong> A estrutura está livre de subestruturas clássicas de interferência em ensaios biológicos (*Pan-Assay Interference Compounds*).
+              ✅ <strong>Nenhum grupo promíscuo detectado:</strong> A estrutura está livre de subestruturas clássicas de interferência em ensaios biológicos.
             </div>
           ` : `
             <div class="pains-alert-box">
@@ -864,7 +1152,6 @@
             </div>
           `}
         </div>
-
       </div>
     `;
 
@@ -877,7 +1164,7 @@
   };
 
   // =========================================================================
-  // 8. RESOLUÇÃO DE COORDENADAS 3D COM TRATAMENTO PARA MONOATÔMICOS
+  // 10. RESOLUÇÃO DE COORDENADAS 3D
   // =========================================================================
   function validarConteudoSDF(sdfText) {
     if (!sdfText || typeof sdfText !== 'string') return false;
@@ -909,7 +1196,7 @@ $$$$
       if (cache && validarConteudoSDF(cache.sdf)) return cache.sdf;
     }
 
-    // 1. RDKit WASM ETKDG (Conformação local direta - essencial para moléculas derivadas in silico)
+    // 1. RDKit WASM ETKDG (Conformação local - essencial para análogos gerados in silico)
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
@@ -951,7 +1238,7 @@ $$$$
       } catch (e) {}
     }
 
-    // 3. CACTUS NIH por SMILES
+    // 3. CACTUS NIH
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Gerando coordenadas (CACTUS NIH)...");
@@ -978,10 +1265,12 @@ $$$$
   }
 
   // =========================================================================
-  // 9. VIEWPORT 3D & TELEMETRIA
+  // 11. VIEWPORT 3D & ATOM PICKING
   // =========================================================================
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
+
+    window.fecharInspectorAtomo();
 
     const watermark = document.getElementById('studioWatermark');
     if (watermark) watermark.style.display = 'none';
@@ -1044,8 +1333,13 @@ $$$$
       modeloCarregadoAtivo = true;
       aplicarEstiloVisual(modeloAtual);
 
+      // Ouvinte de clique atômico duplo: medição geométrica ou inspeção atômica
       studioViewer.setClickable({}, true, function(atom) {
-        if (modoMedicaoAtivo) processarCliqueMedicao(atom);
+        if (modoMedicaoAtivo) {
+          processarCliqueMedicao(atom);
+        } else {
+          selecionarEInspecionarAtomo(atom);
+        }
       });
 
       studioViewer.zoomTo();
@@ -1065,7 +1359,7 @@ $$$$
       }
     } catch (errCena) {
       modeloCarregadoAtivo = false;
-      console.warn('[Studio 3Dmol] Erro contido na construção da cena:', errCena);
+      console.warn('[Studio 3Dmol] Erro na construção da cena:', errCena);
     }
   }
 
@@ -1148,7 +1442,7 @@ $$$$
   }
 
   // =========================================================================
-  // 10. CONTROLES E MEDIÇÃO GEOMÉTRICA (Å / °)
+  // 12. CONTROLES E MEDIÇÃO GEOMÉTRICA (Å / °)
   // =========================================================================
   window.setModelo3D = function(modo) {
     modeloAtual = modo;
@@ -1192,6 +1486,7 @@ $$$$
   window.toggleModoMedicao = function() {
     modoMedicaoAtivo = !modoMedicaoAtivo;
     atomosSelecionadosParaMedicao = [];
+    window.fecharInspectorAtomo();
     const btn = document.getElementById('btnToolMeasure');
     const hud = document.getElementById('measureHud');
     if (btn) btn.classList.toggle('active', modoMedicaoAtivo);
@@ -1361,7 +1656,7 @@ $$$$
   };
 
   // =========================================================================
-  // 11. INICIALIZAÇÃO ASSÍNCRONA
+  // 13. INICIALIZAÇÃO ASSÍNCRONA
   // =========================================================================
   async function inicializarStudioComPolling() {
     let tentativas = 0;
