@@ -19,20 +19,21 @@
       <div class="studio-logo-icon">🧬</div>
       <div class="studio-titles">
         <h1>ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR</h1>
-        <span class="studio-sub-badge">LAIFT • CADD, BIOISOSTERISMO & TABELA PERIÓDICA INTERATIVA v3</span>
+        <span class="studio-sub-badge">LAIFT • CADD, BIOISOSTERISMO & TABELA PERIÓDICA INTERATIVA v3.1</span>
       </div>
       <span class="badge badge-counter" id="studioTotalBadge">Indexando catálogo...</span>
     </div>
+
     <div class="header-control-actions">
-      <button class="studio-btn btn-nav-icon" onclick="window.irParaAnterior()" id="btnNavBack" title="Composto anterior (Alt+←)">◀ Anterior</button>
-      <button class="studio-btn btn-nav-icon" onclick="window.irParaProximo()" id="btnNavForward" title="Próximo composto (Alt+→)">Próximo ▶</button>
+      <button class="studio-btn btn-nav-icon" onclick="window.irParaAnterior()" id="btnNavBack" title="Anterior (Alt+←)">◀</button>
+      <button class="studio-btn btn-nav-icon" onclick="window.irParaProximo()" id="btnNavForward" title="Próximo (Alt+→)">▶</button>
       <button class="studio-btn btn-nav-icon btn-undo" onclick="window.desfazerEdicao()" id="btnUndo" title="Desfazer (Ctrl+Z)" disabled>↶</button>
       <button class="studio-btn btn-nav-icon btn-redo" onclick="window.refazerEdicao()" id="btnRedo" title="Refazer (Ctrl+Y)" disabled>↷</button>
-      <button class="studio-btn btn-favorite" onclick="window.alternarFavoritoAtual()" id="btnFavoriteCurrent" title="Favoritar" style="display: none;">☆ Favoritar</button>
+      <button class="studio-btn btn-favorite" onclick="window.alternarFavoritoAtual()" id="btnFavoriteCurrent" title="Favoritar" style="display: none;">☆</button>
       <button class="studio-btn btn-presentation" onclick="window.alternarModoApresentacao()" title="Modo Apresentação (P)">🎬</button>
       <button class="studio-btn btn-fullscreen-toggle" id="btnToggleNativeFullscreen" onclick="toggleNativeFullscreen()" title="Tela Cheia">⛶</button>
       <button class="studio-btn btn-action-transfer" id="btnCarregarNaBancada" onclick="carregarCompostoDoStudioNaBancada()" style="display: none;">🧪 Bancada</button>
-      <button class="studio-btn btn-action-back" onclick="retornarAoLaboratorio()">✕ Voltar</button>
+      <button class="studio-btn btn-action-back" onclick="retornarAoLaboratorio()">✕</button>
     </div>
   </header>
 
@@ -59,48 +60,56 @@
     </aside>
 
     <section class="studio-viewport-panel">
+
       <nav class="studio-toolbar-ribbon">
         <div class="toolbar-cluster">
           <span class="cluster-label">Modo:</span>
-          <button class="tool-btn" id="btnStudioView2D" onclick="setStudioModoVisual('2D')">2D Vetorial</button>
-          <button class="tool-btn active" id="btnStudioView3D" onclick="setStudioModoVisual('3D')">3D WebGL</button>
+          <button class="tool-btn" id="btnStudioView2D" onclick="setStudioModoVisual('2D')">2D</button>
+          <button class="tool-btn active" id="btnStudioView3D" onclick="setStudioModoVisual('3D')">3D</button>
         </div>
+
         <div class="toolbar-cluster" id="group3DStyles">
-          <span class="cluster-label">Representação:</span>
-          <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')">Ball & Stick</button>
-          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')">CPK</button>
-          <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')">Wireframe</button>
-          <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')">Superfície SAS</button>
+          <span class="cluster-label">Estilo:</span>
+          <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')" title="Ball & Stick">Ball</button>
+          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')" title="CPK (VDW)">CPK</button>
+          <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')" title="Wireframe">Wire</button>
+          <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')" title="Superfície SAS">SAS</button>
         </div>
+
         <div class="toolbar-cluster">
-          <button class="tool-btn btn-ptable-trigger" onclick="window.abrirTabelaPeriodica(null)">⚛️ Tabela Periódica</button>
-          <button class="tool-btn btn-bioisostere-trigger" onclick="window.abrirPainelBioisosterismo()">🧬 Bioisosterismo</button>
+          <button class="tool-btn btn-ptable-trigger" onclick="window.abrirTabelaPeriodica(null)" title="Tabela Periódica Interativa">⚛️ Tabela</button>
+          <button class="tool-btn btn-bioisostere-trigger" onclick="window.abrirPainelBioisosterismo()" title="Bioisosterismo">🧬 Bioiso</button>
         </div>
+
         <div class="toolbar-cluster">
           <span class="cluster-label">Análise:</span>
-          <button class="tool-btn btn-similarity-trigger" onclick="window.abrirSimilaridade()">🔎 Similaridade</button>
-          <button class="tool-btn btn-scaffold-trigger" onclick="window.extrairScaffoldAtual()">🏗️ Scaffold</button>
-          <button class="tool-btn btn-compare-trigger" onclick="window.abrirComparacao()">⚖️ Comparar</button>
+          <button class="tool-btn btn-similarity-trigger" onclick="window.abrirSimilaridade()" title="Similaridade Tanimoto">🔎 Simil.</button>
+          <button class="tool-btn btn-scaffold-trigger" onclick="window.extrairScaffoldAtual()" title="Scaffold Murcko">🏗️ Scaffold</button>
+          <button class="tool-btn btn-compare-trigger" onclick="window.abrirComparacao()" title="Comparação lado a lado">⚖️ Comparar</button>
         </div>
+
         <div class="toolbar-cluster">
-          <span class="cluster-label">Geometria:</span>
-          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()">📏 Medir</button>
-          <button class="tool-btn" onclick="limparMedicoes3D()">Limpar</button>
+          <span class="cluster-label">Geom.:</span>
+          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()" title="Medir">📏 Medir</button>
+          <button class="tool-btn" onclick="limparMedicoes3D()" title="Limpar medições">Limpar</button>
         </div>
+
         <div class="toolbar-cluster right-aligned-cluster">
-          <button class="tool-btn" id="btnAutoRotate" onclick="toggleAutoRotacao3D()">🔄 Giro</button>
-          <button class="tool-btn" onclick="resetarCamera3D()">🎯 Centro</button>
-          <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()">📷 PNG</button>
-          <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()">💾 SDF</button>
-          <button class="tool-btn btn-export-highlight" onclick="window.exportarCSVFiltrados()">📊 CSV</button>
+          <button class="tool-btn" id="btnAutoRotate" onclick="toggleAutoRotacao3D()" title="Giro automático">🔄</button>
+          <button class="tool-btn" onclick="resetarCamera3D()" title="Centralizar">🎯</button>
+          <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()" title="Exportar PNG">📷</button>
+          <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()" title="Exportar SDF">💾</button>
+          <button class="tool-btn btn-export-highlight" onclick="window.exportarCSVFiltrados()" title="Exportar CSV">📊</button>
         </div>
       </nav>
 
       <div class="studio-canvas-stage" id="studioCanvasWrapper">
         <div id="studioViewer3D" class="viewer-surface-3d"></div>
+
         <div id="studioViewer2D" class="viewer-surface-2d" style="display: none;">
-          <canvas id="studioCanvas2D" width="650" height="480"></canvas>
+          <canvas id="studioCanvas2D" width="900" height="640"></canvas>
         </div>
+
         <div class="measure-indicator-pill" id="measureHud" style="display: none;">
           <div class="indicator-dot-pulse"></div>
           <div class="indicator-texts">
@@ -108,6 +117,7 @@
             <small>Clique em 2 átomos para distância (Å) ou 3 para ângulo (°)</small>
           </div>
         </div>
+
         <div class="atom-inspector-hud" id="atomInspectorHud" style="display: none;">
           <div class="atom-inspector-header">
             <div class="atom-elem-badge" id="hudAtomBadge">C</div>
@@ -118,18 +128,20 @@
             <button class="atom-inspector-close" onclick="window.fecharInspectorAtomo()">&times;</button>
           </div>
           <div class="atom-inspector-body">
-            <div class="atom-inspector-row"><span>Eletronegatividade:</span><strong id="hudAtomEletron">2.55 (Pauling)</strong></div>
+            <div class="atom-inspector-row"><span>Eletronegatividade:</span><strong id="hudAtomEletron">2.55</strong></div>
             <div class="atom-inspector-row"><span>Raio Atômico:</span><strong id="hudAtomRaio">77 pm</strong></div>
-            <div class="atom-inspector-row"><span>Vizinhos:</span><strong id="hudAtomNeighbors">C2, O3, H5</strong></div>
+            <div class="atom-inspector-row"><span>Vizinhos:</span><strong id="hudAtomNeighbors">C2, O3</strong></div>
           </div>
           <div class="atom-inspector-actions">
             <button class="btn-hud-replace" onclick="window.substituirAtomoClicadoViaTabela()">⚛️ Abrir Tabela Periódica</button>
           </div>
         </div>
+
         <div class="rdkit-engine-status" id="rdkitIndicator" style="display: none;">
           <span class="spinner-inline"></span>
-          <span id="rdkitIndicatorText">Processando quimiometria...</span>
+          <span id="rdkitIndicatorText">Processando...</span>
         </div>
+
         <div class="studio-watermark-overlay" id="studioWatermark">Selecione uma espécie molecular no painel esquerdo para renderizar a estrutura</div>
         <div class="presentation-exit-hint" id="presentationExitHint" style="display: none;">Pressione <kbd>ESC</kbd> ou <kbd>P</kbd> para sair do Modo Apresentação</div>
       </div>
@@ -141,12 +153,15 @@
         </div>
         <div class="hud-item-block">
           <span class="hud-title">Fórmula / Massa</span>
-          <span class="hud-value"><strong id="studioMolFormula" style="color: var(--neon-yellow);">--</strong> • <strong id="studioMolMassa" style="color: var(--neon-emerald);">-- g/mol</strong></span>
+          <span class="hud-value">
+            <strong id="studioMolFormula" style="color: var(--neon-yellow);">--</strong> • 
+            <strong id="studioMolMassa" style="color: var(--neon-emerald);">-- g/mol</strong>
+          </span>
         </div>
         <div class="hud-item-block cadd-hud-block">
           <div class="cadd-hud-header">
-            <span class="hud-title">Drogabilidade Computacional (CADD)</span>
-            <button class="btn-open-cadd-modal" onclick="window.abrirModalCADD()">📊 Dossiê CADD</button>
+            <span class="hud-title">Drogabilidade CADD</span>
+            <button class="btn-open-cadd-modal" onclick="window.abrirModalCADD()">📊 Dossiê</button>
           </div>
           <div class="lipinski-metrics-row">
             <span class="cadd-badge badge-pending" id="badgeLipinski">Lipinski: --</span>
@@ -156,8 +171,8 @@
           </div>
         </div>
         <div class="hud-item-block measurement-readout-block">
-          <span class="hud-title">Geometria / Inspeção</span>
-          <strong class="hud-value measure-value" id="studioLastMeasurement">Clique em um átomo para inspecionar ou medir</strong>
+          <span class="hud-title">Inspeção</span>
+          <strong class="hud-value measure-value" id="studioLastMeasurement">Clique em um átomo para inspecionar</strong>
         </div>
       </footer>
     </section>
@@ -205,13 +220,13 @@
     </div>
   </div>
 
-  <!-- MODAL: DOSSIÊ CADD -->
+  <!-- MODAL CADD -->
   <div class="cadd-modal" id="caddModal" style="display: none;">
     <div class="cadd-modal-content">
       <div class="cadd-modal-header">
         <div>
-          <h3 id="caddModalTitle">📊 Dossiê de Drogabilidade & Quimiometria In Silico</h3>
-          <span class="cadd-subtitle" id="caddModalSubtitle">Avaliação de propriedades físico-químicas</span>
+          <h3 id="caddModalTitle">📊 Dossiê de Drogabilidade</h3>
+          <span class="cadd-subtitle" id="caddModalSubtitle">Avaliação de propriedades</span>
         </div>
         <button class="btn-close-modal" onclick="window.fecharModalCADD()">&times;</button>
       </div>
@@ -219,7 +234,7 @@
     </div>
   </div>
 
-  <!-- MODAL: BIOISOSTERISMO -->
+  <!-- MODAL BIOISOSTERISMO -->
   <div class="cadd-modal" id="bioisostereModal" style="display: none;">
     <div class="cadd-modal-content bioisostere-modal-content">
       <div class="cadd-modal-header bioisostere-header">
@@ -233,7 +248,7 @@
     </div>
   </div>
 
-  <!-- MODAL: SIMILARIDADE -->
+  <!-- MODAL SIMILARIDADE -->
   <div class="cadd-modal" id="similarityModal" style="display: none;">
     <div class="cadd-modal-content similarity-modal-content">
       <div class="cadd-modal-header similarity-header">
@@ -243,19 +258,17 @@
         </div>
         <button class="btn-close-modal" onclick="window.fecharSimilaridade()">&times;</button>
       </div>
-      <div class="cadd-modal-body similarity-body" id="similarityModalBody">
-        <div style="text-align:center; padding: 30px; color: #64748b;">Carregando análise...</div>
-      </div>
+      <div class="cadd-modal-body similarity-body" id="similarityModalBody"></div>
     </div>
   </div>
 
-  <!-- MODAL: COMPARAÇÃO -->
+  <!-- MODAL COMPARAÇÃO -->
   <div class="cadd-modal" id="comparisonModal" style="display: none;">
     <div class="cadd-modal-content comparison-modal-content">
       <div class="cadd-modal-header comparison-header">
         <div>
           <h3>⚖️ Comparação Molecular Lado a Lado</h3>
-          <span class="cadd-subtitle">Selecione dois compostos para comparar</span>
+          <span class="cadd-subtitle">Selecione dois compostos</span>
         </div>
         <button class="btn-close-modal" onclick="window.fecharComparacao()">&times;</button>
       </div>
@@ -276,7 +289,7 @@
         </div>
       </div>
       <div class="comparison-metrics" id="comparisonMetrics">
-        <div style="text-align:center; padding: 20px; color: #64748b;">Selecione dois compostos e clique em "Comparar".</div>
+        <div style="text-align:center; padding: 20px; color: #64748b;">Selecione e clique em "Comparar".</div>
       </div>
     </div>
   </div>
@@ -291,9 +304,7 @@
     function toggleNativeFullscreen() {
       if (!document.fullscreenElement) {
         document.documentElement.requestFullscreen().catch(err => console.warn(`[Studio FS] ${err.message}`));
-      } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-      }
+      } else if (document.exitFullscreen) document.exitFullscreen();
     }
     function retornarAoLaboratorio() {
       if (window.opener) window.close();
