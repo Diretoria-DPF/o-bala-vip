@@ -1384,3 +1384,205 @@ body.presentation-mode .studio-watermark-overlay { display: none !important; }
 
   .header-control-actions .studio-btn span { display: none; }
 }
+/* =========================================================================
+   ADIÇÕES v3.0 — Adição Molecular + Tabela Periódica Completa
+   ========================================================================= */
+
+/* Grade 9 linhas para acomodar lantanídeos e actinídeos */
+.ptable-matrix {
+  grid-template-rows: repeat(9, minmax(36px, 1fr));
+  gap: 3px;
+}
+
+.ptable-placeholder {
+  background: rgba(100, 116, 139, 0.12) !important;
+  border: 1px dashed #64748b !important;
+  color: #64748b;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: default !important;
+  transform: none !important;
+}
+
+.ptable-placeholder:hover { transform: none !important; box-shadow: none !important; }
+
+.cat-lantanideo .ptable-sym { color: #ec4899; }
+.cat-actinideo .ptable-sym { color: #f43f5e; }
+
+/* Ações no modal (botões Substituir / Adicionar) */
+.ptable-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.btn-execute-atom-swap,
+.btn-execute-atom-add {
+  border: none;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  line-height: 1.2;
+}
+
+.btn-execute-atom-swap {
+  background: var(--neon-green);
+  color: #000;
+}
+
+.btn-execute-atom-swap:hover:not(:disabled) {
+  box-shadow: 0 0 14px var(--neon-green);
+  transform: translateY(-1px);
+}
+
+.btn-execute-atom-swap:disabled {
+  background: #334155;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.btn-execute-atom-add {
+  background: linear-gradient(135deg, #0284c7, #7c3aed);
+  color: #fff;
+}
+
+.btn-execute-atom-add:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 14px rgba(124, 58, 237, 0.6);
+  transform: translateY(-1px);
+}
+
+/* Diagnóstico de adição */
+.ptable-add-diagnostic {
+  background: rgba(2, 6, 23, 0.85);
+  border: 1px solid var(--border-active);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diag-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #94a3b8;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.diag-row strong { color: #f8fafc; }
+
+.diag-status {
+  border-radius: 5px;
+  padding: 7px 9px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  font-family: var(--font-mono);
+}
+
+.diag-ok {
+  background: rgba(0, 255, 136, 0.1);
+  border-left: 3px solid var(--neon-green);
+  color: #86efac;
+}
+
+.diag-warning {
+  background: rgba(250, 204, 21, 0.1);
+  border-left: 3px solid var(--neon-yellow);
+  color: #fde047;
+}
+
+.diag-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-left: 3px solid #ef4444;
+  color: #fca5a5;
+}
+
+.diag-hint {
+  font-size: 0.66rem;
+  color: #94a3b8;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border-left: 2px solid var(--neon-sky);
+}
+
+.diag-hint strong { color: var(--neon-cyan); }
+
+/* Compostos instáveis na lista */
+.compound-item.unstable {
+  border-left: 3px solid var(--neon-yellow);
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.06), transparent 40%);
+}
+
+.comp-unstable-flag {
+  color: var(--neon-yellow);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(250, 204, 21, 0.6));
+  animation: pulseUnstable 1.5s infinite alternate;
+}
+
+@keyframes pulseUnstable {
+  0% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+
+/* Aviso persistente no viewport quando estrutura é instável */
+.unstable-banner {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(120, 53, 15, 0.92);
+  border: 1px solid var(--neon-yellow);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #fde047;
+  z-index: 30;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  max-width: 80%;
+  text-align: center;
+}
+
+.unstable-banner strong { color: #fff; }
+
+.unstable-banner .unstable-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  justify-content: center;
+}
+
+.unstable-banner button {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.unstable-banner button:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
