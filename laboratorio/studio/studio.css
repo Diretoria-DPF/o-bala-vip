@@ -1671,4 +1671,279 @@ body.presentation-mode .studio-watermark-overlay { display: none !important; }
     padding: 4px 6px;
     font-size: 0.62rem;
   }
+
+   /* =========================================================================
+   LAIFT Studio v3.2 — Layout responsivo e compacto
+   ========================================================================= */
+
+/* Header compacto */
+.studio-main-header {
+  padding: 0 12px;
+  gap: 10px;
+}
+
+.header-branding {
+  gap: 8px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.studio-titles h1 {
+  font-size: 0.78rem;
+  letter-spacing: 0.8px;
+}
+
+.studio-sub-badge {
+  font-size: 0.54rem;
+}
+
+.header-control-actions {
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.studio-btn {
+  padding: 5px 9px;
+  font-size: 0.7rem;
+  gap: 4px;
+}
+
+.btn-icon-only {
+  padding: 5px 7px;
+  min-width: 30px;
+  justify-content: center;
+  font-size: 0.82rem;
+}
+
+.btn-text {
+  display: inline;
+}
+
+/* Toolbar compacta */
+.studio-toolbar-ribbon {
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  padding: 0 8px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.studio-toolbar-ribbon::-webkit-scrollbar { display: none; }
+
+.toolbar-cluster {
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.cluster-label {
+  display: none;
+}
+
+.tool-btn {
+  padding: 5px 9px;
+  font-size: 0.72rem;
+  min-width: 32px;
+  justify-content: center;
+}
+
+/* Workspace: sidebar responsiva */
+.studio-workspace-grid {
+  grid-template-columns: clamp(260px, 22vw, 380px) 1fr;
+}
+
+/* Canvas stage com mínimos garantidos */
+.studio-canvas-stage {
+  min-height: 300px;
+}
+
+#studioCanvas2D {
+  max-width: 92%;
+  max-height: 92%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* HUD inferior responsivo */
+.studio-telemetry-hud {
+  gap: 12px;
+  padding: 0 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.studio-telemetry-hud::-webkit-scrollbar { display: none; }
+
+.hud-item-block {
+  flex-shrink: 0;
+}
+
+.hud-name {
+  max-width: 220px;
+}
+
+.cadd-hud-block {
+  flex: 0 0 auto;
+  min-width: 240px;
+}
+
+/* Banner de estrutura instável */
+.unstable-banner {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(120, 53, 15, 0.95);
+  border: 1px solid var(--neon-yellow);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #fde047;
+  z-index: 30;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  max-width: 80%;
+  text-align: center;
+}
+
+.unstable-banner strong { color: #fff; }
+
+.unstable-banner .unstable-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  justify-content: center;
+}
+
+.unstable-banner button {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.unstable-banner button:hover { background: rgba(255, 255, 255, 0.25); }
+
+/* Grid 9 linhas para tabela periódica */
+.ptable-matrix {
+  grid-template-rows: repeat(9, minmax(34px, 1fr));
+}
+
+.ptable-placeholder {
+  background: rgba(100, 116, 139, 0.1) !important;
+  border: 1px dashed #475569 !important;
+  color: #64748b;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: default !important;
+}
+
+.ptable-placeholder:hover { transform: none !important; box-shadow: none !important; }
+
+.cat-lantanideo .ptable-sym { color: #ec4899; }
+.cat-actinideo .ptable-sym { color: #f43f5e; }
+
+/* Diagnóstico de adição */
+.ptable-action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+}
+
+.btn-execute-atom-swap,
+.btn-execute-atom-add {
+  border: none;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.btn-execute-atom-swap { background: var(--neon-green); color: #000; }
+.btn-execute-atom-swap:hover:not(:disabled) { box-shadow: 0 0 14px var(--neon-green); transform: translateY(-1px); }
+.btn-execute-atom-swap:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+
+.btn-execute-atom-add {
+  background: linear-gradient(135deg, #0284c7, #7c3aed);
+  color: #fff;
+}
+.btn-execute-atom-add:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 0 14px rgba(124, 58, 237, 0.6);
+  transform: translateY(-1px);
+}
+
+.ptable-add-diagnostic {
+  background: rgba(2, 6, 23, 0.85);
+  border: 1px solid var(--border-active);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diag-row {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #94a3b8;
+}
+
+.diag-row strong { color: #f8fafc; }
+
+.diag-status {
+  border-radius: 5px;
+  padding: 7px 9px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  font-family: var(--font-mono);
+}
+
+.diag-ok { background: rgba(0, 255, 136, 0.1); border-left: 3px solid var(--neon-green); color: #86efac; }
+.diag-warning { background: rgba(250, 204, 21, 0.1); border-left: 3px solid var(--neon-yellow); color: #fde047; }
+.diag-error { background: rgba(239, 68, 68, 0.12); border-left: 3px solid #ef4444; color: #fca5a5; }
+
+/* Tela média: reduz elementos */
+@media (max-width: 1400px) {
+  .btn-text { display: none; }
+  .studio-titles h1 { font-size: 0.72rem; }
+  .studio-sub-badge { display: none; }
+}
+
+@media (max-width: 1100px) {
+  .studio-workspace-grid { grid-template-columns: 240px 1fr; }
+  .hud-name { max-width: 140px; }
+  .cadd-hud-block { min-width: 180px; }
+}
+
+@media (max-width: 900px) {
+  .studio-workspace-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 200px 1fr;
+  }
+  .studio-sidebar-panel {
+    border-right: none;
+    border-bottom: 1px solid var(--border-active);
+  }
+  .studio-toolbar-ribbon { overflow-x: auto; }
 }
