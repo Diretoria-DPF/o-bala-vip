@@ -1,11 +1,13 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
- * Arquivo: studio/studio.js (Versão Aprimorada)
+ * Arquivo: studio/studio.js
+ * Quimiometria In Silico: Lipinski, Veber, Ghose, PAINS (Baell et al.) & 3Dmol WebGL
  */
 
 (function() {
   'use strict';
 
+  // Barramento BroadcastChannel protegido contra restrições de sandbox de iframe
   let labBroadcast = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
@@ -30,17 +32,32 @@
 
   let RDKitModuleInstance = null;
   let rdkitPromise = null;
+  let ultimoDossieCADD = null;
 
   const ITEMS_PER_CHUNK = 40;
   let currentRenderedIndex = 0;
   let debounceBuscaTimer = null;
-  let resizeTimer = null;
-
-  // Cache de miniaturas 2D
-  const miniaturesCache = new Map();
 
   // =========================================================================
-  // 1. INGESTÃO DOS BANCOS DE DADOS
+  // 1. DICIONÁRIO DE SUBESTRUTURAS SMARTS DE PAINS (BAELL ET AL., 2010)
+  // =========================================================================
+  const PAINS_SUBSTRUCTURES = [
+    { id: 'quinona', nome: 'Quinona / Di-ona Cíclica', smarts: 'O=C1[#6]=,:[#6]C(=O)[#6]=,:[#6]1', risco: 'Agente oxidante com alto potencial redox e alquilação inespecífica de tióis proteicos.' },
+    { id: 'catecol', nome: 'Catecol (1,2-Benzenodiol)', smarts: 'c1c(O)c(O)ccc1', risco: 'Quelante metálico promíscuo e precursor oxidável de orto-quinona reativa.' },
+    { id: 'rhodanina', nome: 'Rodanina (2-Tioxotiazolidin-4-ona)', smarts: 'O=C1CSC(=S)N1', risco: 'Molécula agregadora coloidal, causa inibição enzimática artefatual em ensaios.' },
+    { id: 'michael_acceptor', nome: 'Aceptor de Michael (Enona Conjugada)', smarts: 'C=CC(=O)[#6,#8,#7]', risco: 'Eletrófilo forte capaz de formar ligações covalentes inespecíficas com cisteínas.' },
+    { id: 'alquil_haleto', nome: 'Haleto Alifático Reativo', smarts: '[CX4][Cl,Br,I]', risco: 'Agente alquilante inespecífico, incompatível com seletividade farmacológica.' },
+    { id: 'aldeido', nome: 'Aldeído Livre', smarts: '[CX3H1](=O)[#6,H]', risco: 'Reage covalentemente com resíduos de lisina via formação de base de Schiff.' },
+    { id: 'epoxido', nome: 'Epóxido / Oxirano', smarts: 'C1OC1', risco: 'Anel tensionado altamente reativo a nucleófilos intracelulares e DNA.' },
+    { id: 'aziridina', nome: 'Aziridina', smarts: 'C1NC1', risco: 'Eletrófilo potente com potencial genotóxico por alquilação direta.' },
+    { id: 'tiocarbonila', nome: 'Tiocarbonila Livre (C=S)', smarts: '[#6]=S', risco: 'Interferência espectroscópica e desnaturação inespecífica de sítios proteicos.' },
+    { id: 'hidrazona', nome: 'Hidrazona Fenólica Ativada', smarts: 'c1ccc(O)cc1NN=C', risco: 'Interferência de fluorescência e afinidade promíscua a metais de transição.' },
+    { id: 'nitroso', nome: 'Grupo Nitroso', smarts: '[#6]-[N;X2]=O', risco: 'Espécie reativa de nitrogênio com instabilidade redox e risco de toxicidade.' },
+    { id: 'haloacetamida', nome: 'Haloacetamida Alquilante', smarts: 'NC(=O)C[Cl,Br,I]', risco: 'Inibidor covalente indiscriminado de enzimas tiólicas.' }
+  ];
+
+  // =========================================================================
+  // 2. INGESTÃO DOS BANCOS DE DADOS
   // =========================================================================
   function obterFontesDeDados() {
     const labDb = window.LAB_DATABASE || 
@@ -117,7 +134,7 @@
       });
     }
 
-    // Base de salvaguarda
+    // Base de Salvaguarda
     const acervoReserva = [
       { id: "AAS", chaveOriginal: "AAS_s", nome: "Ácido Acetilsalicílico (Aspirina)", formula: "C9H8O4", molarMass: 180.16, smiles: "CC(=O)OC1=CC=CC=C1C(=O)O", categoria: "farmacos", pubchemQuery: "Aspirin" },
       { id: "Paracetamol", chaveOriginal: "Paracetamol_s", nome: "Paracetamol (Acetaminofeno)", formula: "C8H9NO2", molarMass: 151.16, smiles: "CC(=O)NC1=CC=C(O)C=C1", categoria: "farmacos", pubchemQuery: "Acetaminophen" },
@@ -148,7 +165,9 @@
     compostosFiltrados = [...compostosIndexados];
 
     const totalBadge = document.getElementById('studioTotalBadge');
-    if (totalBadge) totalBadge.textContent = `${compostosIndexados.length} Espécies Prontas`;
+    if (totalBadge) {
+      totalBadge.textContent = `${compostosIndexados.length} Espécies Prontas`;
+    }
 
     atualizarContadorFiltrados();
   }
@@ -167,43 +186,8 @@
   }
 
   // =========================================================================
-  // 2. VIRTUALIZAÇÃO DA LISTA LATERAL (COM MINIATURAS)
+  // 3. VIRTUALIZAÇÃO DA LISTA LATERAL
   // =========================================================================
-  async function obterMiniatura(smiles, pubchemQuery) {
-    const chave = smiles || pubchemQuery;
-    if (miniaturesCache.has(chave)) return miniaturesCache.get(chave);
-
-    if (smiles && smiles !== '--' && !smiles.includes('.')) {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 60;
-        canvas.height = 60;
-        const drawer = new SmilesDrawer.Drawer({ width: 60, height: 60, bondLength: 8 });
-        const tree = await new Promise(resolve => SmilesDrawer.parse(smiles, resolve));
-        if (tree) {
-          drawer.draw(tree, canvas, 'dark', false);
-          const dataUrl = canvas.toDataURL('image/png');
-          miniaturesCache.set(chave, dataUrl);
-          return dataUrl;
-        }
-      } catch (e) {}
-    }
-
-    if (pubchemQuery) {
-      try {
-        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(pubchemQuery)}/PNG?image_size=60x60`;
-        const res = await fetchComTimeout(url, 5000);
-        if (res.ok) {
-          const blob = await res.blob();
-          const dataUrl = URL.createObjectURL(blob);
-          miniaturesCache.set(chave, dataUrl);
-          return dataUrl;
-        }
-      } catch (e) {}
-    }
-    return null;
-  }
-
   function renderizarListaCompostos(reset = true) {
     const listContainer = document.getElementById('studioCompoundList');
     if (!listContainer) return;
@@ -228,9 +212,6 @@
 
       const massaDisplay = comp.molarMass !== '--' ? `${parseFloat(comp.molarMass).toFixed(1)}` : '--';
       itemEl.innerHTML = `
-        <div class="comp-thumb">
-          <img src="" alt="" style="width:60px;height:60px;object-fit:contain;">
-        </div>
         <div class="comp-info-main">
           <span class="comp-name" title="${comp.nome}">${comp.nome}</span>
           <span class="comp-formula">${comp.formula}</span>
@@ -238,14 +219,6 @@
         <span class="comp-badge-mass">${massaDisplay}</span>
       `;
       fragment.appendChild(itemEl);
-
-      // Carregar miniatura de forma assíncrona
-      const thumbImg = itemEl.querySelector('.comp-thumb img');
-      if (thumbImg) {
-        obterMiniatura(comp.smiles, comp.pubchemQuery).then(url => {
-          if (url) thumbImg.src = url;
-        });
-      }
     });
 
     listContainer.appendChild(fragment);
@@ -301,81 +274,7 @@
   };
 
   // =========================================================================
-  // 3. BUSCA AVANÇADA POR SUBESTRUTURA (SMARTS)
-  // =========================================================================
-  window.toggleAdvancedSearch = function() {
-    const panel = document.getElementById('advancedSearchPanel');
-    if (panel) panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
-  };
-
-  window.executarBuscaSMARTS = async function() {
-    const input = document.getElementById('smartsInput');
-    const smarts = input?.value.trim();
-    if (!smarts) return;
-
-    const rdkit = await carregarRDKitSobDemanda();
-    if (!rdkit) {
-      mostrarNotificacao("RDKit não disponível para busca SMARTS", "error");
-      return;
-    }
-
-    try {
-      const queryMol = rdkit.get_qmol(smarts);
-      if (!queryMol) {
-        mostrarNotificacao("Padrão SMARTS inválido", "error");
-        return;
-      }
-
-      const resultados = [];
-      for (const comp of compostosIndexados) {
-        if (comp.smiles && comp.smiles !== '--' && !comp.smiles.includes('.')) {
-          const mol = rdkit.get_mol(comp.smiles);
-          if (mol && mol.has_substruct_match(queryMol)) {
-            resultados.push(comp);
-          }
-          if (mol) mol.delete();
-        }
-      }
-      compostosFiltrados = resultados;
-      renderizarListaCompostos(true);
-      mostrarNotificacao(`${resultados.length} compostos correspondem ao padrão`, "success");
-    } catch (e) {
-      mostrarNotificacao("Erro na busca por subestrutura", "error");
-    }
-  };
-
-  // =========================================================================
-  // 4. NOTIFICAÇÕES (TOASTS) E PREFERÊNCIAS
-  // =========================================================================
-  function mostrarNotificacao(mensagem, tipo = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${tipo}`;
-    toast.textContent = mensagem;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
-  }
-
-  function salvarPreferencias() {
-    localStorage.setItem('studioPrefs', JSON.stringify({
-      modoExibicaoAtual,
-      modeloAtual,
-      autoRotacaoAtiva
-    }));
-  }
-
-  function carregarPreferencias() {
-    const prefs = localStorage.getItem('studioPrefs');
-    if (!prefs) return;
-    try {
-      const p = JSON.parse(prefs);
-      if (p.modoExibicaoAtual) setStudioModoVisual(p.modoExibicaoAtual);
-      if (p.modeloAtual) setModelo3D(p.modeloAtual);
-      if (p.autoRotacaoAtiva) toggleAutoRotacao3D();
-    } catch (e) {}
-  }
-
-  // =========================================================================
-  // 5. MOTOR RDKIT WASM
+  // 4. MOTOR RDKIT WASM: CÁLCULO DE LIPINSKI, VEBER, GHOSE E PAINS
   // =========================================================================
   function carregarRDKitSobDemanda() {
     if (RDKitModuleInstance) return Promise.resolve(RDKitModuleInstance);
@@ -409,32 +308,37 @@
     if (ind) ind.style.display = visivel ? 'flex' : 'none';
   }
 
-  // =========================================================================
-  // 6. AVALIAÇÃO LIPINSKI
-  // =========================================================================
-  async function avaliarPerfilLipinski(smiles, molarMass) {
-    const elLogP = document.getElementById('descLogP');
-    const elTPSA = document.getElementById('descTPSA');
-    const elHBD_HBA = document.getElementById('descHBD_HBA');
-    const elRotB = document.getElementById('descRotB');
-    const elBadge = document.getElementById('lipinskiBadge');
+  /**
+   * Avaliação Quimiométrica Completa: Lipinski, Veber, Ghose e PAINS
+   */
+  async function avaliarQuimiometriaCompleta(smiles, molarMass, nomeComposto) {
+    const bLipinski = document.getElementById('badgeLipinski');
+    const bVeber = document.getElementById('badgeVeber');
+    const bGhose = document.getElementById('badgeGhose');
+    const bPAINS = document.getElementById('badgePAINS');
 
-    if (!elLogP || !elTPSA || !elHBD_HBA || !elBadge) return;
+    if (!bLipinski || !bVeber || !bGhose || !bPAINS) return;
 
+    // Reset para espécies inorgânicas ou sais puros
     if (!smiles || smiles === '--' || smiles.includes('.')) {
-      elLogP.textContent = '--';
-      elTPSA.textContent = '--';
-      elHBD_HBA.textContent = '-- / --';
-      elRotB.textContent = '--';
-      elBadge.className = 'lipinski-status-badge badge-pending';
-      elBadge.textContent = 'Inorgânico / Sal';
+      bLipinski.className = 'cadd-badge badge-pending';
+      bLipinski.textContent = 'Lipinski: N/A';
+      bVeber.className = 'cadd-badge badge-pending';
+      bVeber.textContent = 'Veber: N/A';
+      bGhose.className = 'cadd-badge badge-pending';
+      bGhose.textContent = 'Ghose: N/A';
+      bPAINS.className = 'cadd-badge badge-pending';
+      bPAINS.textContent = 'PAINS: N/A';
+      ultimoDossieCADD = null;
       return;
     }
 
     const rdkit = await carregarRDKitSobDemanda();
     if (!rdkit) {
-      elBadge.className = 'lipinski-status-badge badge-pending';
-      elBadge.textContent = 'Estimado';
+      bLipinski.textContent = 'Lipinski: Estimado';
+      bVeber.textContent = 'Veber: Estimado';
+      bGhose.textContent = 'Ghose: Estimado';
+      bPAINS.textContent = 'PAINS: Sem RDKit';
       return;
     }
 
@@ -443,44 +347,268 @@
       if (!mol) return;
 
       const desc = JSON.parse(mol.get_descriptors());
-      mol.delete();
 
+      // 1. Extração das propriedades fundamentais
       const mw = (typeof molarMass === 'number' && molarMass > 0) ? molarMass : (desc.exactmw || desc.amw || 0);
       const logp = desc.CrippenClogP !== undefined ? desc.CrippenClogP : (desc.clogp || 0);
+      const mr = desc.CrippenMR !== undefined ? desc.CrippenMR : 0;
       const tpsa = desc.tpsa !== undefined ? desc.tpsa : 0;
       const hbd = desc.lipinskiHBD !== undefined ? desc.lipinskiHBD : (desc.NumHBD || 0);
       const hba = desc.lipinskiHBA !== undefined ? desc.lipinskiHBA : (desc.NumHBA || 0);
       const rotb = desc.NumRotatableBonds !== undefined ? desc.NumRotatableBonds : 0;
+      const heavyAtoms = desc.NumHeavyAtoms !== undefined ? desc.NumHeavyAtoms : 0;
+      const csp3 = desc.FractionCSP3 !== undefined ? desc.FractionCSP3 : 0;
 
-      elLogP.textContent = logp.toFixed(2);
-      elTPSA.textContent = `${tpsa.toFixed(1)} Å²`;
-      elHBD_HBA.textContent = `${hbd} / ${hba}`;
-      elRotB.textContent = rotb;
+      // Cálculo de total de átomos com hidrogênios explícitos para Ghose
+      let totalAtoms = heavyAtoms;
+      try {
+        const molComH = rdkit.get_mol(smiles);
+        if (molComH) {
+          molComH.add_hs();
+          totalAtoms = molComH.get_num_atoms();
+          molComH.delete();
+        }
+      } catch (e) {}
 
-      let violacoes = 0;
-      if (mw > 500) violacoes++;
-      if (logp > 5.0) violacoes++;
-      if (hbd > 5) violacoes++;
-      if (hba > 10) violacoes++;
+      // 2. Análise de Lipinski (Ro5 - 1997)
+      const falhasLipinski = [];
+      if (mw > 500) falhasLipinski.push("Massa Molar > 500 Da");
+      if (logp > 5.0) falhasLipinski.push("LogP > 5.0");
+      if (hbd > 5) falhasLipinski.push("Doadores H > 5");
+      if (hba > 10) falhasLipinski.push("Aceptores H > 10");
 
-      if (violacoes === 0) {
-        elBadge.className = 'lipinski-status-badge badge-approved';
-        elBadge.textContent = 'Lipinski: Aprovado (0 viol.)';
-      } else if (violacoes === 1) {
-        elBadge.className = 'lipinski-status-badge badge-warning';
-        elBadge.textContent = 'Lipinski: 1 Violação';
+      if (falhasLipinski.length === 0) {
+        bLipinski.className = 'cadd-badge badge-approved';
+        bLipinski.textContent = 'Lipinski: Aprovado (0 viol.)';
+      } else if (falhasLipinski.length === 1) {
+        bLipinski.className = 'cadd-badge badge-warning';
+        bLipinski.textContent = 'Lipinski: 1 Violação';
       } else {
-        elBadge.className = 'lipinski-status-badge badge-rejected';
-        elBadge.textContent = `Lipinski: ${violacoes} Violações`;
+        bLipinski.className = 'cadd-badge badge-rejected';
+        bLipinski.textContent = `Lipinski: ${falhasLipinski.length} Violações`;
       }
+
+      // 3. Análise de Veber (2002 - Biodisponibilidade Oral)
+      const falhasVeber = [];
+      if (rotb > 10) falhasVeber.push("Ligações Rotacionáveis > 10");
+      if (tpsa > 140) falhasVeber.push("TPSA > 140 Å²");
+
+      if (falhasVeber.length === 0) {
+        bVeber.className = 'cadd-badge badge-approved';
+        bVeber.textContent = 'Veber: Aprovado';
+      } else {
+        bVeber.className = 'cadd-badge badge-rejected';
+        bVeber.textContent = `Veber: ${falhasVeber.length} Violações`;
+      }
+
+      // 4. Análise de Ghose (1999 - Drug-Likeness Filtrado)
+      const falhasGhose = [];
+      if (mw < 160 || mw > 480) falhasGhose.push("Massa Molar fora de 160-480 Da");
+      if (logp < -0.4 || logp > 5.6) falhasGhose.push("LogP fora de -0.4 a 5.6");
+      if (mr < 40 || mr > 130) falhasGhose.push("Refração Molar fora de 40-130");
+      if (totalAtoms < 20 || totalAtoms > 70) falhasGhose.push("Total de Átomos fora de 20-70");
+
+      if (falhasGhose.length === 0) {
+        bGhose.className = 'cadd-badge badge-approved';
+        bGhose.textContent = 'Ghose: Aprovado';
+      } else if (falhasGhose.length === 1) {
+        bGhose.className = 'cadd-badge badge-warning';
+        bGhose.textContent = 'Ghose: 1 Violação';
+      } else {
+        bGhose.className = 'cadd-badge badge-rejected';
+        bGhose.textContent = `Ghose: ${falhasGhose.length} Violações`;
+      }
+
+      // 5. Análise de PAINS (Varredura de Subestruturas SMARTS)
+      const alertasPAINS = [];
+      for (const p of PAINS_SUBSTRUCTURES) {
+        try {
+          const qmol = rdkit.get_qmol(p.smarts);
+          if (qmol) {
+            const match = mol.get_substruct_match(qmol);
+            qmol.delete();
+            if (match && match !== "{}" && match !== "" && match.includes("atoms")) {
+              alertasPAINS.push(p);
+            }
+          }
+        } catch (errSub) {}
+      }
+
+      if (alertasPAINS.length === 0) {
+        bPAINS.className = 'cadd-badge badge-approved';
+        bPAINS.textContent = 'PAINS: Limpo (0 Alertas)';
+      } else {
+        bPAINS.className = 'cadd-badge badge-rejected';
+        bPAINS.textContent = `PAINS: ${alertasPAINS.length} Alerta(s)!`;
+      }
+
+      mol.delete();
+
+      // Armazena dossiê estruturado para o modal interativo
+      ultimoDossieCADD = {
+        nome: nomeComposto,
+        smiles: smiles,
+        mw: mw,
+        logp: logp,
+        mr: mr,
+        tpsa: tpsa,
+        hbd: hbd,
+        hba: hba,
+        rotb: rotb,
+        heavyAtoms: heavyAtoms,
+        totalAtoms: totalAtoms,
+        csp3: csp3,
+        falhasLipinski: falhasLipinski,
+        falhasVeber: falhasVeber,
+        falhasGhose: falhasGhose,
+        alertasPAINS: alertasPAINS
+      };
+
     } catch (err) {
-      elBadge.className = 'lipinski-status-badge badge-pending';
-      elBadge.textContent = 'Indisponível';
+      console.warn("[CADD Quimiometria] Erro no cálculo:", err);
+      bLipinski.textContent = 'Lipinski: Erro';
+      bVeber.textContent = 'Veber: Erro';
+      bGhose.textContent = 'Ghose: Erro';
+      bPAINS.textContent = 'PAINS: Erro';
     }
   }
 
   // =========================================================================
-  // 7. RESOLUÇÃO DE COORDENADAS 3D
+  // 5. MODAL DE DOSSIÊ CADD INTERATIVO
+  // =========================================================================
+  window.abrirModalCADD = function() {
+    const modal = document.getElementById('caddModal');
+    const body = document.getElementById('caddModalBody');
+    const title = document.getElementById('caddModalTitle');
+    const sub = document.getElementById('caddModalSubtitle');
+
+    if (!modal || !body) return;
+    if (!ultimoDossieCADD) {
+      body.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 30px;">Selecione um composto farmacêutico orgânico para visualizar o perfil de drogabilidade in silico.</div>`;
+      modal.style.display = 'flex';
+      return;
+    }
+
+    const d = ultimoDossieCADD;
+    if (title) title.textContent = `📊 Dossiê CADD: ${d.nome}`;
+    if (sub) sub.textContent = `SMILES: ${d.smiles}`;
+
+    body.innerHTML = `
+      <div class="cadd-cards-grid">
+        
+        <!-- CARD 1: REGRA DE LIPINSKI (Ro5) -->
+        <div class="cadd-card">
+          <div class="cadd-card-title-row">
+            <span class="cadd-card-title">💊 Regra de Lipinski (Ro5 - 1997)</span>
+            <span class="cadd-badge ${d.falhasLipinski.length === 0 ? 'badge-approved' : d.falhasLipinski.length === 1 ? 'badge-warning' : 'badge-rejected'}">
+              ${d.falhasLipinski.length === 0 ? 'Conforme (0 viol.)' : d.falhasLipinski.length + ' Violação(ões)'}
+            </span>
+          </div>
+          <div class="cadd-param-list">
+            <div class="cadd-param-item ${d.mw > 500 ? 'violated' : ''}">
+              <span>Massa Molar (≤ 500 Da):</span>
+              <strong>${d.mw.toFixed(2)} Da</strong>
+            </div>
+            <div class="cadd-param-item ${d.logp > 5.0 ? 'violated' : ''}">
+              <span>LogP Crippen (≤ 5.0):</span>
+              <strong>${d.logp.toFixed(2)}</strong>
+            </div>
+            <div class="cadd-param-item ${d.hbd > 5 ? 'violated' : ''}">
+              <span>Doadores de H - HBD (≤ 5):</span>
+              <strong>${d.hbd}</strong>
+            </div>
+            <div class="cadd-param-item ${d.hba > 10 ? 'violated' : ''}">
+              <span>Aceptores de H - HBA (≤ 10):</span>
+              <strong>${d.hba}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: REGRA DE VEBER (BIODISPONIBILIDADE ORAL) -->
+        <div class="cadd-card">
+          <div class="cadd-card-title-row">
+            <span class="cadd-card-title">🔬 Regra de Veber (2002)</span>
+            <span class="cadd-badge ${d.falhasVeber.length === 0 ? 'badge-approved' : 'badge-rejected'}">
+              ${d.falhasVeber.length === 0 ? 'Alta Biodisponibilidade' : 'Baixa Biodisponibilidade'}
+            </span>
+          </div>
+          <div class="cadd-param-list">
+            <div class="cadd-param-item ${d.rotb > 10 ? 'violated' : ''}">
+              <span>Ligações Rotacionáveis (≤ 10):</span>
+              <strong>${d.rotb}</strong>
+            </div>
+            <div class="cadd-param-item ${d.tpsa > 140 ? 'violated' : ''}">
+              <span>Área Polar TPSA (≤ 140 Å²):</span>
+              <strong>${d.tpsa.toFixed(1)} Å²</strong>
+            </div>
+            <div class="cadd-param-item">
+              <span>Fração Carbonos sp³ (Fsp³):</span>
+              <strong>${d.csp3.toFixed(2)}</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 3: FILTRO DE GHOSE (DRUG-LIKENESS) -->
+        <div class="cadd-card">
+          <div class="cadd-card-title-row">
+            <span class="cadd-card-title">📐 Filtro de Ghose (1999)</span>
+            <span class="cadd-badge ${d.falhasGhose.length === 0 ? 'badge-approved' : d.falhasGhose.length === 1 ? 'badge-warning' : 'badge-rejected'}">
+              ${d.falhasGhose.length === 0 ? 'Aprovado' : d.falhasGhose.length + ' Violação(ões)'}
+            </span>
+          </div>
+          <div class="cadd-param-list">
+            <div class="cadd-param-item ${d.mw < 160 || d.mw > 480 ? 'violated' : ''}">
+              <span>Massa Molar (160 - 480 Da):</span>
+              <strong>${d.mw.toFixed(2)} Da</strong>
+            </div>
+            <div class="cadd-param-item ${d.logp < -0.4 || d.logp > 5.6 ? 'violated' : ''}">
+              <span>LogP (-0.4 a 5.6):</span>
+              <strong>${d.logp.toFixed(2)}</strong>
+            </div>
+            <div class="cadd-param-item ${d.mr < 40 || d.mr > 130 ? 'violated' : ''}">
+              <span>Refração Molar - MR (40 - 130):</span>
+              <strong>${d.mr.toFixed(2)}</strong>
+            </div>
+            <div class="cadd-param-item ${d.totalAtoms < 20 || d.totalAtoms > 70 ? 'violated' : ''}">
+              <span>Total de Átomos (20 - 70):</span>
+              <strong>${d.totalAtoms} átomos</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 4: FILTRO PAINS & FALSOS POSITIVOS -->
+        <div class="cadd-card">
+          <div class="cadd-card-title-row">
+            <span class="cadd-card-title">⚠️ Filtro PAINS (Baell et al.)</span>
+            <span class="cadd-badge ${d.alertasPAINS.length === 0 ? 'badge-approved' : 'badge-rejected'}">
+              ${d.alertasPAINS.length === 0 ? 'Isento de Interferência' : d.alertasPAINS.length + ' Alerta(s)'}
+            </span>
+          </div>
+          ${d.alertasPAINS.length === 0 ? `
+            <div class="pains-clean-box">
+              ✅ <strong>Nenhum grupo promíscuo detectado:</strong> A estrutura está livre de subestruturas clássicas de interferência em ensaios biológicos (*Pan-Assay Interference Compounds*).
+            </div>
+          ` : `
+            <div class="pains-alert-box">
+              <strong>Subestruturas Reativas Identificadas:</strong><br>
+              ${d.alertasPAINS.map(a => `• <strong>${a.nome}</strong>: ${a.risco}`).join('<br>')}
+            </div>
+          `}
+        </div>
+
+      </div>
+    `;
+
+    modal.style.display = 'flex';
+  };
+
+  window.fecharModalCADD = function() {
+    const modal = document.getElementById('caddModal');
+    if (modal) modal.style.display = 'none';
+  };
+
+  // =========================================================================
+  // 6. RESOLUÇÃO DE COORDENADAS 3D COM TRATAMENTO PARA MONOATÔMICOS
   // =========================================================================
   function validarConteudoSDF(sdfText) {
     if (!sdfText || typeof sdfText !== 'string') return false;
@@ -500,25 +628,6 @@ $$$$
 `;
   }
 
-  async function fetchComTimeout(url, tempoMs = 8000) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), tempoMs);
-    try {
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-      return res;
-    } catch (e) {
-      clearTimeout(timeout);
-      throw e;
-    }
-  }
-
-  function salvarEmCache(smiles, nome, sdf) {
-    if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarCompostoLocal === 'function') {
-      LabStorageEngine.salvarCompostoLocal(smiles || nome, { sdf: sdf, nome: nome });
-    }
-  }
-
   async function resolverCoordenadas3D(smiles, termoBusca) {
     if (!smiles && !termoBusca) return null;
 
@@ -536,7 +645,7 @@ $$$$
       try {
         exibirStatusRDKit(true, "Consultando PubChem 3D...");
         const urlSmiles = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(smiles)}/SDF?record_type=3d`;
-        const res = await fetchComTimeout(urlSmiles, 8000);
+        const res = await fetch(urlSmiles);
         if (res.ok) {
           const sdfText = await res.text();
           exibirStatusRDKit(false);
@@ -552,7 +661,7 @@ $$$$
     if (smiles && smiles !== '--') {
       try {
         exibirStatusRDKit(true, "Gerando coordenadas (CACTUS NIH)...");
-        const resC = await fetchComTimeout(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/file?format=sdf`, 8000);
+        const resC = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/file?format=sdf`);
         if (resC.ok) {
           const txtC = await resC.text();
           exibirStatusRDKit(false);
@@ -564,7 +673,7 @@ $$$$
       } catch (e) {}
     }
 
-    // 3. RDKit WASM ETKDG
+    // 3. RDKit WASM ETKDG (Conformação local)
     if (smiles && smiles !== '--' && !smiles.includes('.')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
@@ -589,12 +698,12 @@ $$$$
       }
     }
 
-    // 4. PubChem por Query
+    // 4. PubChem por Query/Nome
     if (termoBusca) {
       try {
         exibirStatusRDKit(true, "Consultando PubChem por nome...");
         const query = encodeURIComponent(termoBusca.trim());
-        const resN = await fetchComTimeout(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`, 8000);
+        const resN = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${query}/SDF?record_type=3d`);
         if (resN.ok) {
           const sdfText = await resN.text();
           exibirStatusRDKit(false);
@@ -610,8 +719,14 @@ $$$$
     return null;
   }
 
+  function salvarEmCache(smiles, nome, sdf) {
+    if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarCompostoLocal === 'function') {
+      LabStorageEngine.salvarCompostoLocal(smiles || nome, { sdf: sdf, nome: nome });
+    }
+  }
+
   // =========================================================================
-  // 8. CARREGAMENTO DE ESTRUTURA E RENDERIZAÇÃO
+  // 7. VIEWPORT 3D BLINDADO
   // =========================================================================
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
@@ -630,7 +745,7 @@ $$$$
     if (btnBench) btnBench.style.display = 'inline-flex';
 
     desenharEstrutura2DStudio(comp.smiles, comp.nome);
-    avaliarPerfilLipinski(comp.smiles, parseFloat(comp.molarMass));
+    avaliarQuimiometriaCompleta(comp.smiles, parseFloat(comp.molarMass), comp.nome);
 
     const sdf = await resolverCoordenadas3D(comp.smiles, comp.pubchemQuery || comp.nome);
     sdfCacheLocal = sdf;
@@ -781,7 +896,7 @@ $$$$
   }
 
   // =========================================================================
-  // 9. CONTROLES E MEDIÇÃO
+  // 8. CONTROLES E MEDIÇÃO GEOMÉTRICA (Å / °)
   // =========================================================================
   window.setModelo3D = function(modo) {
     modeloAtual = modo;
@@ -793,7 +908,6 @@ $$$$
     if (modeloCarregadoAtivo && modoExibicaoAtual === '3D') {
       aplicarEstiloVisual(modo);
     }
-    salvarPreferencias();
   };
 
   window.setStudioModoVisual = function(modo) {
@@ -821,7 +935,6 @@ $$$$
       if (v3D) v3D.style.display = 'none';
       if (v2D) v2D.style.display = 'flex';
     }
-    salvarPreferencias();
   };
 
   window.toggleModoMedicao = function() {
@@ -908,7 +1021,6 @@ $$$$
         else studioViewer.stopAnimate();
       } catch(e) {}
     }
-    salvarPreferencias();
   };
 
   window.resetarCamera3D = function() {
@@ -919,9 +1031,6 @@ $$$$
     }
   };
 
-  // =========================================================================
-  // 10. EXPORTAÇÃO
-  // =========================================================================
   window.exportarImagemPNG = function() {
     const nomeBase = (compostoSelecionado?.nome || 'molecula').replace(/\s+/g, '_');
     if (modoExibicaoAtual === '3D' && studioViewer && modeloCarregadoAtivo) {
@@ -942,7 +1051,7 @@ $$$$
 
   window.exportarArquivoSDF = function() {
     if (!sdfCacheLocal) {
-      mostrarNotificacao("Aguarde a conformação 3D ser calculada antes de exportar.", "error");
+      alert("Aguarde a conformação 3D ser calculada antes de exportar o arquivo SDF.");
       return;
     }
     const nomeBase = (compostoSelecionado?.nome || 'composto').replace(/\s+/g, '_');
@@ -955,88 +1064,6 @@ $$$$
     URL.revokeObjectURL(url);
   };
 
-  // =========================================================================
-  // 11. UPLOAD DE ARQUIVOS
-  // =========================================================================
-  window.carregarArquivoEstrutura = function(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const conteudo = e.target.result;
-      const extensao = file.name.split('.').pop().toLowerCase();
-
-      if (extensao === 'sdf' || extensao === 'mol') {
-        sdfCacheLocal = conteudo;
-        construirCena3D(conteudo);
-        mostrarNotificacao("Estrutura carregada com sucesso.", "success");
-      } else if (extensao === 'pdb') {
-        const container = document.getElementById('studioViewer3D');
-        if (container && window.$3Dmol) {
-          container.innerHTML = '';
-          studioViewer = $3Dmol.createViewer(container, { backgroundColor: '#020617' });
-          studioViewer.addModel(conteudo, 'pdb');
-          studioViewer.setStyle({}, { cartoon: { color: 'spectrum' } });
-          studioViewer.zoomTo();
-          studioViewer.render();
-          modeloCarregadoAtivo = true;
-          mostrarNotificacao("Estrutura PDB carregada.", "success");
-        }
-      } else {
-        mostrarNotificacao("Formato de arquivo não suportado.", "error");
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  // =========================================================================
-  // 12. EDITOR KETCHER (INTEGRAÇÃO BÁSICA)
-  // =========================================================================
-  window.abrirEditorKetcher = function() {
-    const modal = document.getElementById('ketcherModal');
-    if (modal) modal.style.display = 'block';
-    const frame = document.getElementById('ketcherFrame');
-    if (frame && compostoSelecionado) {
-      frame.onload = () => {
-        frame.contentWindow.postMessage({ type: 'open', smiles: compostoSelecionado.smiles }, '*');
-      };
-    }
-  };
-
-  window.fecharEditorKetcher = function() {
-    const modal = document.getElementById('ketcherModal');
-    if (modal) modal.style.display = 'none';
-  };
-
-  window.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'save') {
-      const novoSmiles = event.data.smiles;
-      fecharEditorKetcher();
-      if (novoSmiles && compostoSelecionado) {
-        const novoComp = {
-          ...compostoSelecionado,
-          id: 'custom_' + Date.now(),
-          chaveOriginal: 'custom_' + Date.now(),
-          nome: compostoSelecionado.nome + ' (editado)',
-          smiles: novoSmiles,
-          formula: '--',
-          molarMass: '--',
-          categoria: 'farmacos',
-          pubchemQuery: novoSmiles
-        };
-        compostosIndexados.unshift(novoComp);
-        compostosFiltrados.unshift(novoComp);
-        renderizarListaCompostos(true);
-        selecionarCompostoStudio(novoComp);
-        mostrarNotificacao("Molécula editada e adicionada à lista.", "success");
-      }
-    }
-  });
-
-  // =========================================================================
-  // 13. SELEÇÃO E TRANSFERÊNCIA
-  // =========================================================================
   window.selecionarCompostoStudio = function(comp, el) {
     compostoSelecionado = comp;
     document.querySelectorAll('.compound-item').forEach(i => i.classList.remove('selected'));
@@ -1082,7 +1109,7 @@ $$$$
   };
 
   // =========================================================================
-  // 14. INICIALIZAÇÃO
+  // 9. INICIALIZAÇÃO ASSÍNCRONA
   // =========================================================================
   async function inicializarStudioComPolling() {
     let tentativas = 0;
@@ -1095,10 +1122,6 @@ $$$$
 
     indexarAcervoCompleto();
     renderizarListaCompostos(true);
-    carregarPreferencias();
-
-    // Pré-carrega RDKit em segundo plano
-    carregarRDKitSobDemanda();
 
     if (compostosIndexados.length > 0) {
       const primeiro = document.querySelector('.compound-item');
@@ -1107,13 +1130,21 @@ $$$$
   }
 
   window.addEventListener('resize', () => {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (studioViewer && modeloCarregadoAtivo) {
-        studioViewer.resize();
-        studioViewer.render();
-      }
-    }, 200);
+    if (studioViewer && modeloCarregadoAtivo) {
+      studioViewer.resize();
+      studioViewer.render();
+    }
+  });
+
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.acao === 'studioAberto') {
+      setTimeout(() => {
+        if (studioViewer && modeloCarregadoAtivo) {
+          studioViewer.resize();
+          studioViewer.render();
+        }
+      }, 120);
+    }
   });
 
   if (document.readyState === 'loading') {
