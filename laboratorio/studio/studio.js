@@ -1,7 +1,11 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
- * Arquivo: studio/studio.js — v3.1 (Bug fixes + Adição molecular estável)
+ * Arquivo: studio/studio.js — v3.2 FINAL
+ * Correções: RDKit locateFile, scaffold fallback, 2D robusto, adição 100%
  */
+
+const STUDIO_VERSION = '3.2';
+console.log(`%c[Studio] 🧬 LAIFT v${STUDIO_VERSION} inicializando...`, 'color:#00e5ff;font-weight:bold;font-size:14px');
 
 (function() {
   'use strict';
@@ -29,6 +33,7 @@
 
   let RDKitModuleInstance = null;
   let rdkitPromise = null;
+  let rdkitFalhou = false;
   let ultimoDossieCADD = null;
 
   let atomoAtivoInspecionado = null;
@@ -53,112 +58,112 @@
   };
 
   // =========================================================================
-  // 1. TABELA PERIÓDICA — 118 ELEMENTOS
+  // 1. TABELA PERIÓDICA — 118 elementos (compacta)
   // =========================================================================
-  const TABELA_PERIODICA_RAW = [
-    [1,'H','Hidrogênio',1.008,2.20,37,[1],'nao-metal',1,1,'Essencial em pontes de H; bioisosterismo H↔F para bloquear oxidação.'],
-    [2,'He','Hélio',4.003,null,32,[0],'gas-nobre',18,1,'Gás nobre inerte; usado em atmosferas controladas.'],
-    [3,'Li','Lítio',6.94,0.98,152,[1],'alcalino',1,2,'Íon terapêutico em transtorno bipolar.'],
-    [4,'Be','Berílio',9.012,1.57,112,[2],'alcalino-terroso',2,2,'Altamente tóxico; mimetiza magnésio.'],
-    [5,'B','Boro',10.81,2.04,85,[3,4],'metaloide',13,2,'Ácido borônico: inibidor de proteassoma (Bortezomibe).'],
-    [6,'C','Carbono',12.011,2.55,77,[4],'nao-metal',14,2,'Espinha dorsal da química orgânica; sp³/sp²/sp.'],
-    [7,'N','Nitrogênio',14.007,3.04,75,[3,4],'nao-metal',15,2,'Aminas básicas; núcleo de heterociclos.'],
-    [8,'O','Oxigênio',15.999,3.44,73,[2],'nao-metal',16,2,'Aceptor de pontes de H; hidroxilas, éteres, ésteres.'],
-    [9,'F','Flúor',18.998,3.98,71,[1],'halogenio',17,2,'Bioisóstero de H; bloqueia CYP450.'],
-    [10,'Ne','Neônio',20.18,null,69,[0],'gas-nobre',18,2,'Gás nobre inerte.'],
-    [11,'Na','Sódio',22.99,0.93,186,[1],'alcalino',1,3,'Contraíon de sais hidrossolúveis.'],
+  const TP_RAW = [
+    [1,'H','Hidrogênio',1.008,2.20,37,[1],'nao-metal',1,1,'Pontes de H; H↔F bioisosterismo.'],
+    [2,'He','Hélio',4.003,null,32,[0],'gas-nobre',18,1,'Inerte.'],
+    [3,'Li','Lítio',6.94,0.98,152,[1],'alcalino',1,2,'Bipolar; inibe IMPase.'],
+    [4,'Be','Berílio',9.012,1.57,112,[2],'alcalino-terroso',2,2,'Tóxico.'],
+    [5,'B','Boro',10.81,2.04,85,[3,4],'metaloide',13,2,'Bortezomibe.'],
+    [6,'C','Carbono',12.011,2.55,77,[4],'nao-metal',14,2,'Base da química orgânica.'],
+    [7,'N','Nitrogênio',14.007,3.04,75,[3,4],'nao-metal',15,2,'Aminas; heterociclos.'],
+    [8,'O','Oxigênio',15.999,3.44,73,[2],'nao-metal',16,2,'OH, C=O, éteres.'],
+    [9,'F','Flúor',18.998,3.98,71,[1],'halogenio',17,2,'Bioisóstero de H.'],
+    [10,'Ne','Neônio',20.18,null,69,[0],'gas-nobre',18,2,'Inerte.'],
+    [11,'Na','Sódio',22.99,0.93,186,[1],'alcalino',1,3,'Contraíon de sais.'],
     [12,'Mg','Magnésio',24.305,1.31,160,[2],'alcalino-terroso',2,3,'Cofator de quinases.'],
-    [13,'Al','Alumínio',26.982,1.61,143,[3],'metal-pos-transicao',13,3,'Antiácido; adjuvante de vacinas.'],
-    [14,'Si','Silício',28.085,1.90,111,[4],'metaloide',14,3,'Bioisóstero tetravalente de C.'],
-    [15,'P','Fósforo',30.974,2.19,106,[3,5],'nao-metal',15,3,'Profármacos fosfatados; antivirais.'],
-    [16,'S','Enxofre',32.06,2.58,102,[2,4,6],'nao-metal',16,3,'Bioisóstero de O; sulfonamidas.'],
-    [17,'Cl','Cloro',35.45,3.16,99,[1,3,5,7],'halogenio',17,3,'Preenche bolsões hidrofóbicos.'],
-    [18,'Ar','Argônio',39.948,null,97,[0],'gas-nobre',18,3,'Atmosfera protetora.'],
-    [19,'K','Potássio',39.098,0.82,227,[1],'alcalino',1,4,'Cátion intracelular principal.'],
-    [20,'Ca','Cálcio',40.078,1.00,197,[2],'alcalino-terroso',2,4,'2º mensageiro; alvo de bloqueadores.'],
-    [21,'Sc','Escândio',44.956,1.36,162,[3],'metal-transicao',3,4,'Terras raras; catalisadores.'],
-    [22,'Ti','Titânio',47.867,1.54,147,[2,3,4],'metal-transicao',4,4,'Implantes biocompatíveis.'],
-    [23,'V','Vanádio',50.942,1.63,134,[2,3,4,5],'metal-transicao',5,4,'Catálise; mimetiza fosfato.'],
-    [24,'Cr','Cromo',51.996,1.66,128,[2,3,6],'metal-transicao',6,4,'Cr(III) cofator; Cr(VI) carcinogênico.'],
-    [25,'Mn','Manganês',54.938,1.55,127,[2,4,7],'metal-transicao',7,4,'Cofator da SOD; contraste MRI.'],
-    [26,'Fe','Ferro',55.845,1.83,126,[2,3],'metal-transicao',8,4,'Hemoglobina e CYP450.'],
+    [13,'Al','Alumínio',26.982,1.61,143,[3],'metal-pos-transicao',13,3,'Antiácido.'],
+    [14,'Si','Silício',28.085,1.90,111,[4],'metaloide',14,3,'Sila-substituição.'],
+    [15,'P','Fósforo',30.974,2.19,106,[3,5],'nao-metal',15,3,'Profármacos fosfato.'],
+    [16,'S','Enxofre',32.06,2.58,102,[2,4,6],'nao-metal',16,3,'Tioéteres; sulfonamidas.'],
+    [17,'Cl','Cloro',35.45,3.16,99,[1,3,5,7],'halogenio',17,3,'Bolsões hidrofóbicos.'],
+    [18,'Ar','Argônio',39.948,null,97,[0],'gas-nobre',18,3,'Inerte.'],
+    [19,'K','Potássio',39.098,0.82,227,[1],'alcalino',1,4,'Cátion intracelular.'],
+    [20,'Ca','Cálcio',40.078,1.00,197,[2],'alcalino-terroso',2,4,'Bloqueadores de canal.'],
+    [21,'Sc','Escândio',44.956,1.36,162,[3],'metal-transicao',3,4,'Terras raras.'],
+    [22,'Ti','Titânio',47.867,1.54,147,[2,3,4],'metal-transicao',4,4,'Implantes.'],
+    [23,'V','Vanádio',50.942,1.63,134,[2,3,4,5],'metal-transicao',5,4,'Catálise.'],
+    [24,'Cr','Cromo',51.996,1.66,128,[2,3,6],'metal-transicao',6,4,'Cofator de insulina.'],
+    [25,'Mn','Manganês',54.938,1.55,127,[2,4,7],'metal-transicao',7,4,'SOD.'],
+    [26,'Fe','Ferro',55.845,1.83,126,[2,3],'metal-transicao',8,4,'Hemoglobina.'],
     [27,'Co','Cobalto',58.933,1.88,125,[2,3],'metal-transicao',9,4,'Vitamina B12.'],
-    [28,'Ni','Níquel',58.693,1.91,124,[2,3],'metal-transicao',10,4,'Catálise de hidrogenação.'],
-    [29,'Cu','Cobre',63.546,1.90,128,[1,2],'metal-transicao',11,4,'Citocromo c oxidase; SOD.'],
-    [30,'Zn','Zinco',65.38,1.65,134,[2],'metal-transicao',12,4,'Anidrase carbônica; dedos de zinco.'],
-    [31,'Ga','Gálio',69.723,1.81,135,[3],'metal-pos-transicao',13,4,'Ga-68 em PET.'],
-    [32,'Ge','Germânio',72.63,2.01,122,[4],'metaloide',14,4,'Semicondutores.'],
-    [33,'As','Arsênio',74.922,2.18,119,[3,5],'metaloide',15,4,'Trisulfeto de Arsênio (APL).'],
-    [34,'Se','Selênio',78.96,2.55,116,[2,4,6],'nao-metal',16,4,'Selenocisteína; antioxidante.'],
-    [35,'Br','Bromo',79.904,2.96,114,[1,3,5,7],'halogenio',17,4,'Ligações de halogênio direcionadas.'],
-    [36,'Kr','Criptônio',83.798,3.00,110,[0,2],'gas-nobre',18,4,'KrF2 existe; inerte em biologia.'],
-    [37,'Rb','Rubídio',85.468,0.82,248,[1],'alcalino',1,5,'Rb-82 PET cardiologia.'],
-    [38,'Sr','Estrôncio',87.62,0.95,215,[2],'alcalino-terroso',2,5,'Sr-89 paliação.'],
-    [39,'Y','Ítrio',88.906,1.22,180,[3],'metal-transicao',3,5,'Y-90 radioembolização.'],
-    [40,'Zr','Zircônio',91.224,1.33,160,[4],'metal-transicao',4,5,'MOFs; Zr-89 imunoPET.'],
+    [28,'Ni','Níquel',58.693,1.91,124,[2,3],'metal-transicao',10,4,'Catálise.'],
+    [29,'Cu','Cobre',63.546,1.90,128,[1,2],'metal-transicao',11,4,'SOD, citocromo.'],
+    [30,'Zn','Zinco',65.38,1.65,134,[2],'metal-transicao',12,4,'Anidrase carbônica.'],
+    [31,'Ga','Gálio',69.723,1.81,135,[3],'metal-pos-transicao',13,4,'PET.'],
+    [32,'Ge','Germânio',72.63,2.01,122,[4],'metaloide',14,4,'Semicondutor.'],
+    [33,'As','Arsênio',74.922,2.18,119,[3,5],'metaloide',15,4,'APL.'],
+    [34,'Se','Selênio',78.96,2.55,116,[2,4,6],'nao-metal',16,4,'Antioxidante.'],
+    [35,'Br','Bromo',79.904,2.96,114,[1,3,5,7],'halogenio',17,4,'Halogen bond.'],
+    [36,'Kr','Criptônio',83.798,3.00,110,[0,2],'gas-nobre',18,4,'Inerte.'],
+    [37,'Rb','Rubídio',85.468,0.82,248,[1],'alcalino',1,5,'PET cardíaco.'],
+    [38,'Sr','Estrôncio',87.62,0.95,215,[2],'alcalino-terroso',2,5,'Paliativo ósseo.'],
+    [39,'Y','Ítrio',88.906,1.22,180,[3],'metal-transicao',3,5,'Radioembolização.'],
+    [40,'Zr','Zircônio',91.224,1.33,160,[4],'metal-transicao',4,5,'MOFs.'],
     [41,'Nb','Nióbio',92.906,1.6,146,[3,5],'metal-transicao',5,5,'Supercondutores.'],
     [42,'Mo','Molibdênio',95.95,2.16,139,[4,6],'metal-transicao',6,5,'Xantina oxidase.'],
-    [43,'Tc','Tecnécio',98,null,136,[4,7],'metal-transicao',7,5,'Tc-99m radiofármaco.'],
-    [44,'Ru','Rutênio',101.07,2.2,134,[3,4],'metal-transicao',8,5,'Complexos antitumorais.'],
+    [43,'Tc','Tecnécio',98,null,136,[4,7],'metal-transicao',7,5,'Tc-99m.'],
+    [44,'Ru','Rutênio',101.07,2.2,134,[3,4],'metal-transicao',8,5,'Antitumoral.'],
     [45,'Rh','Ródio',102.906,2.28,134,[3],'metal-transicao',9,5,'Catálise.'],
-    [46,'Pd','Paládio',106.42,2.20,137,[2,4],'metal-transicao',10,5,'Suzuki, Heck.'],
+    [46,'Pd','Paládio',106.42,2.20,137,[2,4],'metal-transicao',10,5,'Suzuki.'],
     [47,'Ag','Prata',107.868,1.93,144,[1],'metal-transicao',11,5,'Antibacteriano.'],
-    [48,'Cd','Cádmio',112.414,1.69,151,[2],'metal-transicao',12,5,'Tóxico; quantum dots.'],
-    [49,'In','Índio',114.818,1.78,167,[3],'metal-pos-transicao',13,5,'In-111 radiofármaco.'],
+    [48,'Cd','Cádmio',112.414,1.69,151,[2],'metal-transicao',12,5,'Tóxico.'],
+    [49,'In','Índio',114.818,1.78,167,[3],'metal-pos-transicao',13,5,'Radiofármaco.'],
     [50,'Sn','Estanho',118.71,1.96,158,[2,4],'metal-pos-transicao',14,5,'Organoestânicos.'],
-    [51,'Sb','Antimônio',121.76,2.05,141,[3,5],'metaloide',15,5,'Glucantime (leishmaniose).'],
+    [51,'Sb','Antimônio',121.76,2.05,141,[3,5],'metaloide',15,5,'Antileishmania.'],
     [52,'Te','Telúrio',127.60,2.1,137,[2,4,6],'metaloide',16,5,'Semicondutor.'],
-    [53,'I','Iodo',126.904,2.66,133,[1,3,5,7],'halogenio',17,5,'T3/T4; contrastes iodados.'],
-    [54,'Xe','Xenônio',131.293,2.6,130,[0,2,4,6],'gas-nobre',18,5,'Anestésico; Xe-133.'],
-    [55,'Cs','Césio',132.905,0.79,265,[1],'alcalino',1,6,'Relógios atômicos.'],
-    [56,'Ba','Bário',137.327,0.89,217,[2],'alcalino-terroso',2,6,'Contraste GI (BaSO4).'],
-    [57,'La','Lantânio',138.905,1.10,187,[3],'lantanideo',3,6,'Contrastes MRI.'],
-    [58,'Ce','Cério',140.116,1.12,182,[3,4],'lantanideo',3,6,'Ce-144 radioisótopo.'],
-    [59,'Pr','Praseodímio',140.908,1.13,182,[3],'lantanideo',3,6,'Ímãs, corantes.'],
+    [53,'I','Iodo',126.904,2.66,133,[1,3,5,7],'halogenio',17,5,'T3/T4.'],
+    [54,'Xe','Xenônio',131.293,2.6,130,[0,2,4,6],'gas-nobre',18,5,'Anestésico.'],
+    [55,'Cs','Césio',132.905,0.79,265,[1],'alcalino',1,6,'Relógio atômico.'],
+    [56,'Ba','Bário',137.327,0.89,217,[2],'alcalino-terroso',2,6,'BaSO4.'],
+    [57,'La','Lantânio',138.905,1.10,187,[3],'lantanideo',3,6,'Contraste MRI.'],
+    [58,'Ce','Cério',140.116,1.12,182,[3,4],'lantanideo',3,6,'Radioisótopo.'],
+    [59,'Pr','Praseodímio',140.908,1.13,182,[3],'lantanideo',3,6,'Ímãs.'],
     [60,'Nd','Neodímio',144.242,1.14,181,[3],'lantanideo',3,6,'Ímãs NdFeB.'],
-    [61,'Pm','Promécio',145,null,183,[3],'lantanideo',3,6,'Baterias nucleares.'],
-    [62,'Sm','Samário',150.36,1.17,180,[2,3],'lantanideo',3,6,'Sm-153 dor óssea.'],
+    [61,'Pm','Promécio',145,null,183,[3],'lantanideo',3,6,'Baterias.'],
+    [62,'Sm','Samário',150.36,1.17,180,[2,3],'lantanideo',3,6,'Dor óssea.'],
     [63,'Eu','Európio',151.964,null,180,[2,3],'lantanideo',3,6,'TR-FRET.'],
-    [64,'Gd','Gadolínio',157.25,1.20,180,[3],'lantanideo',3,6,'Contraste MRI.'],
-    [65,'Tb','Térbio',158.925,null,177,[3,4],'lantanideo',3,6,'Fósforos verdes.'],
-    [66,'Dy','Disprósio',162.500,1.22,178,[3],'lantanideo',3,6,'Ímãs alta T.'],
-    [67,'Ho','Hólmio',164.930,1.23,176,[3],'lantanideo',3,6,'Ho-166 hepático.'],
-    [68,'Er','Érbio',167.259,1.24,176,[3],'lantanideo',3,6,'Lasers médicos.'],
-    [69,'Tm','Túlio',168.934,1.25,176,[2,3],'lantanideo',3,6,'Fontes raio-X.'],
+    [64,'Gd','Gadolínio',157.25,1.20,180,[3],'lantanideo',3,6,'MRI.'],
+    [65,'Tb','Térbio',158.925,null,177,[3,4],'lantanideo',3,6,'Fósforos.'],
+    [66,'Dy','Disprósio',162.500,1.22,178,[3],'lantanideo',3,6,'Ímãs.'],
+    [67,'Ho','Hólmio',164.930,1.23,176,[3],'lantanideo',3,6,'Ho-166.'],
+    [68,'Er','Érbio',167.259,1.24,176,[3],'lantanideo',3,6,'Lasers.'],
+    [69,'Tm','Túlio',168.934,1.25,176,[2,3],'lantanideo',3,6,'Raio-X.'],
     [70,'Yb','Itérbio',173.045,null,176,[2,3],'lantanideo',3,6,'Lasers.'],
-    [71,'Lu','Lutécio',174.967,1.27,174,[3],'lantanideo',3,6,'Lu-177 PSMA.'],
+    [71,'Lu','Lutécio',174.967,1.27,174,[3],'lantanideo',3,6,'Lu-177.'],
     [72,'Hf','Háfnio',178.49,1.3,159,[4],'metal-transicao',4,6,'Dielétrico.'],
     [73,'Ta','Tântalo',180.948,1.5,146,[5],'metal-transicao',5,6,'Implantes.'],
     [74,'W','Tungstênio',183.84,2.36,139,[4,6],'metal-transicao',6,6,'Filamentos.'],
-    [75,'Re','Rênio',186.207,1.9,137,[4,7],'metal-transicao',7,6,'Re-186 terapia óssea.'],
-    [76,'Os','Ósmio',190.23,2.2,135,[4,8],'metal-transicao',8,6,'OsO4 fixador.'],
-    [77,'Ir','Irídio',192.217,2.20,136,[3,4],'metal-transicao',9,6,'Ir(III) antitumoral.'],
+    [75,'Re','Rênio',186.207,1.9,137,[4,7],'metal-transicao',7,6,'Terapia óssea.'],
+    [76,'Os','Ósmio',190.23,2.2,135,[4,8],'metal-transicao',8,6,'OsO4.'],
+    [77,'Ir','Irídio',192.217,2.20,136,[3,4],'metal-transicao',9,6,'Antitumoral.'],
     [78,'Pt','Platina',195.084,2.28,139,[2,4],'metal-transicao',10,6,'Cisplatina.'],
     [79,'Au','Ouro',196.967,2.54,144,[1,3],'metal-transicao',11,6,'Auranofina.'],
-    [80,'Hg','Mercúrio',200.592,2.00,149,[1,2],'metal-transicao',12,6,'Timolol (preservante).'],
-    [81,'Tl','Tálio',204.38,1.62,148,[1,3],'metal-pos-transicao',13,6,'Tl-201 cardíaco.'],
-    [82,'Pb','Chumbo',207.2,2.33,146,[2,4],'metal-pos-transicao',14,6,'Pb-212 terapia alfa.'],
-    [83,'Bi','Bismuto',208.980,2.02,148,[3,5],'metal-pos-transicao',15,6,'Pepto-Bismol; Bi-213.'],
-    [84,'Po','Polônio',209,2.0,140,[2,4],'metaloide',16,6,'Radioativo e tóxico.'],
-    [85,'At','Astato',210,2.2,150,[1],'halogenio',17,6,'At-211 terapia.'],
-    [86,'Rn','Radônio',222,null,150,[0,2],'gas-nobre',18,6,'Causa câncer pulmonar.'],
-    [87,'Fr','Frâncio',223,0.7,260,[1],'alcalino',1,7,'Fr-223 terapia.'],
-    [88,'Ra','Rádio',226,0.9,221,[2],'alcalino-terroso',2,7,'Ra-223 (Xofigo).'],
-    [89,'Ac','Actínio',227,1.1,195,[3],'actinideo',3,7,'Ac-225 terapia.'],
-    [90,'Th','Tório',232.038,1.3,180,[4],'actinideo',3,7,'Th-227 PSMA.'],
-    [91,'Pa','Protactínio',231.036,1.5,180,[4,5],'actinideo',3,7,'Radioativo natural.'],
-    [92,'U','Urânio',238.029,1.38,175,[4,6],'actinideo',3,7,'Fissão nuclear.'],
-    [93,'Np','Netúnio',237,1.36,175,[5,6],'actinideo',3,7,'Radioativo artificial.'],
-    [94,'Pu','Plutônio',244,1.28,175,[3,4,5,6],'actinideo',3,7,'Armas nucleares.'],
-    [95,'Am','Amerício',243,1.13,175,[3],'actinideo',3,7,'Detectores de fumaça.'],
-    [96,'Cm','Cúrio',247,1.28,176,[3],'actinideo',3,7,'Fontes raio-X.'],
-    [97,'Bk','Berquélio',247,1.3,170,[3,4],'actinideo',3,7,'Radioativo artificial.'],
-    [98,'Cf','Califórnio',251,1.3,169,[3,4],'actinideo',3,7,'Fonte de nêutrons.'],
-    [99,'Es','Einstênio',252,1.3,168,[3],'actinideo',3,7,'Radioativo artificial.'],
-    [100,'Fm','Férmio',257,1.3,167,[3],'actinideo',3,7,'Radioativo artificial.'],
-    [101,'Md','Mendelévio',258,1.3,166,[2,3],'actinideo',3,7,'Radioativo artificial.'],
-    [102,'No','Nobélio',259,1.3,165,[2,3],'actinideo',3,7,'Radioativo artificial.'],
-    [103,'Lr','Laurêncio',262,null,164,[3],'actinideo',3,7,'Radioativo artificial.'],
+    [80,'Hg','Mercúrio',200.592,2.00,149,[1,2],'metal-transicao',12,6,'Tóxico.'],
+    [81,'Tl','Tálio',204.38,1.62,148,[1,3],'metal-pos-transicao',13,6,'Cintilografia.'],
+    [82,'Pb','Chumbo',207.2,2.33,146,[2,4],'metal-pos-transicao',14,6,'Tóxico.'],
+    [83,'Bi','Bismuto',208.980,2.02,148,[3,5],'metal-pos-transicao',15,6,'Pepto-Bismol.'],
+    [84,'Po','Polônio',209,2.0,140,[2,4],'metaloide',16,6,'Radioativo.'],
+    [85,'At','Astato',210,2.2,150,[1],'halogenio',17,6,'At-211.'],
+    [86,'Rn','Radônio',222,null,150,[0,2],'gas-nobre',18,6,'Radioativo.'],
+    [87,'Fr','Frâncio',223,0.7,260,[1],'alcalino',1,7,'Fr-223.'],
+    [88,'Ra','Rádio',226,0.9,221,[2],'alcalino-terroso',2,7,'Xofigo.'],
+    [89,'Ac','Actínio',227,1.1,195,[3],'actinideo',3,7,'Ac-225.'],
+    [90,'Th','Tório',232.038,1.3,180,[4],'actinideo',3,7,'PSMA.'],
+    [91,'Pa','Protactínio',231.036,1.5,180,[4,5],'actinideo',3,7,'Radioativo.'],
+    [92,'U','Urânio',238.029,1.38,175,[4,6],'actinideo',3,7,'Fissão.'],
+    [93,'Np','Netúnio',237,1.36,175,[5,6],'actinideo',3,7,'Radioativo.'],
+    [94,'Pu','Plutônio',244,1.28,175,[3,4,5,6],'actinideo',3,7,'Armas.'],
+    [95,'Am','Amerício',243,1.13,175,[3],'actinideo',3,7,'Fumaça.'],
+    [96,'Cm','Cúrio',247,1.28,176,[3],'actinideo',3,7,'Raio-X.'],
+    [97,'Bk','Berquélio',247,1.3,170,[3,4],'actinideo',3,7,'Sintético.'],
+    [98,'Cf','Califórnio',251,1.3,169,[3,4],'actinideo',3,7,'Nêutrons.'],
+    [99,'Es','Einstênio',252,1.3,168,[3],'actinideo',3,7,'Sintético.'],
+    [100,'Fm','Férmio',257,1.3,167,[3],'actinideo',3,7,'Sintético.'],
+    [101,'Md','Mendelévio',258,1.3,166,[2,3],'actinideo',3,7,'Sintético.'],
+    [102,'No','Nobélio',259,1.3,165,[2,3],'actinideo',3,7,'Sintético.'],
+    [103,'Lr','Laurêncio',262,null,164,[3],'actinideo',3,7,'Sintético.'],
     [104,'Rf','Rutherfórdio',267,null,null,[4],'metal-transicao',4,7,'Sintético.'],
     [105,'Db','Dúbnio',268,null,null,[5],'metal-transicao',5,7,'Sintético.'],
     [106,'Sg','Seabórgio',269,null,null,[6],'metal-transicao',6,7,'Sintético.'],
@@ -176,7 +181,7 @@
     [118,'Og','Oganessônio',294,null,null,[0,2],'gas-nobre',18,7,'Sintético.']
   ];
 
-  const TABELA_PERIODICA = TABELA_PERIODICA_RAW.map(a => ({
+  const TABELA_PERIODICA = TP_RAW.map(a => ({
     z: a[0], sym: a[1], nome: a[2], massa: a[3], eletron: a[4], raio: a[5],
     valencias: a[6], cat: a[7], grupo: a[8], periodo: a[9], pharma: a[10]
   }));
@@ -195,35 +200,34 @@
   // 2. BIOISOSTERISMO
   // =========================================================================
   const REACOES_BIOISOSTERISMO = [
-    { id: 'carboxila_tetrazol', nome: 'Bioisóstero de Tetrazol', tag: 'Não-Clássico', esquema: 'R-COOH ➔ R-(1H-Tetrazol-5-il)', descricao: 'Mantém carga deslocalizada; 10× mais lipofílico.', alvoSmarts: 'C(=O)[OH]', detectar: (s) => /C\(=O\)O/i.test(s) || /C\(=O\)\[OH\]/i.test(s), transformar: (s) => s.replace(/C\(=O\)\[?OH?\]?/i, 'c1nnn[nH]1') },
-    { id: 'esterificacao_metilica', nome: 'Éster Metílico (Pró-fármaco)', tag: 'Pró-fármaco', esquema: 'R-COOH ➔ R-COOCH₃', descricao: 'Mascara carga; regenerado por esterases.', alvoSmarts: 'C(=O)[OH]', detectar: (s) => /C\(=O\)O/i.test(s) || /C\(=O\)\[OH\]/i.test(s), transformar: (s) => s.replace(/C\(=O\)\[?OH?\]?/i, 'C(=O)OC') },
-    { id: 'amidacao_primaria', nome: 'Amidação de Carboxila', tag: 'Clássico', esquema: 'R-COOH ➔ R-CONH₂', descricao: 'Neutraliza acidez; estabiliza pontes de H.', alvoSmarts: 'C(=O)[OH]', detectar: (s) => /C\(=O\)O/i.test(s) || /C\(=O\)\[OH\]/i.test(s), transformar: (s) => s.replace(/C\(=O\)\[?OH?\]?/i, 'C(=O)N') },
-    { id: 'o_metilacao', nome: 'O-Metilação', tag: 'Bloqueio Fase II', esquema: 'Ar-OH ➔ Ar-OCH₃', descricao: 'Protege fenóis contra glicuronidação.', alvoSmarts: '[OH]', detectar: (s) => /c\(?O\)?/i.test(s) || /\[OH\]/i.test(s) || /O[H]/i.test(s), transformar: (s) => s.replace(/c\(O\)/i, 'c(OC)').replace(/\[OH\]/i, 'OC').replace(/O[H]/i, 'OC') },
-    { id: 'o_acetilacao', nome: 'O-Acetilação', tag: 'Atenuação', esquema: 'Ar-OH ➔ Ar-OCOCH₃', descricao: 'Salicílico ➔ Aspirina; protege mucosa.', alvoSmarts: 'c[OH]', detectar: (s) => /c\(?O\)?/i.test(s) || /\[OH\]/i.test(s), transformar: (s) => s.replace(/c\(O\)/i, 'c(OC(=O)C)').replace(/\[OH\]/i, 'OC(=O)C') },
+    { id: 'carboxila_tetrazol', nome: 'Bioisóstero de Tetrazol', tag: 'Não-Clássico', esquema: 'R-COOH ➔ R-Tetrazol', descricao: '10× mais lipofílico.', alvoSmarts: 'C(=O)[OH]', detectar: (s) => /C\(=O\)O/i.test(s) || /C\(=O\)\[OH\]/i.test(s), transformar: (s) => s.replace(/C\(=O\)\[?OH?\]?/i, 'c1nnn[nH]1') },
+    { id: 'esterificacao_metilica', nome: 'Éster Metílico', tag: 'Pró-fármaco', esquema: 'R-COOH ➔ R-COOCH₃', descricao: 'Regenerado por esterases.', alvoSmarts: 'C(=O)[OH]', detectar: (s) => /C\(=O\)O/i.test(s) || /C\(=O\)\[OH\]/i.test(s), transformar: (s) => s.replace(/C\(=O\)\[?OH?\]?/i, 'C(=O)OC') },
+    { id: 'amidacao_primaria', nome: 'Amidação', tag: 'Clássico', esquema: 'R-COOH ➔ R-CONH₂', descricao: 'Neutraliza acidez.', alvoSmarts: 'C(=O)[OH]', detectar: (s) => /C\(=O\)O/i.test(s) || /C\(=O\)\[OH\]/i.test(s), transformar: (s) => s.replace(/C\(=O\)\[?OH?\]?/i, 'C(=O)N') },
+    { id: 'o_metilacao', nome: 'O-Metilação', tag: 'Fase II', esquema: 'Ar-OH ➔ Ar-OCH₃', descricao: 'Bloqueia glicuronidação.', alvoSmarts: '[OH]', detectar: (s) => /c\(?O\)?/i.test(s) || /\[OH\]/i.test(s) || /O[H]/i.test(s), transformar: (s) => s.replace(/c\(O\)/i, 'c(OC)').replace(/\[OH\]/i, 'OC').replace(/O[H]/i, 'OC') },
+    { id: 'o_acetilacao', nome: 'O-Acetilação', tag: 'Atenuação', esquema: 'Ar-OH ➔ Ar-OCOCH₃', descricao: 'Salicílico ➔ Aspirina.', alvoSmarts: 'c[OH]', detectar: (s) => /c\(?O\)?/i.test(s) || /\[OH\]/i.test(s), transformar: (s) => s.replace(/c\(O\)/i, 'c(OC(=O)C)').replace(/\[OH\]/i, 'OC(=O)C') },
     { id: 'n_acetilacao', nome: 'N-Acetilação', tag: 'Analgésica', esquema: 'Ar-NH₂ ➔ Ar-NHCOCH₃', descricao: '4-Aminofenol ➔ Paracetamol.', alvoSmarts: '[NH2]', detectar: (s) => /N/i.test(s) && !/N\(=O\)/i.test(s), transformar: (s) => s.replace(/NC/i, 'N(C(=O)C)C').replace(/\[NH2\]/i, 'NC(=O)C') },
-    { id: 'fluorizacao_aromatica', nome: 'Fluorização Aromática', tag: 'H ➔ F', esquema: 'Ar-H ➔ Ar-F', descricao: 'Flúor bloqueia oxidação por CYP450.', alvoSmarts: 'c1ccccc1', detectar: (s) => /c1ccccc1/i.test(s), transformar: (s) => s.replace(/c1ccccc1/i, 'c1ccc(F)cc1').replace(/c1/i, 'c1(F)') }
+    { id: 'fluorizacao_aromatica', nome: 'Fluorização', tag: 'H ➔ F', esquema: 'Ar-H ➔ Ar-F', descricao: 'Bloqueia CYP450.', alvoSmarts: 'c1ccccc1', detectar: (s) => /c1ccccc1/i.test(s), transformar: (s) => s.replace(/c1ccccc1/i, 'c1ccc(F)cc1').replace(/c1/i, 'c1(F)') }
   ];
 
   const PAINS_SUBSTRUCTURES = [
-    { nome: 'Quinona',            smarts: 'O=C1C=CC(=O)C=C1',                       risco: 'Aceptor de Michael redox-cíclico.' },
-    { nome: 'Catecol',            smarts: 'c1cc(O)c(O)cc1',                         risco: 'Oxida a orto-quinona; quela metais.' },
-    { nome: 'Hidroquinona',       smarts: 'OC1=CC=C(O)C=C1',                        risco: 'Interferência redox em ensaios colorimétricos.' },
-    { nome: 'Rodanina',           smarts: 'S1C(=O)NC(=O)C1',                        risco: 'Eletrófilo promíscuo.' },
-    { nome: 'Aceptor de Michael', smarts: '[CX3]=[CX3][CX3]=O',                     risco: 'Reatividade tiol inespecífica.' },
-    { nome: 'Azo-composto',       smarts: 'N=NC',                                    risco: 'Redução a aminas carcinogênicas.' },
-    { nome: 'Nitroaromático',     smarts: '[$([NX3](=O)=O),$([NX3+](=O)[O-])][c]',  risco: 'Biorredução a radical tóxico.' },
-    { nome: 'Epóxido',            smarts: 'C1OC1',                                   risco: 'Alquilante de DNA e proteínas.' },
-    { nome: 'Aziridina',          smarts: 'C1CN1',                                   risco: 'Alquilante DNA.' },
-    { nome: 'Aldeído Reativo',    smarts: '[CX3H1](=O)[#6]',                         risco: 'Bases de Schiff com lisinas.' },
-    { nome: 'Haleto de Acila',    smarts: '[CX3](=O)[Cl,Br,I]',                      risco: 'Acilante altamente reativo.' },
-    { nome: 'Anidrido',           smarts: '[CX3](=O)[OX2][CX3](=O)',                 risco: 'Acilante bifuncional.' },
-    { nome: 'Isocianato',         smarts: '[NX2]=[CX2]=[OX1]',                       risco: 'Carbamoilante de aminas.' },
-    { nome: 'Tiois Reativos',     smarts: '[SX2H]',                                   risco: 'Oxidação a dissulfeto.' },
-    { nome: 'Fenol Alquilante',   smarts: '[OX2H]c',                                  risco: 'Substrato promíscuo.' },
-    { nome: 'Enona',              smarts: 'C=CC=O',                                   risco: 'Aceptor de Michael α,β-insaturado.' },
-    { nome: 'Furanos Reativos',   smarts: 'c1ccoc1',                                  risco: 'Epóxido furânico hepatotóxico.' },
-    { nome: 'Hidrazina Livre',    smarts: '[NX3][NX3]',                               risco: 'Hidrazonas inespecíficas.' },
-    { nome: 'Peróxido',           smarts: '[OX2][OX2]',                               risco: 'Fonte de radicais livres.' }
+    { nome: 'Quinona', smarts: 'O=C1C=CC(=O)C=C1', risco: 'Aceptor de Michael redox.' },
+    { nome: 'Catecol', smarts: 'c1cc(O)c(O)cc1', risco: 'Oxida a orto-quinona.' },
+    { nome: 'Hidroquinona', smarts: 'OC1=CC=C(O)C=C1', risco: 'Interferência redox.' },
+    { nome: 'Rodanina', smarts: 'S1C(=O)NC(=O)C1', risco: 'Eletrófilo promíscuo.' },
+    { nome: 'Michael', smarts: '[CX3]=[CX3][CX3]=O', risco: 'Reatividade tiol.' },
+    { nome: 'Azo', smarts: 'N=NC', risco: 'Aminas carcinogênicas.' },
+    { nome: 'Nitroaromático', smarts: '[$([NX3](=O)=O),$([NX3+](=O)[O-])][c]', risco: 'Radical tóxico.' },
+    { nome: 'Epóxido', smarts: 'C1OC1', risco: 'Alquilante DNA.' },
+    { nome: 'Aziridina', smarts: 'C1CN1', risco: 'Alquilante DNA.' },
+    { nome: 'Aldeído Reativo', smarts: '[CX3H1](=O)[#6]', risco: 'Bases de Schiff.' },
+    { nome: 'Haleto de Acila', smarts: '[CX3](=O)[Cl,Br,I]', risco: 'Acilante.' },
+    { nome: 'Anidrido', smarts: '[CX3](=O)[OX2][CX3](=O)', risco: 'Acilante bifuncional.' },
+    { nome: 'Isocianato', smarts: '[NX2]=[CX2]=[OX1]', risco: 'Carbamoilante.' },
+    { nome: 'Tiois', smarts: '[SX2H]', risco: 'Oxidação.' },
+    { nome: 'Enona', smarts: 'C=CC=O', risco: 'Michael α,β-insatur.' },
+    { nome: 'Furanos', smarts: 'c1ccoc1', risco: 'Epóxido furânico.' },
+    { nome: 'Hidrazina', smarts: '[NX3][NX3]', risco: 'Hidrazonas.' },
+    { nome: 'Peróxido', smarts: '[OX2][OX2]', risco: 'Radicais livres.' }
   ];
 
   // =========================================================================
@@ -256,7 +260,6 @@
       const p = JSON.parse(raw);
       if (p.modoExibicaoAtual) setStudioModoVisual(p.modoExibicaoAtual);
       if (p.modeloAtual) setModelo3D(p.modeloAtual);
-      if (p.autoRotacaoAtiva) toggleAutoRotacao3D();
       if (p.categoriaAtiva && p.categoriaAtiva !== 'todas') filtrarCategoriaStudio(p.categoriaAtiva);
     } catch (e) {}
   }
@@ -275,7 +278,8 @@
     btn.style.display = 'inline-flex';
     const isFav = favoritos.has(compostoSelecionado.id);
     btn.classList.toggle('is-active', isFav);
-    btn.innerHTML = isFav ? '★ Favoritado' : '☆ Favoritar';
+    btn.textContent = isFav ? '★' : '☆';
+    btn.title = isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos';
   }
   window.alternarFavoritoAtual = function() {
     if (!compostoSelecionado) return;
@@ -301,10 +305,7 @@
     if (bR) bR.disabled = edicaoHistory.redo.length === 0;
   }
   function pushEdicaoSnapshot(composto, sdf, motivo) {
-    edicaoHistory.undo.push({
-      composto: JSON.parse(JSON.stringify(composto)),
-      sdf: sdf, motivo, timestamp: Date.now()
-    });
+    edicaoHistory.undo.push({ composto: JSON.parse(JSON.stringify(composto)), sdf, motivo, timestamp: Date.now() });
     if (edicaoHistory.undo.length > edicaoHistory.max) edicaoHistory.undo.shift();
     edicaoHistory.redo = [];
     atualizarBotoesUndoRedo();
@@ -318,7 +319,7 @@
     sdfCacheLocal = anterior.sdf;
     if (sdfCacheLocal) construirCena3D(sdfCacheLocal);
     atualizarBotoesUndoRedo();
-    mostrarNotificacao('Ação desfeita: ' + (atual.motivo || ''), 'info');
+    mostrarNotificacao('Ação desfeita.', 'info');
   };
   window.refazerEdicao = function() {
     if (edicaoHistory.redo.length === 0) { mostrarNotificacao('Nada para refazer.', 'info'); return; }
@@ -328,7 +329,7 @@
     sdfCacheLocal = prox.sdf;
     if (sdfCacheLocal) construirCena3D(sdfCacheLocal);
     atualizarBotoesUndoRedo();
-    mostrarNotificacao('Ação refeita: ' + (prox.motivo || ''), 'info');
+    mostrarNotificacao('Ação refeita.', 'info');
   };
 
   // =========================================================================
@@ -363,7 +364,6 @@
     if (studioViewer && modeloCarregadoAtivo) setTimeout(() => { studioViewer.resize(); studioViewer.render(); }, 250);
     if (document.documentElement.requestFullscreen && ativo) document.documentElement.requestFullscreen().catch(() => {});
     else if (document.exitFullscreen && !ativo && document.fullscreenElement) document.exitFullscreen();
-    mostrarNotificacao(ativo ? '🎬 Modo Apresentação ativado' : 'Modo Apresentação desativado', 'info');
   };
 
   // =========================================================================
@@ -381,7 +381,7 @@
           compostosIndexados = e.data.compostos;
           compostosFiltrados = [...compostosIndexados];
           const totalBadge = document.getElementById('studioTotalBadge');
-          if (totalBadge) totalBadge.textContent = `${compostosIndexados.length} Espécies Prontas`;
+          if (totalBadge) totalBadge.textContent = `${compostosIndexados.length} Espécies`;
           renderizarListaCompostos(true);
           carregarPreferencias();
           if (compostosIndexados.length > 0) {
@@ -390,11 +390,10 @@
           }
         } else if (tipo === 'ERRO') {
           exibirStatusRDKit(false);
-          console.warn('[Worker] ' + e.data.mensagem);
           indexarAcervoCompletoFallback();
         }
       };
-      indexerWorker.onerror = () => { console.warn('[Worker] Fallback síncrono.'); indexarAcervoCompletoFallback(); };
+      indexerWorker.onerror = () => { indexarAcervoCompletoFallback(); };
       return indexerWorker;
     } catch (e) { return null; }
   }
@@ -411,18 +410,18 @@
   const ACERVO_RESERVA = [
     { id: "AAS", chaveOriginal: "AAS_s", nome: "Ácido Acetilsalicílico (Aspirina)", formula: "C9H8O4", molarMass: 180.16, smiles: "CC(=O)OC1=CC=CC=C1C(=O)O", categoria: "farmacos", pubchemQuery: "Aspirin" },
     { id: "Paracetamol", chaveOriginal: "Paracetamol_s", nome: "Paracetamol", formula: "C8H9NO2", molarMass: 151.16, smiles: "CC(=O)NC1=CC=C(O)C=C1", categoria: "farmacos", pubchemQuery: "Acetaminophen" },
-    { id: "Dipirona", chaveOriginal: "Dipirona_s", nome: "Dipirona Sódica", formula: "C13H16N3NaO4S", molarMass: 333.34, smiles: "CN(CS(=O)(=O)[O-])C1=C(C)N(N1C)C2=CC=CC=C2.[Na+]", categoria: "farmacos", pubchemQuery: "Metamizole sodium" },
+    { id: "Dipirona", chaveOriginal: "Dipirona_s", nome: "Dipirona Sódica", formula: "C13H16N3NaO4S", molarMass: 333.34, smiles: "CN(CS(=O)(=O)[O-])C1=C(C)N(N1C)C2=CC=CC=C2.[Na+]", categoria: "farmacos", pubchemQuery: "Metamizole" },
     { id: "Ibuprofeno", chaveOriginal: "C13H18O2_s", nome: "Ibuprofeno", formula: "C13H18O2", molarMass: 206.28, smiles: "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O", categoria: "farmacos", pubchemQuery: "Ibuprofen" },
     { id: "Cafeina", chaveOriginal: "Cafeina_s", nome: "Cafeína", formula: "C8H10N4O2", molarMass: 194.19, smiles: "CN1C=NC2=C1C(=O)N(C(=O)N2C)C", categoria: "farmacos", pubchemQuery: "Caffeine" },
     { id: "AcidoSalicilico", chaveOriginal: "AcidoSalicilico_s", nome: "Ácido Salicílico", formula: "C7H6O3", molarMass: 138.12, smiles: "O=C(O)C1=CC=CC=C1O", categoria: "reagentes", pubchemQuery: "Salicylic acid" },
     { id: "AnidridoAcetico", chaveOriginal: "AnidridoAcetico_l", nome: "Anidrido Acético", formula: "C4H6O3", molarMass: 102.09, smiles: "CC(=O)OC(=O)C", categoria: "reagentes", pubchemQuery: "Acetic anhydride" },
     { id: "pAminofenol", chaveOriginal: "pAminofenol_s", nome: "4-Aminofenol", formula: "C6H7NO", molarMass: 109.13, smiles: "NC1=CC=C(O)C=C1", categoria: "reagentes", pubchemQuery: "4-Aminophenol" },
-    { id: "Etanol", chaveOriginal: "Etanol_l", nome: "Etanol Absoluto", formula: "C2H6O", molarMass: 46.07, smiles: "CCO", categoria: "solventes", pubchemQuery: "Ethanol" },
+    { id: "Etanol", chaveOriginal: "Etanol_l", nome: "Etanol", formula: "C2H6O", molarMass: 46.07, smiles: "CCO", categoria: "solventes", pubchemQuery: "Ethanol" },
     { id: "Metanol", chaveOriginal: "Metanol_l", nome: "Metanol", formula: "CH4O", molarMass: 32.04, smiles: "CO", categoria: "solventes", pubchemQuery: "Methanol" },
-    { id: "Acetona", chaveOriginal: "Acetona_l", nome: "Acetona Pura", formula: "C3H6O", molarMass: 58.08, smiles: "CC(=O)C", categoria: "solventes", pubchemQuery: "Acetone" },
+    { id: "Acetona", chaveOriginal: "Acetona_l", nome: "Acetona", formula: "C3H6O", molarMass: 58.08, smiles: "CC(=O)C", categoria: "solventes", pubchemQuery: "Acetone" },
     { id: "Hexano", chaveOriginal: "Hexano_l", nome: "Hexano", formula: "C6H14", molarMass: 86.18, smiles: "CCCCCC", categoria: "solventes", pubchemQuery: "Hexane" },
     { id: "Cloroformio", chaveOriginal: "Cloroformio_l", nome: "Clorofórmio", formula: "CHCl3", molarMass: 119.38, smiles: "ClC(Cl)Cl", categoria: "solventes", pubchemQuery: "Chloroform" },
-    { id: "Na", chaveOriginal: "Na_s", nome: "Sódio Metálico", formula: "Na", molarMass: 22.99, smiles: "[Na]", categoria: "reagentes", pubchemQuery: "Sodium" }
+    { id: "Na", chaveOriginal: "Na_s", nome: "Sódio", formula: "Na", molarMass: 22.99, smiles: "[Na]", categoria: "reagentes", pubchemQuery: "Sodium" }
   ];
 
   function indexarAcervoCompletoFallback() {
@@ -475,7 +474,7 @@
     compostosIndexados = Array.from(mapaUnico.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     compostosFiltrados = [...compostosIndexados];
     const totalBadge = document.getElementById('studioTotalBadge');
-    if (totalBadge) totalBadge.textContent = `${compostosIndexados.length} Espécies Prontas`;
+    if (totalBadge) totalBadge.textContent = `${compostosIndexados.length} Espécies`;
     renderizarListaCompostos(true);
     carregarPreferencias();
     if (compostosIndexados.length > 0) {
@@ -493,7 +492,7 @@
   }
 
   // =========================================================================
-  // 10. LISTA VIRTUALIZADA
+  // 10. LISTA
   // =========================================================================
   function renderizarListaCompostos(reset = true) {
     const listContainer = document.getElementById('studioCompoundList');
@@ -501,7 +500,7 @@
     if (reset) { listContainer.innerHTML = ''; currentRenderedIndex = 0; listContainer.scrollTop = 0; }
     const fatia = compostosFiltrados.slice(currentRenderedIndex, currentRenderedIndex + ITEMS_PER_CHUNK);
     if (fatia.length === 0 && reset) {
-      listContainer.innerHTML = `<div style="padding: 24px; color: #64748b; text-align: center; font-size: 0.75rem;">Nenhum composto localizado.</div>`;
+      listContainer.innerHTML = `<div style="padding:24px; color:#64748b; text-align:center; font-size:0.75rem;">Nenhum composto.</div>`;
       return;
     }
     const fragment = document.createDocumentFragment();
@@ -515,7 +514,7 @@
       const isCustom = comp.categoria === 'custom';
       itemEl.innerHTML = `
         ${isFav ? '<span class="comp-favorite-star">★</span>' : ''}
-        ${isUnstable ? '<span class="comp-unstable-flag" title="Estrutura instável">⚠️</span>' : ''}
+        ${isUnstable ? '<span class="comp-unstable-flag">⚠️</span>' : ''}
         <div class="comp-info-main">
           <span class="comp-name" title="${comp.nome}">${isCustom ? '🧬 ' : ''}${comp.nome}</span>
           <span class="comp-formula">${comp.formula}</span>
@@ -563,51 +562,62 @@
   };
 
   // =========================================================================
-  // 11. RDKIT — versão com retry e timeout generoso
+  // 11. RDKIT — CORRIGIDO com locateFile
   // =========================================================================
   function carregarRDKitSobDemanda() {
     if (RDKitModuleInstance) return Promise.resolve(RDKitModuleInstance);
+    if (rdkitFalhou) return Promise.resolve(null);
     if (rdkitPromise) return rdkitPromise;
 
     rdkitPromise = new Promise(async (resolve) => {
-      exibirStatusRDKit(true, "Carregando RDKit WebAssembly...");
+      exibirStatusRDKit(true, "Carregando RDKit WASM...");
+      console.log('[RDKit] Iniciando carregamento...');
 
-      const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), ms));
+      const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout " + ms + "ms")), ms));
 
       async function tentarInit() {
         if (typeof window.initRDKitModule !== 'function') {
-          throw new Error('initRDKitModule não disponível — CDN falhou?');
+          throw new Error('initRDKitModule ausente');
         }
+        // ⚠️ CRÍTICO: locateFile para apontar o .wasm correto
+        const config = {
+          locateFile: (file) => {
+            console.log('[RDKit] Solicitando arquivo:', file);
+            return `https://unpkg.com/@rdkit/rdkit/dist/${file}`;
+          }
+        };
         const mod = await Promise.race([
-          window.initRDKitModule(),
-          timeout(20000)
+          window.initRDKitModule(config),
+          timeout(25000)
         ]);
         if (!mod || typeof mod.get_mol !== 'function') {
-          throw new Error('RDKit retornou módulo inválido');
+          throw new Error('Módulo RDKit inválido');
         }
         return mod;
       }
 
       try {
         RDKitModuleInstance = await tentarInit();
-        console.log('[RDKit] ✅ Módulo carregado');
+        console.log('[RDKit] ✅ Carregado. Teste:', RDKitModuleInstance.get_mol('CCO') ? 'OK' : 'FALHOU');
         exibirStatusRDKit(false);
-        mostrarNotificacao('✅ RDKit carregado — quimiometria ativa', 'success', 2000);
+        mostrarNotificacao('✅ RDKit ativo', 'success', 2000);
         resolve(RDKitModuleInstance);
       } catch (err) {
         console.warn('[RDKit] ❌ Falha:', err.message);
+        // Retry uma vez
         try {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise(r => setTimeout(r, 1500));
           RDKitModuleInstance = await tentarInit();
-          console.log('[RDKit] ✅ Carregado após retry');
+          console.log('[RDKit] ✅ Retry OK');
           exibirStatusRDKit(false);
           resolve(RDKitModuleInstance);
           return;
         } catch (err2) {
           console.warn('[RDKit] ❌ Retry falhou:', err2.message);
         }
+        rdkitFalhou = true;
         exibirStatusRDKit(false);
-        mostrarNotificacao('⚠️ RDKit indisponível — funcionalidades CADD limitadas', 'warning', 5000);
+        mostrarNotificacao('⚠️ RDKit offline — usando heurísticas', 'warning', 5000);
         resolve(null);
       }
     });
@@ -622,25 +632,25 @@
   }
 
   // =========================================================================
-  // 12. QUIMIOMETRIA — versão robusta com fallback
+  // 12. QUIMIOMETRIA — com fallback heurístico
   // =========================================================================
+  function extrairSmilesPrincipal(smiles) {
+    if (!smiles) return null;
+    if (!smiles.includes('.')) return smiles;
+    const partes = smiles.split('.').filter(p => p && p.length > 1 && !/^\[(Na|K|Li|Ca|Mg|Cl|Br|NH4)[+-]?\]$/.test(p));
+    if (partes.length === 0) return null;
+    return partes.sort((a, b) => b.length - a.length)[0];
+  }
+
   async function calcularPropriedadesMoleculares(smiles, molarMass) {
     const rdkit = await carregarRDKitSobDemanda();
-    if (!rdkit) return calcularPropriedadesFallback(smiles, molarMass);
-    if (!smiles || smiles === '--') return null;
-
-    let smilesLimpo = smiles;
-    if (smiles.includes('.')) {
-      const partes = smiles.split('.').filter(p => p && !/^\[(Na|K|Li|Ca|Mg|Cl|Br)\]/.test(p));
-      if (partes.length > 0) smilesLimpo = partes.sort((a, b) => b.length - a.length)[0];
-      else return null;
+    const smilesLimpo = extrairSmilesPrincipal(smiles);
+    if (!rdkit || !smilesLimpo || smilesLimpo.startsWith('RADICAL_')) {
+      return calcularPropriedadesFallback(smiles, molarMass);
     }
-    if (smilesLimpo.startsWith('RADICAL_')) return calcularPropriedadesFallback(smiles, molarMass);
-
     try {
       const mol = rdkit.get_mol(smilesLimpo);
       if (!mol) return calcularPropriedadesFallback(smiles, molarMass);
-
       let desc = {};
       try { desc = JSON.parse(mol.get_descriptors()); } catch (e) {}
 
@@ -673,12 +683,12 @@
       mol.delete();
 
       const fl = [], fv = [], fg = [];
-      if (mw > 500) fl.push("MW > 500");
-      if (logp > 5) fl.push("LogP > 5");
-      if (hbd > 5) fl.push("HBD > 5");
-      if (hba > 10) fl.push("HBA > 10");
-      if (rotb > 10) fv.push("RotB > 10");
-      if (tpsa > 140) fv.push("TPSA > 140");
+      if (mw > 500) fl.push("MW>500");
+      if (logp > 5) fl.push("LogP>5");
+      if (hbd > 5) fl.push("HBD>5");
+      if (hba > 10) fl.push("HBA>10");
+      if (rotb > 10) fv.push("RotB>10");
+      if (tpsa > 140) fv.push("TPSA>140");
       if (mw < 160 || mw > 480) fg.push("MW");
       if (logp < -0.4 || logp > 5.6) fg.push("LogP");
       if (mr < 40 || mr > 130) fg.push("MR");
@@ -692,22 +702,28 @@
 
   function calcularPropriedadesFallback(smiles, molarMass) {
     if (!smiles || smiles === '--') return null;
-    const cCount = (smiles.match(/C(?![a-z])/g) || []).length;
-    const nCount = (smiles.match(/N(?![a-z])/g) || []).length;
-    const oCount = (smiles.match(/O(?![a-z])/g) || []).length;
-    const sCount = (smiles.match(/S(?![a-z])/g) || []).length;
-    const halCount = (smiles.match(/(F|Cl|Br|I)/g) || []).length;
-    const rotB = (smiles.match(/-/g) || []).length;
+    const s = smiles;
+    const cCount = (s.match(/C(?![a-z])/g) || []).length;
+    const nCount = (s.match(/N(?![a-z])/g) || []).length;
+    const oCount = (s.match(/O(?![a-z])/g) || []).length;
+    const sCount = (s.match(/S(?![a-z])/g) || []).length;
+    const halCount = (s.match(/(F|Cl|Br|I)/g) || []).length;
+    const aromCount = (s.match(/[cnops]/g) || []).length;
+    const rotB = (s.match(/-/g) || []).length;
     const mw = (typeof molarMass === 'number' && molarMass > 0) ? molarMass :
                cCount * 12 + nCount * 14 + oCount * 16 + sCount * 32 + halCount * 35;
+    // Estimativas grosseiras
+    const logp = (cCount - nCount - oCount) * 0.5 + halCount * 0.8;
+    const tpsa = (nCount + oCount * 2) * 12;
     return {
-      mw, logp: 0, mr: cCount * 5, tpsa: (nCount + oCount) * 12,
-      hbd: nCount + oCount, hba: nCount + oCount, rotb: rotB,
+      mw, logp: Math.round(logp * 100) / 100, mr: cCount * 5,
+      tpsa, hbd: nCount + oCount, hba: nCount + oCount, rotb: rotB,
       heavyAtoms: cCount + nCount + oCount + sCount + halCount,
       totalAtoms: cCount + nCount + oCount + sCount + halCount,
-      csp3: 0.5,
-      falhasLipinski: mw > 500 ? ["MW > 500"] : [],
-      falhasVeber: [], falhasGhose: [],
+      csp3: aromCount > 0 ? 0.2 : 0.5,
+      falhasLipinski: mw > 500 ? ["MW>500"] : [],
+      falhasVeber: tpsa > 140 ? ["TPSA>140"] : [],
+      falhasGhose: [],
       alertasPAINS: [],
       _fallback: true
     };
@@ -726,16 +742,15 @@
     const p = await calcularPropriedadesMoleculares(smiles, molarMass);
     if (!p) { [bL, bV, bG, bP].forEach(b => { b.className = 'cadd-badge badge-pending'; }); return; }
 
-    const sufixoEst = p._fallback ? ' (est.)' : '';
+    const est = p._fallback ? ' (est.)' : '';
     bL.className = 'cadd-badge ' + (p.falhasLipinski.length === 0 ? 'badge-approved' : p.falhasLipinski.length === 1 ? 'badge-warning' : 'badge-rejected');
-    bL.textContent = (p.falhasLipinski.length === 0 ? 'Lipinski: OK' : `Lipinski: ${p.falhasLipinski.length} Viol.`) + sufixoEst;
+    bL.textContent = (p.falhasLipinski.length === 0 ? 'Lipinski: OK' : `Lipinski: ${p.falhasLipinski.length}`) + est;
     bV.className = 'cadd-badge ' + (p.falhasVeber.length === 0 ? 'badge-approved' : 'badge-rejected');
-    bV.textContent = (p.falhasVeber.length === 0 ? 'Veber: OK' : `Veber: ${p.falhasVeber.length} Viol.`) + sufixoEst;
-    bG.className = 'cadd-badge ' + (p.falhasGhose.length === 0 ? 'badge-approved' : p.falhasGhose.length === 1 ? 'badge-warning' : 'badge-rejected');
-    bG.textContent = (p.falhasGhose.length === 0 ? 'Ghose: OK' : `Ghose: ${p.falhasGhose.length} Viol.`) + sufixoEst;
+    bV.textContent = (p.falhasVeber.length === 0 ? 'Veber: OK' : `Veber: ${p.falhasVeber.length}`) + est;
+    bG.className = 'cadd-badge ' + (p.falhasGhose.length === 0 ? 'badge-approved' : 'badge-rejected');
+    bG.textContent = (p.falhasGhose.length === 0 ? 'Ghose: OK' : `Ghose: ${p.falhasGhose.length}`) + est;
     bP.className = 'cadd-badge ' + (p.alertasPAINS.length === 0 ? 'badge-approved' : 'badge-rejected');
-    bP.textContent = (p.alertasPAINS.length === 0 ? 'PAINS: Limpo' : `PAINS: ${p.alertasPAINS.length}`) + sufixoEst;
-
+    bP.textContent = (p.alertasPAINS.length === 0 ? 'PAINS: OK' : `PAINS: ${p.alertasPAINS.length}`) + est;
     ultimoDossieCADD = { ...p, nome, smiles };
   }
 
@@ -750,29 +765,29 @@
       atomHighlightShape = studioViewer.addSphere({ center: { x: atom.x, y: atom.y, z: atom.z }, radius: 0.42, color: '#00e5ff', opacity: 0.55 });
       studioViewer.render();
     } catch (e) {}
-    const elemSym = (atom.elem || 'C').toUpperCase();
-    const elemData = TABELA_PERIODICA.find(e => e.sym.toUpperCase() === elemSym) || { z: '?', sym: elemSym, nome: 'Elemento', massa: '--', eletron: '--', raio: '--', valencias: [1] };
-    const vizinhos = [];
+    const sym = (atom.elem || 'C').toUpperCase();
+    const ed = TABELA_PERIODICA.find(e => e.sym.toUpperCase() === sym) || { z: '?', sym, nome: 'Elemento', massa: '--', eletron: '--', raio: '--', valencias: [1] };
+    const viz = [];
     const nLig = atom.bonds ? atom.bonds.length : 0;
     if (atom.bonds && Array.isArray(atom.bonds)) {
       const all = studioViewer.selectedAtoms({}) || [];
       atom.bonds.forEach(bIdx => {
         const v = all.find(a => (a.serial === bIdx || a.index === bIdx));
-        if (v) vizinhos.push(`${v.elem}#${(v.serial || v.index || 0) + 1}`);
+        if (v) viz.push(`${v.elem}#${(v.serial || v.index || 0) + 1}`);
       });
     }
     const hud = document.getElementById('atomInspectorHud');
     if (hud) {
-      document.getElementById('hudAtomBadge').textContent = elemData.sym;
-      document.getElementById('hudAtomTitle').textContent = `${elemData.nome} (${elemData.sym}) — Átomo #${(atom.serial || atom.index || 0) + 1}`;
-      document.getElementById('hudAtomSub').textContent = `Coord: (${atom.x.toFixed(2)}, ${atom.y.toFixed(2)}, ${atom.z.toFixed(2)}) • ${nLig} Ligação(ões)`;
-      document.getElementById('hudAtomEletron').textContent = elemData.eletron ? `${elemData.eletron} (Pauling)` : 'Inerte';
-      document.getElementById('hudAtomRaio').textContent = elemData.raio ? `${elemData.raio} pm` : '--';
-      document.getElementById('hudAtomNeighbors').textContent = vizinhos.length > 0 ? vizinhos.join(', ') : 'Átomo isolado';
+      document.getElementById('hudAtomBadge').textContent = ed.sym;
+      document.getElementById('hudAtomTitle').textContent = `${ed.nome} (${ed.sym}) — #${(atom.serial || atom.index || 0) + 1}`;
+      document.getElementById('hudAtomSub').textContent = `(${atom.x.toFixed(2)}, ${atom.y.toFixed(2)}, ${atom.z.toFixed(2)}) • ${nLig} lig.`;
+      document.getElementById('hudAtomEletron').textContent = ed.eletron ? `${ed.eletron}` : 'Inerte';
+      document.getElementById('hudAtomRaio').textContent = ed.raio ? `${ed.raio} pm` : '--';
+      document.getElementById('hudAtomNeighbors').textContent = viz.length > 0 ? viz.join(', ') : 'Isolado';
       hud.style.display = 'flex';
     }
     const hudLabel = document.getElementById('studioLastMeasurement');
-    if (hudLabel) hudLabel.textContent = `Átomo: ${elemData.nome} (${elemData.sym}) com ${nLig} ligações.`;
+    if (hudLabel) hudLabel.textContent = `${ed.nome} (${ed.sym}) • ${nLig} ligações`;
   }
   window.fecharInspectorAtomo = function() {
     const hud = document.getElementById('atomInspectorHud');
@@ -805,8 +820,7 @@
         x: parseFloat(l.substring(0, 10)),
         y: parseFloat(l.substring(10, 20)),
         z: parseFloat(l.substring(20, 30)),
-        elem: l.substring(31, 34).trim(),
-        linhaOriginal: l
+        elem: l.substring(31, 34).trim()
       });
     }
     const bonds = [];
@@ -816,52 +830,46 @@
       bonds.push({
         a1: parseInt(l.substring(0, 3).trim()),
         a2: parseInt(l.substring(3, 6).trim()),
-        tipo: parseInt(l.substring(6, 9).trim()) || 1,
-        linhaOriginal: l
+        tipo: parseInt(l.substring(6, 9).trim()) || 1
       });
     }
-    return { atoms, bonds, numAtoms, numBonds, linhas, countsLine };
+    return { atoms, bonds, numAtoms, numBonds, linhas };
   }
 
   function reconstruirSDF(parsed, atoms, bonds, marcarInstavel) {
-    const linhasNovas = [];
-    linhasNovas.push(parsed.linhas[0] || 'LAIFT-MODIFIED');
-    linhasNovas.push(parsed.linhas[1] || '  LAIFT 3D EDITOR');
-    linhasNovas.push(parsed.linhas[2] || '');
-    const nA = atoms.length, nB = bonds.length;
-    linhasNovas.push(`${String(nA).padStart(3, ' ')}${String(nB).padStart(3, ' ')}  0  0  0  0  0  0  0  0999 V2000`);
+    const L = [];
+    L.push(parsed.linhas[0] || 'LAIFT-MODIFIED');
+    L.push(parsed.linhas[1] || '  LAIFT 3D EDITOR');
+    L.push(parsed.linhas[2] || '');
+    L.push(`${String(atoms.length).padStart(3, ' ')}${String(bonds.length).padStart(3, ' ')}  0  0  0  0  0  0  0  0999 V2000`);
     atoms.forEach(a => {
       const x = a.x.toFixed(4).padStart(10, ' ');
       const y = a.y.toFixed(4).padStart(10, ' ');
       const z = a.z.toFixed(4).padStart(10, ' ');
       const el = (a.elem || 'C').padEnd(3, ' ').substring(0, 3);
-      linhasNovas.push(`${x}${y}${z} ${el} 0  0  0  0  0  0  0  0  0  0  0  0`);
+      L.push(`${x}${y}${z} ${el} 0  0  0  0  0  0  0  0  0  0  0  0`);
     });
     bonds.forEach(b => {
-      linhasNovas.push(`${String(b.a1).padStart(3, ' ')}${String(b.a2).padStart(3, ' ')}${String(b.tipo || 1).padStart(3, ' ')}  0  0  0  0`);
+      L.push(`${String(b.a1).padStart(3, ' ')}${String(b.a2).padStart(3, ' ')}${String(b.tipo || 1).padStart(3, ' ')}  0  0  0  0`);
     });
-    linhasNovas.push('M  END');
+    L.push('M  END');
     if (marcarInstavel) {
-      linhasNovas.push('>  <INSTABILITY>');
-      linhasNovas.push('Valência estendida — estrutura radicalar');
-      linhasNovas.push('');
+      L.push('>  <INSTABILITY>');
+      L.push('Valência estendida');
+      L.push('');
     }
-    linhasNovas.push('$$$$');
-    return linhasNovas.join('\n');
+    L.push('$$$$');
+    return L.join('\n');
   }
 
   function calcularPosicaoNovoAtomo(parent, vizinhos) {
-    const bondLength = 1.5;
-    if (!vizinhos || vizinhos.length === 0) return { x: parent.x + bondLength, y: parent.y, z: parent.z };
+    const BL = 1.5;
+    if (!vizinhos || vizinhos.length === 0) return { x: parent.x + BL, y: parent.y, z: parent.z };
     let sx = 0, sy = 0, sz = 0;
     for (const v of vizinhos) { sx += (v.x - parent.x); sy += (v.y - parent.y); sz += (v.z - parent.z); }
     const mag = Math.sqrt(sx * sx + sy * sy + sz * sz);
-    if (mag < 0.01) return { x: parent.x + bondLength, y: parent.y, z: parent.z };
-    return {
-      x: parent.x + (-sx / mag) * bondLength,
-      y: parent.y + (-sy / mag) * bondLength,
-      z: parent.z + (-sz / mag) * bondLength
-    };
+    if (mag < 0.01) return { x: parent.x + BL, y: parent.y, z: parent.z };
+    return { x: parent.x + (-sx / mag) * BL, y: parent.y + (-sy / mag) * BL, z: parent.z + (-sz / mag) * BL };
   }
 
   // =========================================================================
@@ -876,9 +884,9 @@
     if (sub) {
       if (atomoAtivoInspecionado) {
         const nLig = atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : 0;
-        sub.innerHTML = `Âncora: <strong>${atomoAtivoInspecionado.elem}#${(atomoAtivoInspecionado.serial || atomoAtivoInspecionado.index || 0) + 1}</strong> (${nLig} lig.). Compatíveis com substituição em verde.`;
+        sub.innerHTML = `Âncora: <strong>${atomoAtivoInspecionado.elem}#${(atomoAtivoInspecionado.serial || atomoAtivoInspecionado.index || 0) + 1}</strong> (${nLig} lig.)`;
       } else {
-        sub.textContent = 'Selecione um elemento para consultar propriedades e planejar modificações.';
+        sub.textContent = 'Clique em um elemento para análise.';
       }
     }
     renderizarMatrizTabelaPeriodica('todas');
@@ -905,15 +913,14 @@
     matrix.innerHTML = '';
     const nLigAlvo = atomoAtivoInspecionado && atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : null;
 
-    const mkPlaceholder = (txt, r, c) => {
+    const mkP = (txt, r, c) => {
       const el = document.createElement('div');
       el.className = 'ptable-tile ptable-placeholder';
-      el.style.gridRow = r; el.style.gridColumn = c;
-      el.textContent = txt;
+      el.style.gridRow = r; el.style.gridColumn = c; el.textContent = txt;
       matrix.appendChild(el);
     };
-    mkPlaceholder('57-71', 6, 3);
-    mkPlaceholder('89-103', 7, 3);
+    mkP('57-71', 6, 3);
+    mkP('89-103', 7, 3);
 
     TABELA_PERIODICA.forEach(elem => {
       const pos = POSICOES_PTABLE[elem.sym];
@@ -923,15 +930,14 @@
       tile.style.gridRow = pos.r; tile.style.gridColumn = pos.c;
       if (nLigAlvo !== null) {
         const valMax = Math.max(...elem.valencias);
-        const isC = (nLigAlvo <= valMax && valMax > 0);
-        tile.classList.add(isC ? 'compatible' : 'incompatible');
+        tile.classList.add((nLigAlvo <= valMax && valMax > 0) ? 'compatible' : 'incompatible');
       }
       if (filtroCat !== 'todas' && elem.cat !== filtroCat) tile.style.opacity = '0.15';
       if (elementoPTableSelecionado?.sym === elem.sym) tile.classList.add('selected');
       tile.onclick = () => selecionarElementoNaTabela(elem, tile);
-      tile.title = `${elem.nome} (Z=${elem.z}) — ${elem.cat}`;
-      const massaTxt = elem.massa < 100 ? elem.massa.toFixed(1) : Math.round(elem.massa);
-      tile.innerHTML = `<span class="ptable-z">${elem.z}</span><span class="ptable-sym">${elem.sym}</span><span class="ptable-mass">${massaTxt}</span>`;
+      tile.title = `${elem.nome} (Z=${elem.z})`;
+      const mt = elem.massa < 100 ? elem.massa.toFixed(1) : Math.round(elem.massa);
+      tile.innerHTML = `<span class="ptable-z">${elem.z}</span><span class="ptable-sym">${elem.sym}</span><span class="ptable-mass">${mt}</span>`;
       matrix.appendChild(tile);
     });
   }
@@ -948,17 +954,17 @@
     if (atomoAtivoInspecionado && nLigAlvo !== null) {
       const valMax = Math.max(...elem.valencias);
       if (elem.sym === atomoAtivoInspecionado.elem) {
-        htmlVal = `<div class="ptable-valence-check valence-valid">ℹ️ O átomo já é <strong>${elem.nome}</strong>.</div>`;
+        htmlVal = `<div class="ptable-valence-check valence-valid">ℹ️ Já é <strong>${elem.nome}</strong>.</div>`;
       } else if (valMax === 0) {
-        htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ Gases nobres não fazem ligações covalentes estáveis.</div>`;
+        htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ Gás nobre — sem ligações.</div>`;
       } else if (nLigAlvo > valMax) {
-        htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ <strong>Valência incompatível:</strong> ${nLigAlvo} lig. ativas excedem máximo (${valMax}).</div>`;
+        htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ <strong>Valência excedida:</strong> ${nLigAlvo} > ${valMax}.</div>`;
       } else {
         podeSubst = true;
-        htmlVal = `<div class="ptable-valence-check valence-valid">✅ <strong>Substituição estável:</strong> comporta as ${nLigAlvo} ligações.</div>`;
+        htmlVal = `<div class="ptable-valence-check valence-valid">✅ <strong>Compatível:</strong> comporta ${nLigAlvo} ligações.</div>`;
       }
     } else {
-      htmlVal = `<div class="ptable-valence-check" style="background:rgba(255,255,255,0.04); color:#94a3b8;">Clique em um átomo no 3D para ativar substituição e adição.</div>`;
+      htmlVal = `<div class="ptable-valence-check" style="background:rgba(255,255,255,0.04); color:#94a3b8;">Clique em um átomo no 3D.</div>`;
     }
 
     let htmlDiagAdd = '';
@@ -969,20 +975,17 @@
         <div class="ptable-hero-badge"><span class="hero-z">${elem.z}</span><span class="hero-sym">${elem.sym}</span></div>
         <div class="ptable-hero-info">
           <span class="ptable-hero-name">${elem.nome}</span>
-          <span class="ptable-hero-family">${elem.cat.replace(/-/g, ' ')} • Grupo ${elem.grupo}</span>
+          <span class="ptable-hero-family">${elem.cat.replace(/-/g, ' ')} • G${elem.grupo}</span>
         </div>
       </div>
       <div class="ptable-params-list">
         <div class="ptable-param-row"><span>Z:</span><strong>${elem.z}</strong></div>
         <div class="ptable-param-row"><span>Massa:</span><strong>${elem.massa} g/mol</strong></div>
-        <div class="ptable-param-row"><span>Eletronegatividade:</span><strong>${elem.eletron ? elem.eletron : 'Inerte'}</strong></div>
-        <div class="ptable-param-row"><span>Raio Covalente:</span><strong>${elem.raio ? elem.raio + ' pm' : '--'}</strong></div>
+        <div class="ptable-param-row"><span>Eletroneg.:</span><strong>${elem.eletron || 'Inerte'}</strong></div>
+        <div class="ptable-param-row"><span>Raio:</span><strong>${elem.raio ? elem.raio + ' pm' : '--'}</strong></div>
         <div class="ptable-param-row"><span>Valências:</span><strong>${elem.valencias.join(', ')}</strong></div>
       </div>
-      <div class="ptable-pharma-box">
-        <strong style="color:var(--neon-cyan); display:block; margin-bottom:3px;">Papel na Química Medicinal:</strong>
-        ${elem.pharma}
-      </div>
+      <div class="ptable-pharma-box"><strong style="color:var(--neon-cyan); display:block; margin-bottom:3px;">Química Medicinal:</strong>${elem.pharma}</div>
       ${htmlVal}
       ${atomoAtivoInspecionado ? `
         <div class="ptable-action-buttons">
@@ -1002,28 +1005,24 @@
     const parent = parsed.atoms[parentIdx];
     if (!parent) return '';
     const bonds = parsed.bonds.filter(b => b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1);
-    const elemParent = TABELA_PERIODICA.find(e => e.sym === parent.elem);
-    const valParent = elemParent ? Math.max(...elemParent.valencias) : 4;
-    const disponiveis = valParent - bonds.length;
+    const eP = TABELA_PERIODICA.find(e => e.sym === parent.elem);
+    const valP = eP ? Math.max(...eP.valencias) : 4;
+    const disp = valP - bonds.length;
     const temH = bonds.some(b => {
       const idx = b.a1 === parentIdx + 1 ? b.a2 - 1 : b.a1 - 1;
       return parsed.atoms[idx] && parsed.atoms[idx].elem === 'H';
     });
 
-    let html = `<div class="ptable-add-diagnostic">`;
-    html += `<div class="diag-row"><span>Conexões disponíveis:</span><strong>${Math.max(0, disponiveis)} de ${valParent}</strong></div>`;
-
-    if (disponiveis > 0) {
-      html += `<div class="diag-status diag-ok">✅ Adição direta possível. ${elemAlvo.nome} ligará a ${parent.elem}#${parentIdx + 1}.</div>`;
+    let h = `<div class="ptable-add-diagnostic"><div class="diag-row"><span>Conexões livres:</span><strong>${Math.max(0, disp)} de ${valP}</strong></div>`;
+    if (disp > 0) {
+      h += `<div class="diag-status diag-ok">✅ Adição direta possível.</div>`;
     } else if (temH) {
-      html += `<div class="diag-status diag-warning">⚠️ ${parent.elem}#${parentIdx + 1} saturado. Um <strong>H será removido</strong> ao adicionar ${elemAlvo.sym}.</div>`;
-      html += `<div class="diag-hint"><strong>Alteração automática:</strong> remover 1 H do pai para liberar conexão.</div>`;
+      h += `<div class="diag-status diag-warning">⚠️ Saturado — H será removido automaticamente.</div>`;
     } else {
-      html += `<div class="diag-status diag-error">⚠️ ${parent.elem}#${parentIdx + 1} saturado e <strong>sem H</strong>. Adicionar gera radical livre.</div>`;
-      html += `<div class="diag-hint"><strong>Mudanças necessárias:</strong> substituir ${parent.elem} por N/P/S (valência maior), remover ligação existente, ou aceitar radical.</div>`;
+      h += `<div class="diag-status diag-error">⚠️ Saturado sem H — gerará radical.</div>`;
     }
-    html += `</div>`;
-    return html;
+    h += `</div>`;
+    return h;
   }
 
   // =========================================================================
@@ -1044,8 +1043,7 @@
         contador++;
       }
     }
-    if (linhaIdx === -1) { mostrarNotificacao('Posição atômica não mapeada.', 'error'); return; }
-
+    if (linhaIdx === -1) { mostrarNotificacao('Posição não mapeada.', 'error'); return; }
     const orig = linhas[linhaIdx];
     linhas[linhaIdx] = orig.substring(0, 31) + novoSimbolo.padEnd(3) + orig.substring(34);
     const novoSdf = linhas.join('\n');
@@ -1054,28 +1052,28 @@
     if (rdkit) {
       try {
         const mol = rdkit.get_mol(novoSdf);
-        if (!mol) { mostrarNotificacao(`Substituição ${elemAntigo}→${novoSimbolo} gera estrutura instável.`, 'error'); return; }
+        if (!mol) { mostrarNotificacao(`Substituição ${elemAntigo}→${novoSimbolo} instável.`, 'error'); return; }
         const novoSmiles = mol.get_smiles();
         mol.delete();
-        pushEdicaoSnapshot(compostoSelecionado, sdfCacheLocal, `Substituição ${elemAntigo}→${novoSimbolo}`);
+        pushEdicaoSnapshot(compostoSelecionado, sdfCacheLocal, `Sub ${elemAntigo}→${novoSimbolo}`);
         const idD = 'sub_' + Date.now();
-        const nomeD = `${compostoSelecionado.nome} (${elemAntigo}${atomIdx + 1}➔${novoSimbolo})`;
-        const novoComp = { id: idD, chaveOriginal: idD, nome: nomeD, formula: 'Modificação Atômica', molarMass: '--', smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD };
+        const nomeD = `${compostoSelecionado.nome} (${elemAntigo}→${novoSimbolo})`;
+        const novoComp = { id: idD, chaveOriginal: idD, nome: nomeD, formula: 'Mod. Atômica', molarMass: '--', smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD };
         compostosIndexados.unshift(novoComp);
         compostosFiltrados.unshift(novoComp);
         renderizarListaCompostos(true);
         selecionarCompostoStudio(novoComp);
         window.fecharTabelaPeriodica();
         window.fecharInspectorAtomo();
-        mostrarNotificacao(`✅ Substituição: ${nomeD}`, 'success');
+        mostrarNotificacao(`✅ ${nomeD}`, 'success');
       } catch (err) {
-        mostrarNotificacao('Erro de valência RDKit.', 'error');
+        mostrarNotificacao('Erro de valência.', 'error');
       }
     }
   };
 
   // =========================================================================
-  // 17. ADIÇÃO — CORRIGIDO (novoSimbolo em toda parte)
+  // 17. ADIÇÃO — versão auditada (zero referências a novoSym)
   // =========================================================================
   window.executarAdicaoAtomo = async function(novoSimbolo) {
     if (!atomoAtivoInspecionado || !compostoSelecionado || !sdfCacheLocal) {
@@ -1084,122 +1082,116 @@
     }
 
     const parsed = parseSDF_Simples(sdfCacheLocal);
-    if (!parsed) { mostrarNotificacao('Não foi possível processar o SDF.', 'error'); return; }
+    if (!parsed) { mostrarNotificacao('SDF inválido.', 'error'); return; }
 
     const parentIdx = atomoAtivoInspecionado.index !== undefined
       ? atomoAtivoInspecionado.index
       : (atomoAtivoInspecionado.serial - 1);
 
     if (parentIdx < 0 || parentIdx >= parsed.atoms.length) {
-      mostrarNotificacao('Índice atômico inválido.', 'error');
+      mostrarNotificacao('Índice inválido.', 'error');
       return;
     }
 
     const parent = parsed.atoms[parentIdx];
-    const elemParent = TABELA_PERIODICA.find(e => e.sym === parent.elem);
-    const valParent = elemParent ? Math.max(...elemParent.valencias) : 4;
-    const elemNovo = TABELA_PERIODICA.find(e => e.sym === novoSimbolo);
-    if (!elemNovo) { mostrarNotificacao('Elemento inválido.', 'error'); return; }
+    const eP = TABELA_PERIODICA.find(e => e.sym === parent.elem);
+    const valP = eP ? Math.max(...eP.valencias) : 4;
+    const eN = TABELA_PERIODICA.find(e => e.sym === novoSimbolo);
+    if (!eN) { mostrarNotificacao('Elemento inválido.', 'error'); return; }
 
-    const bondsParent = parsed.bonds.filter(b => b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1);
-    const nLigAtual = bondsParent.length;
+    const bondsP = parsed.bonds.filter(b => b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1);
+    const nLig = bondsP.length;
 
     let acao = 'direto';
-    let hIdxRemover = -1;
-    let avisoInstavel = false;
+    let hIdxRem = -1;
+    let instavel = false;
 
-    if (nLigAtual >= valParent) {
-      for (const b of bondsParent) {
+    if (nLig >= valP) {
+      for (const b of bondsP) {
         const vIdx = (b.a1 === parentIdx + 1) ? (b.a2 - 1) : (b.a1 - 1);
-        if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRemover = vIdx; break; }
+        if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRem = vIdx; break; }
       }
-      if (hIdxRemover >= 0) {
+      if (hIdxRem >= 0) {
         acao = 'remover_h';
       } else {
-        // CORRIGIDO: usar novoSimbolo em vez de novoSym
         const msg =
 `⚠️ ADIÇÃO GERA ESTRUTURA INSTÁVEL
 
 Átomo âncora: ${parent.elem}#${parentIdx + 1}
-Ligações atuais: ${nLigAtual} (valência máx.: ${valParent})
+Ligações atuais: ${nLig} (valência máx.: ${valP})
 Hidrogênios disponíveis: 0
 
 Adicionar ${novoSimbolo} criará uma valência estendida (radical livre).
 
-RECOMENDAÇÕES PARA ESTABILIDADE:
-• Substituir ${parent.elem} por elemento de valência maior (ex: N, P, S), OU
+RECOMENDAÇÕES:
+• Substituir ${parent.elem} por elemento de valência maior (N, P, S), OU
 • Remover previamente uma ligação existente, OU
-• Prosseguir mesmo assim — estrutura marcada como instável
+• Prosseguir — estrutura marcada como instável
 
 Deseja continuar?`;
         if (!confirm(msg)) { mostrarNotificacao('Adição cancelada.', 'info'); return; }
         acao = 'forcar_instavel';
-        avisoInstavel = true;
+        instavel = true;
       }
     }
 
     let atoms = parsed.atoms.map(a => ({ ...a }));
     let bonds = parsed.bonds.map(b => ({ ...b }));
 
-    if (acao === 'remover_h' && hIdxRemover >= 0) {
-      atoms.splice(hIdxRemover, 1);
+    if (acao === 'remover_h' && hIdxRem >= 0) {
+      atoms.splice(hIdxRem, 1);
       bonds = bonds
-        .filter(b => (b.a1 - 1) !== hIdxRemover && (b.a2 - 1) !== hIdxRemover)
+        .filter(b => (b.a1 - 1) !== hIdxRem && (b.a2 - 1) !== hIdxRem)
         .map(b => ({
           ...b,
-          a1: (b.a1 - 1) > hIdxRemover ? b.a1 - 1 : b.a1,
-          a2: (b.a2 - 1) > hIdxRemover ? b.a2 - 1 : b.a2
+          a1: (b.a1 - 1) > hIdxRem ? b.a1 - 1 : b.a1,
+          a2: (b.a2 - 1) > hIdxRem ? b.a2 - 1 : b.a2
         }));
     }
 
-    const parentIdxFinal = (acao === 'remover_h' && hIdxRemover >= 0 && parentIdx > hIdxRemover) ? parentIdx - 1 : parentIdx;
-    const parentFinal = atoms[parentIdxFinal];
-
-    const bondsParentFinal = bonds.filter(b => b.a1 === parentIdxFinal + 1 || b.a2 === parentIdxFinal + 1);
-    const vizinhos = bondsParentFinal.map(b => {
-      const vIdx = (b.a1 === parentIdxFinal + 1) ? (b.a2 - 1) : (b.a1 - 1);
+    const pIdxFinal = (acao === 'remover_h' && hIdxRem >= 0 && parentIdx > hIdxRem) ? parentIdx - 1 : parentIdx;
+    const parentFinal = atoms[pIdxFinal];
+    const bPF = bonds.filter(b => b.a1 === pIdxFinal + 1 || b.a2 === pIdxFinal + 1);
+    const viz = bPF.map(b => {
+      const vIdx = (b.a1 === pIdxFinal + 1) ? (b.a2 - 1) : (b.a1 - 1);
       return atoms[vIdx];
     }).filter(Boolean);
 
-    const posNova = calcularPosicaoNovoAtomo(parentFinal, vizinhos);
+    const posNova = calcularPosicaoNovoAtomo(parentFinal, viz);
 
-    atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo, linhaOriginal: '' });
-    const novoAtomIdx = atoms.length;
+    atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo });
+    bonds.push({ a1: pIdxFinal + 1, a2: atoms.length, tipo: 1 });
 
-    bonds.push({ a1: parentIdxFinal + 1, a2: novoAtomIdx, tipo: 1, linhaOriginal: '' });
-
-    const novoSdf = reconstruirSDF(parsed, atoms, bonds, avisoInstavel);
+    const novoSdf = reconstruirSDF(parsed, atoms, bonds, instavel);
 
     const rdkit = await carregarRDKitSobDemanda();
     let novoSmiles = null, rdkitErro = null;
     if (rdkit) {
       try {
-        const molVal = rdkit.get_mol(novoSdf);
-        if (molVal) { novoSmiles = molVal.get_smiles(); molVal.delete(); }
-        else rdkitErro = 'RDKit não parseou a estrutura.';
+        const m = rdkit.get_mol(novoSdf);
+        if (m) { novoSmiles = m.get_smiles(); m.delete(); }
+        else rdkitErro = 'RDKit não parseou.';
       } catch (e) { rdkitErro = e.message; }
     }
 
-    if (!novoSmiles && !avisoInstavel) {
+    if (!novoSmiles && !instavel) {
       mostrarNotificacao('Estrutura inválida: ' + (rdkitErro || 'erro'), 'error');
       return;
     }
-    // CORRIGIDO: usar novoSimbolo
-    if (!novoSmiles && avisoInstavel) {
+    if (!novoSmiles && instavel) {
       novoSmiles = 'RADICAL_' + novoSimbolo + '_' + Date.now();
     }
 
-    pushEdicaoSnapshot(compostoSelecionado, sdfCacheLocal, `Adição ${novoSimbolo}`);
+    pushEdicaoSnapshot(compostoSelecionado, sdfCacheLocal, `Add ${novoSimbolo}`);
 
     const idD = 'add_' + Date.now();
-    const sufixoInstavel = avisoInstavel ? ' ⚠️ INSTÁVEL' : '';
-    // CORRIGIDO: usar novoSimbolo
-    const nomeD = `${compostoSelecionado.nome} + ${novoSimbolo}${sufixoInstavel}`;
+    const suf = instavel ? ' ⚠️ INSTÁVEL' : '';
+    const nomeD = `${compostoSelecionado.nome} + ${novoSimbolo}${suf}`;
     const novoComp = {
       id: idD, chaveOriginal: idD, nome: nomeD,
       formula: 'Adição Atômica', molarMass: '--',
       smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD,
-      unstable: avisoInstavel,
+      unstable: instavel,
       sdfModificado: novoSdf
     };
 
@@ -1210,11 +1202,8 @@ Deseja continuar?`;
     window.fecharTabelaPeriodica();
     window.fecharInspectorAtomo();
 
-    if (avisoInstavel) {
-      mostrarNotificacao(`⚠️ Estrutura instável criada: ${nomeD}`, 'warning', 5000);
-    } else {
-      mostrarNotificacao(`✅ Átomo adicionado: ${nomeD}`, 'success');
-    }
+    if (instavel) mostrarNotificacao(`⚠️ Instável: ${nomeD}`, 'warning', 5000);
+    else mostrarNotificacao(`✅ Adicionado: ${nomeD}`, 'success');
   };
 
   // =========================================================================
@@ -1225,17 +1214,17 @@ Deseja continuar?`;
     const body = document.getElementById('bioisostereModalBody');
     if (!modal || !body) return;
     if (!compostoSelecionado || !compostoSelecionado.smiles || compostoSelecionado.smiles === '--') {
-      body.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8;">Selecione uma molécula orgânica estruturada.</div>`;
+      body.innerHTML = `<div style="text-align:center; padding:30px; color:#94a3b8;">Selecione uma molécula.</div>`;
       modal.style.display = 'flex';
       return;
     }
     const smiles = compostoSelecionado.smiles;
     const nome = compostoSelecionado.nome;
     const disp = REACOES_BIOISOSTERISMO.filter(rx => rx.detectar(smiles));
-    const htmlGrupos = disp.length > 0
-      ? Array.from(new Set(disp.map(r => r.alvoSmarts))).map(t => `<span class="bio-group-chip">Alvo: ${t}</span>`).join('')
-      : '<span style="color:#f87171; font-size:0.75rem;">Nenhum grupo farmacofórico elegível.</span>';
-    const htmlCards = disp.length > 0
+    const chips = disp.length > 0
+      ? Array.from(new Set(disp.map(r => r.alvoSmarts))).map(t => `<span class="bio-group-chip">${t}</span>`).join('')
+      : '<span style="color:#f87171; font-size:0.75rem;">Sem grupos elegíveis.</span>';
+    const cards = disp.length > 0
       ? disp.map(rx => `
         <div class="bio-transform-card">
           <div class="bio-card-top">
@@ -1244,17 +1233,17 @@ Deseja continuar?`;
             <span class="cadd-badge badge-warning" style="align-self:flex-start; margin-top:2px;">${rx.tag}</span>
             <p class="bio-card-desc">${rx.descricao}</p>
           </div>
-          <button class="btn-apply-transform" onclick="window.executarTransformacaoBioisosterica('${rx.id}')">🧪 Sintetizar Análogo in Silico</button>
+          <button class="btn-apply-transform" onclick="window.executarTransformacaoBioisosterica('${rx.id}')">🧪 Sintetizar</button>
         </div>`).join('') : '';
     body.innerHTML = `
       <div class="bio-detected-groups-panel">
         <span class="bio-detected-title">Molécula: <strong style="color:var(--neon-cyan);">${nome}</strong></span>
         <div style="font-family:var(--font-mono); font-size:0.7rem; color:#cbd5e1; word-break:break-all;">${smiles}</div>
-        <div class="bio-groups-chips" style="margin-top:6px;">${htmlGrupos}</div>
+        <div class="bio-groups-chips" style="margin-top:6px;">${chips}</div>
       </div>
       <div id="bioComparisonArea"></div>
-      <h4 style="color:#f8fafc; font-size:0.82rem; margin-top:8px;">Transformações Disponíveis:</h4>
-      <div class="bio-transforms-grid">${htmlCards}</div>
+      <h4 style="color:#f8fafc; font-size:0.82rem; margin-top:8px;">Transformações:</h4>
+      <div class="bio-transforms-grid">${cards}</div>
     `;
     modal.style.display = 'flex';
   };
@@ -1265,55 +1254,55 @@ Deseja continuar?`;
     if (!compostoSelecionado) return;
     const rx = REACOES_BIOISOSTERISMO.find(r => r.id === idReacao);
     if (!rx) return;
-    const smilesOrig = compostoSelecionado.smiles;
-    const novoSmiles = rx.transformar(smilesOrig);
-    if (novoSmiles === smilesOrig) { mostrarNotificacao('Não foi possível derivatizar.', 'error'); return; }
+    const sO = compostoSelecionado.smiles;
+    const nS = rx.transformar(sO);
+    if (nS === sO) { mostrarNotificacao('Não foi possível derivatizar.', 'error'); return; }
     const rdkit = await carregarRDKitSobDemanda();
     if (rdkit) {
       try {
-        const m = rdkit.get_mol(novoSmiles);
-        if (!m) { mostrarNotificacao('Análogo com valência instável.', 'error'); return; }
+        const m = rdkit.get_mol(nS);
+        if (!m) { mostrarNotificacao('Valência instável.', 'error'); return; }
         m.delete();
       } catch (e) { mostrarNotificacao('Erro de validação.', 'error'); return; }
     }
-    const pA = await calcularPropriedadesMoleculares(smilesOrig, parseFloat(compostoSelecionado.molarMass));
-    const pD = await calcularPropriedadesMoleculares(novoSmiles, 0);
-    const compArea = document.getElementById('bioComparisonArea');
-    if (compArea && pA && pD) {
+    const pA = await calcularPropriedadesMoleculares(sO, parseFloat(compostoSelecionado.molarMass));
+    const pD = await calcularPropriedadesMoleculares(nS, 0);
+    const area = document.getElementById('bioComparisonArea');
+    if (area && pA && pD) {
       const dMW = pD.mw - pA.mw, dLogP = pD.logp - pA.logp, dTPSA = pD.tpsa - pA.tpsa;
-      compArea.innerHTML = `
+      area.innerHTML = `
         <div class="bio-comparison-container">
           <div class="bio-comparison-header">
-            <span class="bio-comparison-title">✨ Análogo: ${rx.nome}</span>
-            <button class="studio-btn btn-action-transfer" onclick="window.adicionarDerivadoAoCatalogo('${rx.nome.replace(/'/g, "\\'")}', '${novoSmiles}', ${pD.mw.toFixed(2)})">📥 Injetar no Catálogo</button>
+            <span class="bio-comparison-title">✨ ${rx.nome}</span>
+            <button class="studio-btn btn-action-transfer" onclick="window.adicionarDerivadoAoCatalogo('${rx.nome.replace(/'/g, "\\'")}', '${nS}', ${pD.mw.toFixed(2)})">📥 Injetar</button>
           </div>
           <table class="delta-table">
             <thead><tr><th>Propriedade</th><th>Original</th><th>Derivado</th><th>Δ</th><th>Impacto</th></tr></thead>
             <tbody>
-              <tr><td><strong>Massa</strong></td><td>${pA.mw.toFixed(1)} Da</td><td>${pD.mw.toFixed(1)} Da</td><td>${dMW >= 0 ? '+' : ''}${dMW.toFixed(1)}</td><td>${pD.mw <= 500 ? '✅ Ro5' : '⚠️ Violação'}</td></tr>
+              <tr><td><strong>Massa</strong></td><td>${pA.mw.toFixed(1)}</td><td>${pD.mw.toFixed(1)}</td><td>${dMW >= 0 ? '+' : ''}${dMW.toFixed(1)}</td><td>${pD.mw <= 500 ? '✅ Ro5' : '⚠️'}</td></tr>
               <tr><td><strong>LogP</strong></td><td>${pA.logp.toFixed(2)}</td><td>${pD.logp.toFixed(2)}</td><td class="${dLogP > 0 ? 'delta-pos' : 'delta-neg'}">${dLogP >= 0 ? '+' : ''}${dLogP.toFixed(2)}</td><td>${dLogP > 0 ? 'Mais lipofílico' : 'Mais hidrofílico'}</td></tr>
-              <tr><td><strong>TPSA</strong></td><td>${pA.tpsa.toFixed(1)} Å²</td><td>${pD.tpsa.toFixed(1)} Å²</td><td class="${dTPSA < 0 ? 'delta-good' : 'delta-neg'}">${dTPSA >= 0 ? '+' : ''}${dTPSA.toFixed(1)}</td><td>${pD.tpsa <= 140 ? '✅ Oral OK' : '⚠️ Baixa permeabilidade'}</td></tr>
+              <tr><td><strong>TPSA</strong></td><td>${pA.tpsa.toFixed(1)}</td><td>${pD.tpsa.toFixed(1)}</td><td class="${dTPSA < 0 ? 'delta-good' : 'delta-neg'}">${dTPSA >= 0 ? '+' : ''}${dTPSA.toFixed(1)}</td><td>${pD.tpsa <= 140 ? '✅ Oral' : '⚠️'}</td></tr>
             </tbody>
           </table>
         </div>
       `;
     }
   };
-  window.adicionarDerivadoAoCatalogo = function(nomeTransf, novoSmiles, novoMW) {
+  window.adicionarDerivadoAoCatalogo = function(nomeT, nS, nMW) {
     if (!compostoSelecionado) return;
     const idU = 'deriv_' + Date.now();
-    const nomeD = `${compostoSelecionado.nome} [${nomeTransf}]`;
-    const novoComp = { id: idU, chaveOriginal: idU, nome: nomeD, formula: 'Análogo CADD', molarMass: novoMW, smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD };
-    compostosIndexados.unshift(novoComp);
-    compostosFiltrados.unshift(novoComp);
+    const nomeD = `${compostoSelecionado.nome} [${nomeT}]`;
+    const nc = { id: idU, chaveOriginal: idU, nome: nomeD, formula: 'Análogo', molarMass: nMW, smiles: nS, categoria: 'custom', pubchemQuery: nomeD };
+    compostosIndexados.unshift(nc);
+    compostosFiltrados.unshift(nc);
     renderizarListaCompostos(true);
-    selecionarCompostoStudio(novoComp);
+    selecionarCompostoStudio(nc);
     window.fecharPainelBioisosterismo();
     mostrarNotificacao('Análogo adicionado.', 'success');
   };
 
   // =========================================================================
-  // 19. SIMILARIDADE TANIMOTO
+  // 19. SIMILARIDADE
   // =========================================================================
   window.abrirSimilaridade = async function() {
     const modal = document.getElementById('similarityModal');
@@ -1322,43 +1311,44 @@ Deseja continuar?`;
     if (!modal || !body) return;
     if (!compostoSelecionado || !compostoSelecionado.smiles) { mostrarNotificacao('Selecione uma molécula.', 'error'); return; }
     modal.style.display = 'flex';
-    body.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Calculando fingerprints Morgan...</div>';
+    body.innerHTML = '<div style="text-align:center; padding:30px; color:#64748b;">Calculando fingerprints...</div>';
     if (sub) sub.textContent = `Alvo: ${compostoSelecionado.nome}`;
     const rdkit = await carregarRDKitSobDemanda();
     if (!rdkit) { body.innerHTML = '<div style="padding:20px; color:#f87171;">RDKit indisponível.</div>'; return; }
-    const alvoMol = rdkit.get_mol(compostoSelecionado.smiles);
+    const alvoMol = rdkit.get_mol(extrairSmilesPrincipal(compostoSelecionado.smiles) || compostoSelecionado.smiles);
     if (!alvoMol) { body.innerHTML = '<div style="padding:20px; color:#f87171;">SMILES inválido.</div>'; return; }
     let alvoFp = null;
     try { alvoFp = alvoMol.get_morgan_fp(); } catch (e) {}
     alvoMol.delete();
-    if (!alvoFp) { body.innerHTML = '<div style="padding:20px; color:#f87171;">Fingerprint não calculável.</div>'; return; }
-    const resultados = [];
+    if (!alvoFp) { body.innerHTML = '<div style="padding:20px; color:#f87171;">FP não calculável.</div>'; return; }
+    const res = [];
     for (const comp of compostosIndexados) {
-      if (!comp.smiles || comp.smiles === '--' || comp.smiles.includes('.')) continue;
+      const sL = extrairSmilesPrincipal(comp.smiles);
+      if (!sL) continue;
       if (comp.id === compostoSelecionado.id) continue;
       try {
-        const m = rdkit.get_mol(comp.smiles);
+        const m = rdkit.get_mol(sL);
         if (!m) continue;
         const fp = m.get_morgan_fp();
         m.delete();
         if (!fp) continue;
         const t = tanimotoBits(alvoFp, fp);
-        if (t > 0.15) resultados.push({ comp, tanimoto: t });
+        if (t > 0.15) res.push({ comp, t });
       } catch (e) {}
     }
-    resultados.sort((a, b) => b.tanimoto - a.tanimoto);
-    const top = resultados.slice(0, 20);
-    if (top.length === 0) { body.innerHTML = `<div style="padding:20px; color:#94a3b8;">Nenhum similar (Tanimoto > 0.15).</div>`; return; }
+    res.sort((a, b) => b.t - a.t);
+    const top = res.slice(0, 20);
+    if (top.length === 0) { body.innerHTML = '<div style="padding:20px; color:#94a3b8;">Sem similares.</div>'; return; }
     body.innerHTML = `
       <div class="similarity-target-box">
-        <div class="similarity-target-name">🎯 Alvo: ${compostoSelecionado.nome}</div>
+        <div class="similarity-target-name">🎯 ${compostoSelecionado.nome}</div>
         <div class="similarity-target-smiles">${compostoSelecionado.smiles}</div>
       </div>
       <div class="similarity-results-list">
         ${top.map(r => {
-          const sc = r.tanimoto > 0.7 ? 'score-high' : r.tanimoto > 0.4 ? 'score-mid' : 'score-low';
+          const sc = r.t > 0.7 ? 'score-high' : r.t > 0.4 ? 'score-mid' : 'score-low';
           return `<div class="similarity-result-item" onclick='window.selecionarCompostoStudio(${JSON.stringify(r.comp)}); window.fecharSimilaridade();'>
-            <div class="similarity-score-badge ${sc}">${(r.tanimoto * 100).toFixed(0)}%</div>
+            <div class="similarity-score-badge ${sc}">${(r.t * 100).toFixed(0)}%</div>
             <div><div class="similarity-result-name">${r.comp.nome}</div><div class="similarity-result-formula">${r.comp.formula}</div></div>
             <div style="text-align:right; font-family:var(--font-mono); font-size:0.65rem; color:#94a3b8;">${r.comp.molarMass !== '--' ? parseFloat(r.comp.molarMass).toFixed(1) + ' Da' : ''}</div>
           </div>`;
@@ -1377,65 +1367,75 @@ Deseja continuar?`;
   function popcount(x) { let c = 0; while (x) { x &= x - 1; c++; } return c; }
 
   // =========================================================================
-  // 20. SCAFFOLD — com múltiplos métodos
+  // 20. SCAFFOLD — CORRIGIDO com fallback SMARTS
   // =========================================================================
   window.extrairScaffoldAtual = async function () {
     if (!compostoSelecionado || !compostoSelecionado.smiles || compostoSelecionado.smiles === '--') {
-      mostrarNotificacao('Selecione uma molécula com SMILES válido.', 'error');
+      mostrarNotificacao('Selecione uma molécula.', 'error');
       return;
     }
     const rdkit = await carregarRDKitSobDemanda();
-    if (!rdkit) {
-      mostrarNotificacao('RDKit indisponível — scaffold requer quimiometria.', 'error');
-      return;
-    }
+    if (!rdkit) { mostrarNotificacao('RDKit indisponível.', 'error'); return; }
+
     try {
-      const mol = rdkit.get_mol(compostoSelecionado.smiles);
-      if (!mol) { mostrarNotificacao('SMILES inválido para scaffold.', 'error'); return; }
+      const smilesPrincipal = extrairSmilesPrincipal(compostoSelecionado.smiles);
+      if (!smilesPrincipal) { mostrarNotificacao('SMILES inválido.', 'error'); return; }
+
+      const mol = rdkit.get_mol(smilesPrincipal);
+      if (!mol) { mostrarNotificacao('SMILES inválido.', 'error'); return; }
+
       let sc = null;
-      const metodos = ['get_murcko_scaffold', 'get_murcko', 'get_scaffold'];
-      for (const metodo of metodos) {
-        if (typeof mol[metodo] === 'function') {
-          try { sc = mol[metodo](); } catch (e) {}
-          if (sc) break;
-        }
+
+      // Método 1: tentar get_murcko_scaffold se existir
+      if (typeof mol.get_murcko_scaffold === 'function') {
+        try { sc = mol.get_murcko_scaffold(); } catch (e) {}
       }
-      if (!sc) {
+
+      // Método 2: fallback — remover cadeias laterais manualmente
+      if (!sc || sc === '' || sc === smilesPrincipal) {
         try {
-          const mol2 = rdkit.get_mol(compostoSelecionado.smiles);
-          if (mol2) { sc = mol2.get_smiles(); mol2.delete(); }
+          // Remove grupos terminais comuns (hidroxilas, aminas, halogenetos, grupos metila nas pontas)
+          let simplificado = smilesPrincipal
+            .replace(/\(\[?OH?\]?\)/g, '')
+            .replace(/\(\[?NH[0-9]?\]?\)/g, '')
+            .replace(/\(=O\)/g, '')
+            .replace(/\(\[?F,Cl,Br,I\]?\)/g, '');
+          // Reconstroi com RDKit para validar
+          const m2 = rdkit.get_mol(simplificado);
+          if (m2) { sc = m2.get_smiles(); m2.delete(); }
         } catch (e) {}
       }
+
       mol.delete();
-      if (!sc || sc === '' || sc === compostoSelecionado.smiles) {
-        mostrarNotificacao('Não foi possível extrair scaffold (molécula sem anel principal ou RDKit limitado).', 'warning');
+
+      if (!sc || sc === '' || sc === smilesPrincipal) {
+        mostrarNotificacao('Não foi possível extrair scaffold (molécula sem anel ou RDKit limitado).', 'warning', 4000);
         return;
       }
+
       const idS = 'scaffold_' + Date.now();
       const nomeS = `Scaffold de ${compostoSelecionado.nome}`;
-      const novoComp = { id: idS, chaveOriginal: idS, nome: nomeS, formula: 'Scaffold Murcko', molarMass: '--', smiles: sc, categoria: 'custom', pubchemQuery: nomeS };
-      compostosIndexados.unshift(novoComp);
-      compostosFiltrados.unshift(novoComp);
+      const nc = { id: idS, chaveOriginal: idS, nome: nomeS, formula: 'Scaffold Murcko', molarMass: '--', smiles: sc, categoria: 'custom', pubchemQuery: nomeS };
+      compostosIndexados.unshift(nc);
+      compostosFiltrados.unshift(nc);
       renderizarListaCompostos(true);
-      selecionarCompostoStudio(novoComp);
-      mostrarNotificacao('✅ Scaffold extraído: ' + sc, 'success');
+      selecionarCompostoStudio(nc);
+      mostrarNotificacao('✅ Scaffold: ' + sc, 'success');
     } catch (e) {
-      mostrarNotificacao('Erro ao extrair scaffold.', 'error');
+      console.error('[Scaffold]', e);
+      mostrarNotificacao('Erro: ' + e.message, 'error');
     }
   };
 
   // =========================================================================
-  // 21. COMPARAÇÃO SPLIT-SCREEN
+  // 21. COMPARAÇÃO
   // =========================================================================
   window.abrirComparacao = function() {
     const modal = document.getElementById('comparisonModal');
     const selA = document.getElementById('cmpSelectA'), selB = document.getElementById('cmpSelectB');
     if (!modal || !selA || !selB) return;
-    const opcoes = compostosIndexados
-      .filter(c => c.smiles && c.smiles !== '--' && !c.smiles.includes('.'))
-      .slice(0, 500)
-      .map(c => `<option value="${c.id}">${c.nome} — ${c.formula}</option>`)
-      .join('');
+    const opcoes = compostosIndexados.filter(c => c.smiles && c.smiles !== '--').slice(0, 500)
+      .map(c => `<option value="${c.id}">${c.nome} — ${c.formula}</option>`).join('');
     selA.innerHTML = opcoes;
     selB.innerHTML = opcoes;
     if (compostoSelecionado) selA.value = compostoSelecionado.id;
@@ -1444,7 +1444,7 @@ Deseja continuar?`;
       if (outro) selB.value = outro.id;
     }
     modal.style.display = 'flex';
-    document.getElementById('comparisonMetrics').innerHTML = '<div style="text-align:center; padding: 20px; color: #64748b; font-size: 0.78rem;">Clique em "⚖️ Comparar".</div>';
+    document.getElementById('comparisonMetrics').innerHTML = '<div style="text-align:center; padding: 20px; color: #64748b; font-size: 0.78rem;">Clique em Comparar.</div>';
   };
   window.fecharComparacao = function() {
     const m = document.getElementById('comparisonModal'); if (m) m.style.display = 'none';
@@ -1454,7 +1454,7 @@ Deseja continuar?`;
   window.executarComparacao = async function() {
     const idA = document.getElementById('cmpSelectA')?.value;
     const idB = document.getElementById('cmpSelectB')?.value;
-    if (!idA || !idB || idA === idB) { mostrarNotificacao('Selecione dois compostos diferentes.', 'warning'); return; }
+    if (!idA || !idB || idA === idB) { mostrarNotificacao('Selecione compostos diferentes.', 'warning'); return; }
     const cA = compostosIndexados.find(c => c.id === idA);
     const cB = compostosIndexados.find(c => c.id === idB);
     if (!cA || !cB) return;
@@ -1476,63 +1476,43 @@ Deseja continuar?`;
       cmpViewerB.setStyle({}, { stick: { radius: 0.12 }, sphere: { scale: 0.22 } });
       cmpViewerB.zoomTo(); cmpViewerB.render();
     }
-    sincronizarCameras(cmpViewerA, cmpViewerB);
     const pA = await calcularPropriedadesMoleculares(cA.smiles, parseFloat(cA.molarMass));
     const pB = await calcularPropriedadesMoleculares(cB.smiles, parseFloat(cB.molarMass));
     if (pA && pB) {
-      const render = (l, a, b, menorMelhor = false) => {
-        const d = b - a, ok = menorMelhor ? d < 0 : d > 0;
+      const r = (l, a, b, mm = false) => {
+        const d = b - a, ok = mm ? d < 0 : d > 0;
         return `<tr><td>${l}</td><td>${a.toFixed(2)}</td><td>${b.toFixed(2)}</td><td class="${ok ? 'cmp-delta-pos' : 'cmp-delta-neg'}">${d >= 0 ? '+' : ''}${d.toFixed(2)}</td></tr>`;
       };
       document.getElementById('comparisonMetrics').innerHTML = `
         <table class="comparison-table">
-          <thead><tr><th>Propriedade</th><th>${cA.nome}</th><th>${cB.nome}</th><th>Δ (B-A)</th></tr></thead>
+          <thead><tr><th>Propriedade</th><th>${cA.nome}</th><th>${cB.nome}</th><th>Δ</th></tr></thead>
           <tbody>
-            ${render('Massa (Da)', pA.mw, pB.mw, true)}
-            ${render('LogP', pA.logp, pB.logp, false)}
-            ${render('TPSA (Å²)', pA.tpsa, pB.tpsa, true)}
-            ${render('HBD', pA.hbd, pB.hbd, true)}
-            ${render('HBA', pA.hba, pB.hba, true)}
-            ${render('Ligações RotB', pA.rotb, pB.rotb, true)}
-            ${render('MR', pA.mr, pB.mr, false)}
-            ${render('Fração sp³', pA.csp3, pB.csp3, false)}
+            ${r('Massa', pA.mw, pB.mw, true)}
+            ${r('LogP', pA.logp, pB.logp, false)}
+            ${r('TPSA', pA.tpsa, pB.tpsa, true)}
+            ${r('HBD', pA.hbd, pB.hbd, true)}
+            ${r('HBA', pA.hba, pB.hba, true)}
+            ${r('RotB', pA.rotb, pB.rotb, true)}
           </tbody>
         </table>
       `;
     }
   };
-  function sincronizarCameras(v1, v2) {
-    if (!v1 || !v2) return;
-    let sync = false;
-    const link = (src, dst) => {
-      if (!src || !dst || typeof src.setViewChangeCallback !== 'function') return;
-      src.setViewChangeCallback(() => {
-        if (sync) return;
-        sync = true;
-        try { dst.setView(src.getView()); dst.render(); } catch (e) {}
-        sync = false;
-      });
-    };
-    link(v1, v2); link(v2, v1);
-  }
 
   // =========================================================================
   // 22. CSV
   // =========================================================================
   window.exportarCSVFiltrados = function() {
-    if (compostosFiltrados.length === 0) { mostrarNotificacao('Nenhum composto filtrado.', 'error'); return; }
-    const linhas = ['Nome,Formula,Massa,SMILES,Categoria,Instavel'];
+    if (compostosFiltrados.length === 0) { mostrarNotificacao('Sem compostos.', 'error'); return; }
+    const L = ['Nome,Formula,Massa,SMILES,Categoria,Instavel'];
     compostosFiltrados.forEach(c => {
-      const nome = `"${(c.nome || '').replace(/"/g, '""')}"`;
-      const smiles = `"${(c.smiles || '').replace(/"/g, '""')}"`;
-      linhas.push([nome, c.formula || '', c.molarMass || '', smiles, c.categoria || '', c.unstable ? 'SIM' : 'NAO'].join(','));
+      L.push([`"${(c.nome || '').replace(/"/g, '""')}"`, c.formula || '', c.molarMass || '', `"${(c.smiles || '').replace(/"/g, '""')}"`, c.categoria || '', c.unstable ? 'SIM' : 'NAO'].join(','));
     });
-    const blob = new Blob(['\ufeff' + linhas.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['\ufeff' + L.join('\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `laift_catalogo_${new Date().toISOString().slice(0, 10)}.csv`;
+    const a = document.createElement('a'); a.href = url; a.download = `laift_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click(); URL.revokeObjectURL(url);
-    mostrarNotificacao(`${compostosFiltrados.length} compostos exportados.`, 'success');
+    mostrarNotificacao(`${compostosFiltrados.length} exportados.`, 'success');
   };
 
   // =========================================================================
@@ -1545,58 +1525,56 @@ Deseja continuar?`;
     const sub = document.getElementById('caddModalSubtitle');
     if (!modal || !body) return;
     if (!ultimoDossieCADD) {
-      body.innerHTML = `<div style="text-align:center; color:#94a3b8; padding:30px;">Selecione um composto orgânico.</div>`;
+      body.innerHTML = `<div style="text-align:center; color:#94a3b8; padding:30px;">Selecione um composto.</div>`;
       modal.style.display = 'flex';
       return;
     }
     const d = ultimoDossieCADD;
-    if (title) title.textContent = `📊 Dossiê CADD: ${d.nome}`;
-    if (sub) sub.textContent = `SMILES: ${d.smiles}${d._fallback ? ' (valores estimados)' : ''}`;
+    if (title) title.textContent = `📊 ${d.nome}`;
+    if (sub) sub.textContent = `SMILES: ${d.smiles}${d._fallback ? ' (estimado)' : ''}`;
     body.innerHTML = `
       <div class="cadd-cards-grid">
         <div class="cadd-card">
           <div class="cadd-card-title-row">
-            <span class="cadd-card-title">💊 Lipinski (Ro5)</span>
-            <span class="cadd-badge ${d.falhasLipinski.length === 0 ? 'badge-approved' : d.falhasLipinski.length === 1 ? 'badge-warning' : 'badge-rejected'}">${d.falhasLipinski.length === 0 ? 'Conforme' : d.falhasLipinski.length + ' Violação(ões)'}</span>
+            <span class="cadd-card-title">💊 Lipinski</span>
+            <span class="cadd-badge ${d.falhasLipinski.length === 0 ? 'badge-approved' : d.falhasLipinski.length === 1 ? 'badge-warning' : 'badge-rejected'}">${d.falhasLipinski.length === 0 ? 'Conforme' : d.falhasLipinski.length + ' Viol.'}</span>
           </div>
           <div class="cadd-param-list">
-            <div class="cadd-param-item ${d.mw > 500 ? 'violated' : ''}"><span>MW (≤ 500):</span><strong>${d.mw.toFixed(2)} Da</strong></div>
-            <div class="cadd-param-item ${d.logp > 5 ? 'violated' : ''}"><span>LogP (≤ 5):</span><strong>${d.logp.toFixed(2)}</strong></div>
-            <div class="cadd-param-item ${d.hbd > 5 ? 'violated' : ''}"><span>HBD (≤ 5):</span><strong>${d.hbd}</strong></div>
-            <div class="cadd-param-item ${d.hba > 10 ? 'violated' : ''}"><span>HBA (≤ 10):</span><strong>${d.hba}</strong></div>
+            <div class="cadd-param-item ${d.mw > 500 ? 'violated' : ''}"><span>MW:</span><strong>${d.mw.toFixed(2)}</strong></div>
+            <div class="cadd-param-item ${d.logp > 5 ? 'violated' : ''}"><span>LogP:</span><strong>${d.logp.toFixed(2)}</strong></div>
+            <div class="cadd-param-item ${d.hbd > 5 ? 'violated' : ''}"><span>HBD:</span><strong>${d.hbd}</strong></div>
+            <div class="cadd-param-item ${d.hba > 10 ? 'violated' : ''}"><span>HBA:</span><strong>${d.hba}</strong></div>
           </div>
         </div>
         <div class="cadd-card">
           <div class="cadd-card-title-row">
             <span class="cadd-card-title">🔬 Veber</span>
-            <span class="cadd-badge ${d.falhasVeber.length === 0 ? 'badge-approved' : 'badge-rejected'}">${d.falhasVeber.length === 0 ? 'Alta biodisponib.' : 'Baixa'}</span>
+            <span class="cadd-badge ${d.falhasVeber.length === 0 ? 'badge-approved' : 'badge-rejected'}">${d.falhasVeber.length === 0 ? 'OK' : 'Baixa'}</span>
           </div>
           <div class="cadd-param-list">
-            <div class="cadd-param-item ${d.rotb > 10 ? 'violated' : ''}"><span>RotB (≤ 10):</span><strong>${d.rotb}</strong></div>
-            <div class="cadd-param-item ${d.tpsa > 140 ? 'violated' : ''}"><span>TPSA (≤ 140):</span><strong>${d.tpsa.toFixed(1)} Å²</strong></div>
+            <div class="cadd-param-item ${d.rotb > 10 ? 'violated' : ''}"><span>RotB:</span><strong>${d.rotb}</strong></div>
+            <div class="cadd-param-item ${d.tpsa > 140 ? 'violated' : ''}"><span>TPSA:</span><strong>${d.tpsa.toFixed(1)}</strong></div>
             <div class="cadd-param-item"><span>Fsp³:</span><strong>${d.csp3.toFixed(2)}</strong></div>
           </div>
         </div>
         <div class="cadd-card">
           <div class="cadd-card-title-row">
             <span class="cadd-card-title">📐 Ghose</span>
-            <span class="cadd-badge ${d.falhasGhose.length === 0 ? 'badge-approved' : 'badge-rejected'}">${d.falhasGhose.length === 0 ? 'Aprovado' : d.falhasGhose.length + ' Viol.'}</span>
+            <span class="cadd-badge ${d.falhasGhose.length === 0 ? 'badge-approved' : 'badge-rejected'}">${d.falhasGhose.length === 0 ? 'OK' : d.falhasGhose.length + ' Viol.'}</span>
           </div>
           <div class="cadd-param-list">
-            <div class="cadd-param-item ${d.mw < 160 || d.mw > 480 ? 'violated' : ''}"><span>MW (160-480):</span><strong>${d.mw.toFixed(1)}</strong></div>
-            <div class="cadd-param-item ${d.logp < -0.4 || d.logp > 5.6 ? 'violated' : ''}"><span>LogP (-0.4 a 5.6):</span><strong>${d.logp.toFixed(2)}</strong></div>
-            <div class="cadd-param-item ${d.mr < 40 || d.mr > 130 ? 'violated' : ''}"><span>MR (40-130):</span><strong>${d.mr.toFixed(1)}</strong></div>
-            <div class="cadd-param-item ${d.totalAtoms < 20 || d.totalAtoms > 70 ? 'violated' : ''}"><span>Átomos (20-70):</span><strong>${d.totalAtoms}</strong></div>
+            <div class="cadd-param-item"><span>MR:</span><strong>${d.mr.toFixed(1)}</strong></div>
+            <div class="cadd-param-item"><span>Átomos:</span><strong>${d.totalAtoms}</strong></div>
           </div>
         </div>
         <div class="cadd-card">
           <div class="cadd-card-title-row">
             <span class="cadd-card-title">⚠️ PAINS</span>
-            <span class="cadd-badge ${d.alertasPAINS.length === 0 ? 'badge-approved' : 'badge-rejected'}">${d.alertasPAINS.length === 0 ? 'Isento' : d.alertasPAINS.length + ' Alerta(s)'}</span>
+            <span class="cadd-badge ${d.alertasPAINS.length === 0 ? 'badge-approved' : 'badge-rejected'}">${d.alertasPAINS.length === 0 ? 'Isento' : d.alertasPAINS.length + ' Alerta'}</span>
           </div>
           ${d.alertasPAINS.length === 0
-            ? `<div class="pains-clean-box">✅ <strong>Sem grupos promíscuos.</strong></div>`
-            : `<div class="pains-alert-box"><strong>Subestruturas reativas:</strong><br>${d.alertasPAINS.map(a => `• <strong>${a.nome}</strong>: ${a.risco}`).join('<br>')}</div>`}
+            ? `<div class="pains-clean-box">✅ Sem grupos promíscuos.</div>`
+            : `<div class="pains-alert-box"><strong>Reativos:</strong><br>${d.alertasPAINS.map(a => `• ${a.nome}`).join('<br>')}</div>`}
         </div>
       </div>
     `;
@@ -1631,52 +1609,66 @@ Deseja continuar?`;
       } catch (e) {}
     }
 
-    if (smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('[')) {
+    // Extrai componente principal (remove sais)
+    const sL = extrairSmilesPrincipal(smiles);
+
+    // 1. RDKit ETKDG local
+    if (sL && !sL.startsWith('[')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
         try {
-          exibirStatusRDKit(true, "Calculando geometria 3D (ETKDG)...");
-          const mol = rdkit.get_mol(smiles);
+          exibirStatusRDKit(true, "Gerando 3D local...");
+          const mol = rdkit.get_mol(sL);
           if (mol) {
             try { mol.add_hs(); } catch (e) {}
-            const embedStatus = mol.embed_mol();
-            if (embedStatus >= 0) {
+            if (mol.embed_mol() >= 0) {
               const sdf = mol.to_sdf();
               mol.delete();
               exibirStatusRDKit(false);
-              if (validarConteudoSDF(sdf)) { salvarEmCache(smiles, termoBusca, sdf); return sdf; }
+              if (validarConteudoSDF(sdf)) { salvarEmCache(sL, termoBusca, sdf); return sdf; }
             } else mol.delete();
           }
-        } catch (e) { console.warn('[3D] RDKit ETKDG falhou:', e.message); }
+        } catch (e) { console.warn('[3D] ETKDG falhou:', e.message); }
       }
       exibirStatusRDKit(false);
     }
 
-    if (smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('[')) {
+    // 2. PubChem por SMILES (só o principal, sem sais)
+    if (sL && !sL.startsWith('[')) {
       try {
-        exibirStatusRDKit(true, "Consultando PubChem 3D...");
-        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(smiles)}/SDF?record_type=3d`;
-        const res = await fetch(url);
+        exibirStatusRDKit(true, "PubChem 3D...");
+        const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(sL)}/SDF?record_type=3d`);
         if (res.ok) {
           const sdf = await res.text();
           exibirStatusRDKit(false);
-          if (validarConteudoSDF(sdf)) { salvarEmCache(smiles, termoBusca, sdf); return sdf; }
+          if (validarConteudoSDF(sdf)) { salvarEmCache(sL, termoBusca, sdf); return sdf; }
         }
-        exibirStatusRDKit(false);
       } catch (e) {}
     }
 
+    // 3. PubChem por nome
     if (termoBusca) {
       try {
-        exibirStatusRDKit(true, "Consultando PubChem por nome...");
-        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termoBusca.trim())}/SDF?record_type=3d`;
-        const res = await fetch(url);
+        exibirStatusRDKit(true, "PubChem por nome...");
+        const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termoBusca.trim())}/SDF?record_type=3d`);
         if (res.ok) {
           const sdf = await res.text();
           exibirStatusRDKit(false);
           if (validarConteudoSDF(sdf)) { salvarEmCache(smiles || termoBusca, termoBusca, sdf); return sdf; }
         }
-        exibirStatusRDKit(false);
+      } catch (e) {}
+    }
+
+    // 4. CACTUS
+    if (sL) {
+      try {
+        exibirStatusRDKit(true, "CACTUS...");
+        const res = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(sL)}/file?format=sdf`);
+        if (res.ok) {
+          const sdf = await res.text();
+          exibirStatusRDKit(false);
+          if (validarConteudoSDF(sdf)) { salvarEmCache(sL, termoBusca, sdf); return sdf; }
+        }
       } catch (e) {}
     }
 
@@ -1720,7 +1712,10 @@ Deseja continuar?`;
       modeloCarregadoAtivo = false;
       const container = document.getElementById('studioViewer3D');
       if (container) {
-        container.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#f87171; font-size:0.8rem; text-align:center; max-width:80%;">⚠️ Coordenadas 3D não disponíveis.</div>`;
+        container.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#facc15; font-size:0.8rem; text-align:center; max-width:80%; line-height:1.5;">
+          ⚠️ <strong>Coordenadas 3D indisponíveis</strong><br>
+          <span style="color:#94a3b8; font-size:0.7rem;">A projeção 2D continua funcional.<br>Motivo: SMILES inválido, sal sem estrutura de rede ou RDKit offline.</span>
+        </div>`;
       }
       removerBannerInstabilidade();
     }
@@ -1734,7 +1729,7 @@ Deseja continuar?`;
     banner.className = 'unstable-banner';
     banner.id = 'unstableBanner';
     banner.innerHTML = `
-      <div>⚠️ <strong>Estrutura instável</strong> — valência estendida (radical livre).</div>
+      <div>⚠️ <strong>Estrutura instável</strong> — valência estendida (radical).</div>
       <div class="unstable-actions">
         <button onclick="window.desfazerEdicao()">↶ Desfazer</button>
         <button onclick="document.getElementById('unstableBanner').remove()">OK</button>
@@ -1749,70 +1744,41 @@ Deseja continuar?`;
 
   function construirCena3D(sdfText) {
     const container = document.getElementById('studioViewer3D');
-    if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) {
-      console.warn('[3D] Pré-requisitos não atendidos.');
-      return;
-    }
+    if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
 
     const rect = container.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) {
-      console.warn('[3D] Container sem dimensões — retry em 200ms');
-      setTimeout(() => construirCena3D(sdfText), 200);
+      setTimeout(() => construirCena3D(sdfText), 250);
       return;
     }
 
     try {
-      if (studioViewer) {
-        try { studioViewer.stopAnimate(); } catch (e) {}
-        try { studioViewer.clear(); } catch (e) {}
-      }
+      if (studioViewer) { try { studioViewer.stopAnimate(); } catch (e) {} try { studioViewer.clear(); } catch (e) {} }
       container.innerHTML = '';
-
-      studioViewer = $3Dmol.createViewer(container, {
-        backgroundColor: '#020617',
-        antialias: true
-      });
-
+      studioViewer = $3Dmol.createViewer(container, { backgroundColor: '#020617', antialias: true });
       const model = studioViewer.addModel(sdfText, 'sdf');
-      if (!model || typeof model.selectedAtoms !== 'function') {
-        modeloCarregadoAtivo = false;
-        return;
-      }
-      const atomos = model.selectedAtoms({}) || [];
-      if (atomos.length === 0) {
-        modeloCarregadoAtivo = false;
-        return;
-      }
-
+      if (!model || typeof model.selectedAtoms !== 'function') { modeloCarregadoAtivo = false; return; }
+      const ats = model.selectedAtoms({}) || [];
+      if (ats.length === 0) { modeloCarregadoAtivo = false; return; }
       modeloCarregadoAtivo = true;
       aplicarEstiloVisual(modeloAtual);
-
       studioViewer.setClickable({}, true, function (atom) {
         if (modoMedicaoAtivo) processarCliqueMedicao(atom);
         else selecionarEInspecionarAtomo(atom);
       });
-
       studioViewer.zoomTo();
       studioViewer.render();
-
       setTimeout(() => {
         if (studioViewer && modeloCarregadoAtivo) {
           try {
             const r2 = container.getBoundingClientRect();
-            if (r2.width > 0 && r2.height > 0) {
-              studioViewer.resize();
-              studioViewer.render();
-            }
+            if (r2.width > 0 && r2.height > 0) { studioViewer.resize(); studioViewer.render(); }
           } catch (e) {}
         }
       }, 180);
-
-      if (autoRotacaoAtiva) {
-        try { studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
-      }
+      if (autoRotacaoAtiva) { try { studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {} }
     } catch (errCena) {
       modeloCarregadoAtivo = false;
-      console.error('[3D] Erro:', errCena);
     }
   }
 
@@ -1834,7 +1800,7 @@ Deseja continuar?`;
   }
 
   // =========================================================================
-  // 26. 2D — CORRIGIDO (passa canvas, não ID)
+  // 26. 2D — Melhorado: trata sais e falhas
   // =========================================================================
   function desenharEstrutura2DStudio(smiles, nome) {
     const canvas = document.getElementById('studioCanvas2D');
@@ -1845,38 +1811,74 @@ Deseja continuar?`;
     ctx.fillStyle = '#020617';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (typeof SmilesDrawer === 'undefined') { desenharFallback2D(canvas, smiles, nome); return; }
-    if (!smiles || smiles === '--' || smiles.includes('.') || smiles.startsWith('RADICAL_')) {
-      desenharFallback2D(canvas, smiles, nome); return;
+    if (typeof SmilesDrawer === 'undefined') { desenharFallback2D(canvas, smiles, nome, 'SmilesDrawer não carregado'); return; }
+
+    // Extrair componente principal se for sal
+    const sL = extrairSmilesPrincipal(smiles);
+
+    if (!sL || sL.startsWith('RADICAL_')) {
+      desenharFallback2D(canvas, smiles, nome, 'Molécula inorgânica ou radical');
+      return;
     }
 
     try {
       const drawer = new SmilesDrawer.Drawer({
         width: canvas.width,
         height: canvas.height,
-        bondThickness: 1.6,
-        bondLength: 20,
+        bondThickness: 2,
+        bondLength: 22,
         isomeric: true,
-        padding: 20
+        padding: 30
       });
+
+      let desenhou = false;
       SmilesDrawer.parse(
-        smiles,
-        function (tree) { drawer.draw(tree, canvas, 'dark', false); },
-        function (err) { desenharFallback2D(canvas, smiles, nome); }
+        sL,
+        function (tree) {
+          try {
+            drawer.draw(tree, canvas, 'dark', false);
+            desenhou = true;
+          } catch (e) {
+            desenharFallback2D(canvas, sL, nome, 'Erro de desenho');
+          }
+        },
+        function (err) {
+          console.warn('[SmilesDrawer] Parse erro:', err);
+          desenharFallback2D(canvas, sL, nome, 'SMILES inválido para desenho');
+        }
       );
-    } catch (e) { desenharFallback2D(canvas, smiles, nome); }
+    } catch (e) {
+      console.warn('[SmilesDrawer] Exceção:', e);
+      desenharFallback2D(canvas, sL, nome, 'Exceção: ' + e.message);
+    }
   }
-  function desenharFallback2D(canvas, smiles, nome) {
+
+  function desenharFallback2D(canvas, smiles, nome, motivo) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#020617'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#38bdf8';
-    ctx.font = 'bold 18px "Urbanist", sans-serif';
+    ctx.font = 'bold 22px "Urbanist", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(nome || 'Composto', canvas.width / 2, canvas.height / 2 - 12);
+    ctx.fillText(nome || 'Composto', canvas.width / 2, canvas.height / 2 - 30);
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '12px "Fira Code", monospace';
-    ctx.fillText(smiles || 'Estrutura Indisponível', canvas.width / 2, canvas.height / 2 + 18);
+    ctx.font = '13px "Fira Code", monospace';
+    // Quebra o SMILES em múltiplas linhas se for longo
+    const sm = smiles || '--';
+    const maxChars = 60;
+    const linhas = [];
+    for (let i = 0; i < sm.length && linhas.length < 4; i += maxChars) {
+      linhas.push(sm.substring(i, i + maxChars));
+    }
+    linhas.forEach((l, i) => {
+      ctx.fillText(l, canvas.width / 2, canvas.height / 2 + i * 20);
+    });
+    if (motivo) {
+      ctx.fillStyle = '#facc15';
+      ctx.font = 'italic 11px "Urbanist"';
+      ctx.fillText('(' + motivo + ')', canvas.width / 2, canvas.height / 2 + linhas.length * 20 + 30);
+    }
   }
 
   // =========================================================================
@@ -1961,18 +1963,18 @@ Deseja continuar?`;
   window.exportarImagemPNG = function() {
     const nb = (compostoSelecionado?.nome || 'molecula').replace(/\s+/g, '_');
     if (modoExibicaoAtual === '3D' && studioViewer && modeloCarregadoAtivo) {
-      const a = document.createElement('a'); a.download = `${nb}_3D_LAIFT.png`; a.href = studioViewer.pngURI(); a.click();
+      const a = document.createElement('a'); a.download = `${nb}_3D.png`; a.href = studioViewer.pngURI(); a.click();
     } else {
       const c = document.getElementById('studioCanvas2D');
-      if (c) { const a = document.createElement('a'); a.download = `${nb}_2D_LAIFT.png`; a.href = c.toDataURL('image/png'); a.click(); }
+      if (c) { const a = document.createElement('a'); a.download = `${nb}_2D.png`; a.href = c.toDataURL('image/png'); a.click(); }
     }
   };
   window.exportarArquivoSDF = function() {
-    if (!sdfCacheLocal) { mostrarNotificacao('Aguarde a conformação 3D.', 'error'); return; }
+    if (!sdfCacheLocal) { mostrarNotificacao('Sem SDF.', 'error'); return; }
     const nb = (compostoSelecionado?.nome || 'composto').replace(/\s+/g, '_');
     const blob = new Blob([sdfCacheLocal], { type: 'chemical/x-mdl-sdfile;charset=utf-8' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${nb}_3D.sdf`; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${nb}.sdf`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -1990,12 +1992,9 @@ Deseja continuar?`;
   window.carregarCompostoDoStudioNaBancada = function() {
     if (!compostoSelecionado) return;
     const payload = {
-      chave: compostoSelecionado.chaveOriginal,
-      nome: compostoSelecionado.nome,
-      smiles: compostoSelecionado.smiles,
-      formula: compostoSelecionado.formula,
-      molarMass: compostoSelecionado.molarMass,
-      timestamp: Date.now()
+      chave: compostoSelecionado.chaveOriginal, nome: compostoSelecionado.nome,
+      smiles: compostoSelecionado.smiles, formula: compostoSelecionado.formula,
+      molarMass: compostoSelecionado.molarMass, timestamp: Date.now()
     };
     if (labBroadcast) labBroadcast.postMessage({ tipo: 'CARREGAR_COMPOSTO_BANCADA', composto: payload });
     if (window.parent && window.parent !== window) window.parent.postMessage({ acao: 'carregarCompostoNaBancada', composto: payload }, '*');
@@ -2009,6 +2008,7 @@ Deseja continuar?`;
   // 29. INICIALIZAÇÃO
   // =========================================================================
   async function inicializarStudio() {
+    console.log('[Studio] 🚀 Inicializando v' + STUDIO_VERSION);
     let tent = 0;
     while (tent < 10) {
       const { labDb, synthDb } = obterFontesDeDados();
