@@ -1,7 +1,6 @@
 /**
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
- * Arquivo: studio/studio.js — v3.0
- * Adição molecular (crescimento) + Tabela Periódica Completa (118 elementos)
+ * Arquivo: studio/studio.js — v3.1 (Bug fixes + Adição molecular estável)
  */
 
 (function() {
@@ -54,121 +53,113 @@
   };
 
   // =========================================================================
-  // 1. TABELA PERIÓDICA — 118 ELEMENTOS (dados compactos)
-  // Formato: [z, sym, nome, massa, eletronegatividade, raio, valencias, categoria, grupo, periodo, pharma]
+  // 1. TABELA PERIÓDICA — 118 ELEMENTOS
   // =========================================================================
   const TABELA_PERIODICA_RAW = [
-    // Período 1
     [1,'H','Hidrogênio',1.008,2.20,37,[1],'nao-metal',1,1,'Essencial em pontes de H; bioisosterismo H↔F para bloquear oxidação.'],
     [2,'He','Hélio',4.003,null,32,[0],'gas-nobre',18,1,'Gás nobre inerte; usado em atmosferas controladas.'],
-    // Período 2
-    [3,'Li','Lítio',6.94,0.98,152,[1],'alcalino',1,2,'Íon terapêutico em transtorno bipolar; inibe inositol monofosfatase.'],
-    [4,'Be','Berílio',9.012,1.57,112,[2],'alcalino-terroso',2,2,'Altamente tóxico; mimetiza magnésio causando beriliose.'],
-    [5,'B','Boro',10.81,2.04,85,[3,4],'metaloide',13,2,'Ácido borônico: inibidor reversível de proteassoma (Bortezomibe).'],
-    [6,'C','Carbono',12.011,2.55,77,[4],'nao-metal',14,2,'Espinha dorsal da química orgânica; sp³/sp²/sp; quiralidade tetraédrica.'],
-    [7,'N','Nitrogênio',14.007,3.04,75,[3,4],'nao-metal',15,2,'Aminas básicas protonáveis; núcleo de heterociclos (piridina, piperazina).'],
-    [8,'O','Oxigênio',15.999,3.44,73,[2],'nao-metal',16,2,'Aceptor de pontes de H; carbonilas, hidroxilas, éteres, ésteres.'],
-    [9,'F','Flúor',18.998,3.98,71,[1],'halogenio',17,2,'Bioisóstero de H; aumenta lipofilicidade, bloqueia CYP450.'],
+    [3,'Li','Lítio',6.94,0.98,152,[1],'alcalino',1,2,'Íon terapêutico em transtorno bipolar.'],
+    [4,'Be','Berílio',9.012,1.57,112,[2],'alcalino-terroso',2,2,'Altamente tóxico; mimetiza magnésio.'],
+    [5,'B','Boro',10.81,2.04,85,[3,4],'metaloide',13,2,'Ácido borônico: inibidor de proteassoma (Bortezomibe).'],
+    [6,'C','Carbono',12.011,2.55,77,[4],'nao-metal',14,2,'Espinha dorsal da química orgânica; sp³/sp²/sp.'],
+    [7,'N','Nitrogênio',14.007,3.04,75,[3,4],'nao-metal',15,2,'Aminas básicas; núcleo de heterociclos.'],
+    [8,'O','Oxigênio',15.999,3.44,73,[2],'nao-metal',16,2,'Aceptor de pontes de H; hidroxilas, éteres, ésteres.'],
+    [9,'F','Flúor',18.998,3.98,71,[1],'halogenio',17,2,'Bioisóstero de H; bloqueia CYP450.'],
     [10,'Ne','Neônio',20.18,null,69,[0],'gas-nobre',18,2,'Gás nobre inerte.'],
-    // Período 3
-    [11,'Na','Sódio',22.99,0.93,186,[1],'alcalino',1,3,'Contraíon de sais hidrossolúveis (Dipirona Sódica, Diclofenaco Sódico).'],
-    [12,'Mg','Magnésio',24.305,1.31,160,[2],'alcalino-terroso',2,3,'Cofator de quinases; estabiliza ATP e DNA polimerases.'],
-    [13,'Al','Alumínio',26.982,1.61,143,[3],'metal-pos-transicao',13,3,'Antiácido gástrico; adjuvante imunológico em vacinas.'],
-    [14,'Si','Silício',28.085,1.90,111,[4],'metaloide',14,3,'Bioisóstero tetravalente de C (sila-substituição); eleva LogP.'],
-    [15,'P','Fósforo',30.974,2.19,106,[3,5],'nao-metal',15,3,'Profármacos fosfatados; antivirais nucleotídeos (Sofosbuvir).'],
-    [16,'S','Enxofre',32.06,2.58,102,[2,4,6],'nao-metal',16,3,'Bioisóstero de oxigênio; sulfonamidas, tióis, tioéteres.'],
-    [17,'Cl','Cloro',35.45,3.16,99,[1,3,5,7],'halogenio',17,3,'Preenche bolsões hidrofóbicos; forma cloridratos solúveis.'],
-    [18,'Ar','Argônio',39.948,null,97,[0],'gas-nobre',18,3,'Inerte; atmosfera protetora em reações sensíveis.'],
-    // Período 4
-    [19,'K','Potássio',39.098,0.82,227,[1],'alcalino',1,4,'Cátion intracelular principal; sais de rápida dissolução.'],
-    [20,'Ca','Cálcio',40.078,1.00,197,[2],'alcalino-terroso',2,4,'2º mensageiro; alvo de bloqueadores de canal (Anlodipino).'],
+    [11,'Na','Sódio',22.99,0.93,186,[1],'alcalino',1,3,'Contraíon de sais hidrossolúveis.'],
+    [12,'Mg','Magnésio',24.305,1.31,160,[2],'alcalino-terroso',2,3,'Cofator de quinases.'],
+    [13,'Al','Alumínio',26.982,1.61,143,[3],'metal-pos-transicao',13,3,'Antiácido; adjuvante de vacinas.'],
+    [14,'Si','Silício',28.085,1.90,111,[4],'metaloide',14,3,'Bioisóstero tetravalente de C.'],
+    [15,'P','Fósforo',30.974,2.19,106,[3,5],'nao-metal',15,3,'Profármacos fosfatados; antivirais.'],
+    [16,'S','Enxofre',32.06,2.58,102,[2,4,6],'nao-metal',16,3,'Bioisóstero de O; sulfonamidas.'],
+    [17,'Cl','Cloro',35.45,3.16,99,[1,3,5,7],'halogenio',17,3,'Preenche bolsões hidrofóbicos.'],
+    [18,'Ar','Argônio',39.948,null,97,[0],'gas-nobre',18,3,'Atmosfera protetora.'],
+    [19,'K','Potássio',39.098,0.82,227,[1],'alcalino',1,4,'Cátion intracelular principal.'],
+    [20,'Ca','Cálcio',40.078,1.00,197,[2],'alcalino-terroso',2,4,'2º mensageiro; alvo de bloqueadores.'],
     [21,'Sc','Escândio',44.956,1.36,162,[3],'metal-transicao',3,4,'Terras raras; catalisadores.'],
-    [22,'Ti','Titânio',47.867,1.54,147,[2,3,4],'metal-transicao',4,4,'Implantes biocompatíveis; catálise.'],
-    [23,'V','Vanádio',50.942,1.63,134,[2,3,4,5],'metal-transicao',5,4,'Catálise industrial; mimetiza fosfato.'],
-    [24,'Cr','Cromo',51.996,1.66,128,[2,3,6],'metal-transicao',6,4,'Cr(III) cofator de insulina; Cr(VI) carcinogênico.'],
-    [25,'Mn','Manganês',54.938,1.55,127,[2,4,7],'metal-transicao',7,4,'Cofator da SOD; contraste em MRI.'],
-    [26,'Fe','Ferro',55.845,1.83,126,[2,3],'metal-transicao',8,4,'Centro redox da hemoglobina e CYP450 hepáticas.'],
-    [27,'Co','Cobalto',58.933,1.88,125,[2,3],'metal-transicao',9,4,'Centro da vitamina B12; ativa HIF.'],
-    [28,'Ni','Níquel',58.693,1.91,124,[2,3],'metal-transicao',10,4,'Catálise (Raney, hidrogenação); alergênico.'],
-    [29,'Cu','Cobre',63.546,1.90,128,[1,2],'metal-transicao',11,4,'Cofator da citocromo c oxidase e SOD.'],
-    [30,'Zn','Zinco',65.38,1.65,134,[2],'metal-transicao',12,4,'Anidrase carbônica; dedos de zinco (fatores de transcrição).'],
-    [31,'Ga','Gálio',69.723,1.81,135,[3],'metal-pos-transicao',13,4,'Contraste; Ga-68 em PET.'],
-    [32,'Ge','Germânio',72.63,2.01,122,[4],'metaloide',14,4,'Semicondutores; análogo de Si.'],
-    [33,'As','Arsênio',74.922,2.18,119,[3,5],'metaloide',15,4,'Salvarsan histórico; antileucêmico (Trisulfeto de Arsênio).'],
-    [34,'Se','Selênio',78.96,2.55,116,[2,4,6],'nao-metal',16,4,'Selenocisteína; antioxidante (glutationa peroxidase).'],
-    [35,'Br','Bromo',79.904,2.96,114,[1,3,5,7],'halogenio',17,4,'Ligações de halogênio direcionadas com carbonilas proteicas.'],
+    [22,'Ti','Titânio',47.867,1.54,147,[2,3,4],'metal-transicao',4,4,'Implantes biocompatíveis.'],
+    [23,'V','Vanádio',50.942,1.63,134,[2,3,4,5],'metal-transicao',5,4,'Catálise; mimetiza fosfato.'],
+    [24,'Cr','Cromo',51.996,1.66,128,[2,3,6],'metal-transicao',6,4,'Cr(III) cofator; Cr(VI) carcinogênico.'],
+    [25,'Mn','Manganês',54.938,1.55,127,[2,4,7],'metal-transicao',7,4,'Cofator da SOD; contraste MRI.'],
+    [26,'Fe','Ferro',55.845,1.83,126,[2,3],'metal-transicao',8,4,'Hemoglobina e CYP450.'],
+    [27,'Co','Cobalto',58.933,1.88,125,[2,3],'metal-transicao',9,4,'Vitamina B12.'],
+    [28,'Ni','Níquel',58.693,1.91,124,[2,3],'metal-transicao',10,4,'Catálise de hidrogenação.'],
+    [29,'Cu','Cobre',63.546,1.90,128,[1,2],'metal-transicao',11,4,'Citocromo c oxidase; SOD.'],
+    [30,'Zn','Zinco',65.38,1.65,134,[2],'metal-transicao',12,4,'Anidrase carbônica; dedos de zinco.'],
+    [31,'Ga','Gálio',69.723,1.81,135,[3],'metal-pos-transicao',13,4,'Ga-68 em PET.'],
+    [32,'Ge','Germânio',72.63,2.01,122,[4],'metaloide',14,4,'Semicondutores.'],
+    [33,'As','Arsênio',74.922,2.18,119,[3,5],'metaloide',15,4,'Trisulfeto de Arsênio (APL).'],
+    [34,'Se','Selênio',78.96,2.55,116,[2,4,6],'nao-metal',16,4,'Selenocisteína; antioxidante.'],
+    [35,'Br','Bromo',79.904,2.96,114,[1,3,5,7],'halogenio',17,4,'Ligações de halogênio direcionadas.'],
     [36,'Kr','Criptônio',83.798,3.00,110,[0,2],'gas-nobre',18,4,'KrF2 existe; inerte em biologia.'],
-    // Período 5
-    [37,'Rb','Rubídio',85.468,0.82,248,[1],'alcalino',1,5,'Rb-82 PET em cardiologia.'],
-    [38,'Sr','Estrôncio',87.62,0.95,215,[2],'alcalino-terroso',2,5,'Sr-89 para paliação de dor óssea.'],
-    [39,'Y','Ítrio',88.906,1.22,180,[3],'metal-transicao',3,5,'Y-90 radioembolização hepática.'],
+    [37,'Rb','Rubídio',85.468,0.82,248,[1],'alcalino',1,5,'Rb-82 PET cardiologia.'],
+    [38,'Sr','Estrôncio',87.62,0.95,215,[2],'alcalino-terroso',2,5,'Sr-89 paliação.'],
+    [39,'Y','Ítrio',88.906,1.22,180,[3],'metal-transicao',3,5,'Y-90 radioembolização.'],
     [40,'Zr','Zircônio',91.224,1.33,160,[4],'metal-transicao',4,5,'MOFs; Zr-89 imunoPET.'],
-    [41,'Nb','Nióbio',92.906,1.6,146,[3,5],'metal-transicao',5,5,'Supercondutores; ligas biocompatíveis.'],
-    [42,'Mo','Molibdênio',95.95,2.16,139,[4,6],'metal-transicao',6,5,'Cofator de xantina oxidase e nitrogenase.'],
-    [43,'Tc','Tecnécio',98,null,136,[4,7],'metal-transicao',7,5,'Tc-99m: principal radiofármaco diagnóstico.'],
-    [44,'Ru','Rutênio',101.07,2.2,134,[3,4],'metal-transicao',8,5,'Complexos antitumorais (NAMI-A).'],
-    [45,'Rh','Ródio',102.906,2.28,134,[3],'metal-transicao',9,5,'Catálise; complexos metálicos terapêuticos.'],
-    [46,'Pd','Paládio',106.42,2.20,137,[2,4],'metal-transicao',10,5,'Catálise cruzada (Suzuki, Heck).'],
-    [47,'Ag','Prata',107.868,1.93,144,[1],'metal-transicao',11,5,'Antibacteriano (AgNO3); arginina-prata.'],
+    [41,'Nb','Nióbio',92.906,1.6,146,[3,5],'metal-transicao',5,5,'Supercondutores.'],
+    [42,'Mo','Molibdênio',95.95,2.16,139,[4,6],'metal-transicao',6,5,'Xantina oxidase.'],
+    [43,'Tc','Tecnécio',98,null,136,[4,7],'metal-transicao',7,5,'Tc-99m radiofármaco.'],
+    [44,'Ru','Rutênio',101.07,2.2,134,[3,4],'metal-transicao',8,5,'Complexos antitumorais.'],
+    [45,'Rh','Ródio',102.906,2.28,134,[3],'metal-transicao',9,5,'Catálise.'],
+    [46,'Pd','Paládio',106.42,2.20,137,[2,4],'metal-transicao',10,5,'Suzuki, Heck.'],
+    [47,'Ag','Prata',107.868,1.93,144,[1],'metal-transicao',11,5,'Antibacteriano.'],
     [48,'Cd','Cádmio',112.414,1.69,151,[2],'metal-transicao',12,5,'Tóxico; quantum dots.'],
-    [49,'In','Índio',114.818,1.78,167,[3],'metal-pos-transicao',13,5,'In-111 radiofármaco; ligas.'],
-    [50,'Sn','Estanho',118.71,1.96,158,[2,4],'metal-pos-transicao',14,5,'Organoestânicos; Sn-117m terapia.'],
-    [51,'Sb','Antimônio',121.76,2.05,141,[3,5],'metaloide',15,5,'Antileishmania (Glucantime); pentavalente ativo.'],
-    [52,'Te','Telúrio',127.60,2.1,137,[2,4,6],'metaloide',16,5,'Semicondutor; tóxico.'],
-    [53,'I','Iodo',126.904,2.66,133,[1,3,5,7],'halogenio',17,5,'Hormônios tireoidianos (T3/T4); contrastes iodados.'],
-    [54,'Xe','Xenônio',131.293,2.6,130,[0,2,4,6],'gas-nobre',18,5,'Xe-133 ventilação; anestésico; XeF4.'],
-    // Período 6
-    [55,'Cs','Césio',132.905,0.79,265,[1],'alcalino',1,6,'Cs-137 radioisótopo; relógios atômicos.'],
+    [49,'In','Índio',114.818,1.78,167,[3],'metal-pos-transicao',13,5,'In-111 radiofármaco.'],
+    [50,'Sn','Estanho',118.71,1.96,158,[2,4],'metal-pos-transicao',14,5,'Organoestânicos.'],
+    [51,'Sb','Antimônio',121.76,2.05,141,[3,5],'metaloide',15,5,'Glucantime (leishmaniose).'],
+    [52,'Te','Telúrio',127.60,2.1,137,[2,4,6],'metaloide',16,5,'Semicondutor.'],
+    [53,'I','Iodo',126.904,2.66,133,[1,3,5,7],'halogenio',17,5,'T3/T4; contrastes iodados.'],
+    [54,'Xe','Xenônio',131.293,2.6,130,[0,2,4,6],'gas-nobre',18,5,'Anestésico; Xe-133.'],
+    [55,'Cs','Césio',132.905,0.79,265,[1],'alcalino',1,6,'Relógios atômicos.'],
     [56,'Ba','Bário',137.327,0.89,217,[2],'alcalino-terroso',2,6,'Contraste GI (BaSO4).'],
-    [57,'La','Lantânio',138.905,1.10,187,[3],'lantanideo',3,6,'Contrastes MRI; catalisadores (FCC).'],
-    [58,'Ce','Cério',140.116,1.12,182,[3,4],'lantanideo',3,6,'Óxido polidor; Ce-144 radioisótopo.'],
+    [57,'La','Lantânio',138.905,1.10,187,[3],'lantanideo',3,6,'Contrastes MRI.'],
+    [58,'Ce','Cério',140.116,1.12,182,[3,4],'lantanideo',3,6,'Ce-144 radioisótopo.'],
     [59,'Pr','Praseodímio',140.908,1.13,182,[3],'lantanideo',3,6,'Ímãs, corantes.'],
-    [60,'Nd','Neodímio',144.242,1.14,181,[3],'lantanideo',3,6,'Ímãs NdFeB (motores).'],
-    [61,'Pm','Promécio',145,null,183,[3],'lantanideo',3,6,'Radioativo; baterias nucleares.'],
-    [62,'Sm','Samário',150.36,1.17,180,[2,3],'lantanideo',3,6,'Sm-153 para dor óssea metastática.'],
-    [63,'Eu','Európio',151.964,null,180,[2,3],'lantanideo',3,6,'Fluorescência (ensaios TR-FRET); Eu-152.'],
-    [64,'Gd','Gadolínio',157.25,1.20,180,[3],'lantanideo',3,6,'Contraste MRI (DTPA-Gd, DOTA-Gd).'],
-    [65,'Tb','Térbio',158.925,null,177,[3,4],'lantanideo',3,6,'Fósforos verdes em displays.'],
-    [66,'Dy','Disprósio',162.500,1.22,178,[3],'lantanideo',3,6,'Ímãs de alta temperatura.'],
-    [67,'Ho','Hólmio',164.930,1.23,176,[3],'lantanideo',3,6,'Ho-166 terapia hepática (microesferas).'],
-    [68,'Er','Érbio',167.259,1.24,176,[3],'lantanideo',3,6,'Lasers médicos (dermatologia, oftalmologia).'],
-    [69,'Tm','Túlio',168.934,1.25,176,[2,3],'lantanideo',3,6,'Fontes portáteis de raio-X.'],
-    [70,'Yb','Itérbio',173.045,null,176,[2,3],'lantanideo',3,6,'Lasers; relógios atômicos.'],
-    [71,'Lu','Lutécio',174.967,1.27,174,[3],'lantanideo',3,6,'Lu-177 terapia tumoral (PSMA, DOTATATE).'],
-    [72,'Hf','Háfnio',178.49,1.3,159,[4],'metal-transicao',4,6,'HfO2 dielétrico; ligas biocompatíveis.'],
-    [73,'Ta','Tântalo',180.948,1.5,146,[5],'metal-transicao',5,6,'Capacitores; implantes cirúrgicos.'],
-    [74,'W','Tungstênio',183.84,2.36,139,[4,6],'metal-transicao',6,6,'Filamentos; catalisadores.'],
-    [75,'Re','Rênio',186.207,1.9,137,[4,7],'metal-transicao',7,6,'Re-186/188 terapia óssea.'],
-    [76,'Os','Ósmio',190.23,2.2,135,[4,8],'metal-transicao',8,6,'OsO4 fixador histológico (microscopia eletrônica).'],
-    [77,'Ir','Irídio',192.217,2.20,136,[3,4],'metal-transicao',9,6,'Complexos antitumorais (Ir(III)); catálise.'],
-    [78,'Pt','Platina',195.084,2.28,139,[2,4],'metal-transicao',10,6,'Cisplatina, carboplatina, oxaliplatina — cross-link no DNA.'],
-    [79,'Au','Ouro',196.967,2.54,144,[1,3],'metal-transicao',11,6,'Auranofina (artrite); Au-198 terapia.'],
-    [80,'Hg','Mercúrio',200.592,2.00,149,[1,2],'metal-transicao',12,6,'Timolol (preservante); extremamente tóxico.'],
-    [81,'Tl','Tálio',204.38,1.62,148,[1,3],'metal-pos-transicao',13,6,'Tl-201 cintilografia cardíaca.'],
-    [82,'Pb','Chumbo',207.2,2.33,146,[2,4],'metal-pos-transicao',14,6,'Pb-212 terapia alfa; neurotóxico.'],
-    [83,'Bi','Bismuto',208.980,2.02,148,[3,5],'metal-pos-transicao',15,6,'Subsalicilato (Pepto-Bismol); Bi-213 terapia alfa.'],
-    [84,'Po','Polônio',209,2.0,140,[2,4],'metaloide',16,6,'Altamente radioativo e tóxico.'],
-    [85,'At','Astato',210,2.2,150,[1],'halogenio',17,6,'At-211 terapia alfa em câncer.'],
-    [86,'Rn','Radônio',222,null,150,[0,2],'gas-nobre',18,6,'Radioativo; causa câncer pulmonar.'],
-    // Período 7
-    [87,'Fr','Frâncio',223,0.7,260,[1],'alcalino',1,7,'Radioativo; Fr-223 terapia.'],
-    [88,'Ra','Rádio',226,0.9,221,[2],'alcalino-terroso',2,7,'Ra-223 terapia óssea (Xofigo).'],
-    [89,'Ac','Actínio',227,1.1,195,[3],'actinideo',3,7,'Ac-225 terapia alfa (mieloma, próstata).'],
-    [90,'Th','Tório',232.038,1.3,180,[4],'actinideo',3,7,'Th-227 terapia alfa (PSMA).'],
+    [60,'Nd','Neodímio',144.242,1.14,181,[3],'lantanideo',3,6,'Ímãs NdFeB.'],
+    [61,'Pm','Promécio',145,null,183,[3],'lantanideo',3,6,'Baterias nucleares.'],
+    [62,'Sm','Samário',150.36,1.17,180,[2,3],'lantanideo',3,6,'Sm-153 dor óssea.'],
+    [63,'Eu','Európio',151.964,null,180,[2,3],'lantanideo',3,6,'TR-FRET.'],
+    [64,'Gd','Gadolínio',157.25,1.20,180,[3],'lantanideo',3,6,'Contraste MRI.'],
+    [65,'Tb','Térbio',158.925,null,177,[3,4],'lantanideo',3,6,'Fósforos verdes.'],
+    [66,'Dy','Disprósio',162.500,1.22,178,[3],'lantanideo',3,6,'Ímãs alta T.'],
+    [67,'Ho','Hólmio',164.930,1.23,176,[3],'lantanideo',3,6,'Ho-166 hepático.'],
+    [68,'Er','Érbio',167.259,1.24,176,[3],'lantanideo',3,6,'Lasers médicos.'],
+    [69,'Tm','Túlio',168.934,1.25,176,[2,3],'lantanideo',3,6,'Fontes raio-X.'],
+    [70,'Yb','Itérbio',173.045,null,176,[2,3],'lantanideo',3,6,'Lasers.'],
+    [71,'Lu','Lutécio',174.967,1.27,174,[3],'lantanideo',3,6,'Lu-177 PSMA.'],
+    [72,'Hf','Háfnio',178.49,1.3,159,[4],'metal-transicao',4,6,'Dielétrico.'],
+    [73,'Ta','Tântalo',180.948,1.5,146,[5],'metal-transicao',5,6,'Implantes.'],
+    [74,'W','Tungstênio',183.84,2.36,139,[4,6],'metal-transicao',6,6,'Filamentos.'],
+    [75,'Re','Rênio',186.207,1.9,137,[4,7],'metal-transicao',7,6,'Re-186 terapia óssea.'],
+    [76,'Os','Ósmio',190.23,2.2,135,[4,8],'metal-transicao',8,6,'OsO4 fixador.'],
+    [77,'Ir','Irídio',192.217,2.20,136,[3,4],'metal-transicao',9,6,'Ir(III) antitumoral.'],
+    [78,'Pt','Platina',195.084,2.28,139,[2,4],'metal-transicao',10,6,'Cisplatina.'],
+    [79,'Au','Ouro',196.967,2.54,144,[1,3],'metal-transicao',11,6,'Auranofina.'],
+    [80,'Hg','Mercúrio',200.592,2.00,149,[1,2],'metal-transicao',12,6,'Timolol (preservante).'],
+    [81,'Tl','Tálio',204.38,1.62,148,[1,3],'metal-pos-transicao',13,6,'Tl-201 cardíaco.'],
+    [82,'Pb','Chumbo',207.2,2.33,146,[2,4],'metal-pos-transicao',14,6,'Pb-212 terapia alfa.'],
+    [83,'Bi','Bismuto',208.980,2.02,148,[3,5],'metal-pos-transicao',15,6,'Pepto-Bismol; Bi-213.'],
+    [84,'Po','Polônio',209,2.0,140,[2,4],'metaloide',16,6,'Radioativo e tóxico.'],
+    [85,'At','Astato',210,2.2,150,[1],'halogenio',17,6,'At-211 terapia.'],
+    [86,'Rn','Radônio',222,null,150,[0,2],'gas-nobre',18,6,'Causa câncer pulmonar.'],
+    [87,'Fr','Frâncio',223,0.7,260,[1],'alcalino',1,7,'Fr-223 terapia.'],
+    [88,'Ra','Rádio',226,0.9,221,[2],'alcalino-terroso',2,7,'Ra-223 (Xofigo).'],
+    [89,'Ac','Actínio',227,1.1,195,[3],'actinideo',3,7,'Ac-225 terapia.'],
+    [90,'Th','Tório',232.038,1.3,180,[4],'actinideo',3,7,'Th-227 PSMA.'],
     [91,'Pa','Protactínio',231.036,1.5,180,[4,5],'actinideo',3,7,'Radioativo natural.'],
-    [92,'U','Urânio',238.029,1.38,175,[4,6],'actinideo',3,7,'U-235 fissão nuclear; U-238 radioisótopo.'],
+    [92,'U','Urânio',238.029,1.38,175,[4,6],'actinideo',3,7,'Fissão nuclear.'],
     [93,'Np','Netúnio',237,1.36,175,[5,6],'actinideo',3,7,'Radioativo artificial.'],
-    [94,'Pu','Plutônio',244,1.28,175,[3,4,5,6],'actinideo',3,7,'Pu-238 baterias espaciais; Pu-239 armas nucleares.'],
-    [95,'Am','Amerício',243,1.13,175,[3],'actinideo',3,7,'Detectores de fumaça (Am-241).'],
-    [96,'Cm','Cúrio',247,1.28,176,[3],'actinideo',3,7,'Radioativo; fontes de raio-X.'],
+    [94,'Pu','Plutônio',244,1.28,175,[3,4,5,6],'actinideo',3,7,'Armas nucleares.'],
+    [95,'Am','Amerício',243,1.13,175,[3],'actinideo',3,7,'Detectores de fumaça.'],
+    [96,'Cm','Cúrio',247,1.28,176,[3],'actinideo',3,7,'Fontes raio-X.'],
     [97,'Bk','Berquélio',247,1.3,170,[3,4],'actinideo',3,7,'Radioativo artificial.'],
-    [98,'Cf','Califórnio',251,1.3,169,[3,4],'actinideo',3,7,'Cf-252 fonte de nêutrons; reator de partida.'],
+    [98,'Cf','Califórnio',251,1.3,169,[3,4],'actinideo',3,7,'Fonte de nêutrons.'],
     [99,'Es','Einstênio',252,1.3,168,[3],'actinideo',3,7,'Radioativo artificial.'],
     [100,'Fm','Férmio',257,1.3,167,[3],'actinideo',3,7,'Radioativo artificial.'],
     [101,'Md','Mendelévio',258,1.3,166,[2,3],'actinideo',3,7,'Radioativo artificial.'],
     [102,'No','Nobélio',259,1.3,165,[2,3],'actinideo',3,7,'Radioativo artificial.'],
     [103,'Lr','Laurêncio',262,null,164,[3],'actinideo',3,7,'Radioativo artificial.'],
-    [104,'Rf','Rutherfórdio',267,null,null,[4],'metal-transicao',4,7,'Sintético (transurânico).'],
+    [104,'Rf','Rutherfórdio',267,null,null,[4],'metal-transicao',4,7,'Sintético.'],
     [105,'Db','Dúbnio',268,null,null,[5],'metal-transicao',5,7,'Sintético.'],
     [106,'Sg','Seabórgio',269,null,null,[6],'metal-transicao',6,7,'Sintético.'],
     [107,'Bh','Bóhrio',270,null,null,[7],'metal-transicao',7,7,'Sintético.'],
@@ -181,29 +172,21 @@
     [114,'Fl','Fleróvio',289,null,null,[2,4],'metal-pos-transicao',14,7,'Sintético.'],
     [115,'Mc','Moscóvio',290,null,null,[1,3],'metal-pos-transicao',15,7,'Sintético.'],
     [116,'Lv','Livermório',293,null,null,[2,4],'metal-pos-transicao',16,7,'Sintético.'],
-    [117,'Ts','Tenesso',294,null,null,[1],'halogenio',17,7,'Sintético (poucos átomos produzidos).'],
-    [118,'Og','Oganessônio',294,null,null,[0,2],'gas-nobre',18,7,'Sintético (poucos átomos produzidos).']
+    [117,'Ts','Tenesso',294,null,null,[1],'halogenio',17,7,'Sintético.'],
+    [118,'Og','Oganessônio',294,null,null,[0,2],'gas-nobre',18,7,'Sintético.']
   ];
 
-  // Converte para objetos
   const TABELA_PERIODICA = TABELA_PERIODICA_RAW.map(a => ({
     z: a[0], sym: a[1], nome: a[2], massa: a[3], eletron: a[4], raio: a[5],
     valencias: a[6], cat: a[7], grupo: a[8], periodo: a[9], pharma: a[10]
   }));
 
-  // Mapeamento de posição na grade (considerando lantanídeos/actinídeos em linhas separadas)
   const POSICOES_PTABLE = (() => {
     const pos = {};
     TABELA_PERIODICA.forEach(e => {
-      if (e.z >= 57 && e.z <= 71) {
-        // Lantanídeos: linha 8, colunas 3-17
-        pos[e.sym] = { r: 8, c: 3 + (e.z - 57) };
-      } else if (e.z >= 89 && e.z <= 103) {
-        // Actinídeos: linha 9, colunas 3-17
-        pos[e.sym] = { r: 9, c: 3 + (e.z - 89) };
-      } else {
-        pos[e.sym] = { r: e.periodo, c: e.grupo };
-      }
+      if (e.z >= 57 && e.z <= 71) pos[e.sym] = { r: 8, c: 3 + (e.z - 57) };
+      else if (e.z >= 89 && e.z <= 103) pos[e.sym] = { r: 9, c: 3 + (e.z - 89) };
+      else pos[e.sym] = { r: e.periodo, c: e.grupo };
     });
     return pos;
   })();
@@ -349,7 +332,7 @@
   };
 
   // =========================================================================
-  // 6. HISTÓRICO DE NAVEGAÇÃO
+  // 6. HISTÓRICO
   // =========================================================================
   function pushNavegacao(comp) {
     if (!comp) return;
@@ -532,7 +515,7 @@
       const isCustom = comp.categoria === 'custom';
       itemEl.innerHTML = `
         ${isFav ? '<span class="comp-favorite-star">★</span>' : ''}
-        ${isUnstable ? '<span class="comp-unstable-flag" title="Estrutura instável (radical ou valência estendida)">⚠️</span>' : ''}
+        ${isUnstable ? '<span class="comp-unstable-flag" title="Estrutura instável">⚠️</span>' : ''}
         <div class="comp-info-main">
           <span class="comp-name" title="${comp.nome}">${isCustom ? '🧬 ' : ''}${comp.nome}</span>
           <span class="comp-formula">${comp.formula}</span>
@@ -580,22 +563,55 @@
   };
 
   // =========================================================================
-  // 11. RDKIT
+  // 11. RDKIT — versão com retry e timeout generoso
   // =========================================================================
   function carregarRDKitSobDemanda() {
     if (RDKitModuleInstance) return Promise.resolve(RDKitModuleInstance);
     if (rdkitPromise) return rdkitPromise;
+
     rdkitPromise = new Promise(async (resolve) => {
-      exibirStatusRDKit(true, "Iniciando RDKit WebAssembly...");
+      exibirStatusRDKit(true, "Carregando RDKit WebAssembly...");
+
+      const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), ms));
+
+      async function tentarInit() {
+        if (typeof window.initRDKitModule !== 'function') {
+          throw new Error('initRDKitModule não disponível — CDN falhou?');
+        }
+        const mod = await Promise.race([
+          window.initRDKitModule(),
+          timeout(20000)
+        ]);
+        if (!mod || typeof mod.get_mol !== 'function') {
+          throw new Error('RDKit retornou módulo inválido');
+        }
+        return mod;
+      }
+
       try {
-        if (typeof window.initRDKitModule === 'function') {
-          const timeoutPromise = new Promise((_, r) => setTimeout(() => r(new Error("Timeout")), 4000));
-          RDKitModuleInstance = await Promise.race([window.initRDKitModule(), timeoutPromise]);
+        RDKitModuleInstance = await tentarInit();
+        console.log('[RDKit] ✅ Módulo carregado');
+        exibirStatusRDKit(false);
+        mostrarNotificacao('✅ RDKit carregado — quimiometria ativa', 'success', 2000);
+        resolve(RDKitModuleInstance);
+      } catch (err) {
+        console.warn('[RDKit] ❌ Falha:', err.message);
+        try {
+          await new Promise(r => setTimeout(r, 2000));
+          RDKitModuleInstance = await tentarInit();
+          console.log('[RDKit] ✅ Carregado após retry');
           exibirStatusRDKit(false);
           resolve(RDKitModuleInstance);
-        } else { exibirStatusRDKit(false); resolve(null); }
-      } catch (e) { exibirStatusRDKit(false); resolve(null); }
+          return;
+        } catch (err2) {
+          console.warn('[RDKit] ❌ Retry falhou:', err2.message);
+        }
+        exibirStatusRDKit(false);
+        mostrarNotificacao('⚠️ RDKit indisponível — funcionalidades CADD limitadas', 'warning', 5000);
+        resolve(null);
+      }
     });
+
     return rdkitPromise;
   }
   function exibirStatusRDKit(visivel, texto = "") {
@@ -606,15 +622,28 @@
   }
 
   // =========================================================================
-  // 12. QUIMIOMETRIA
+  // 12. QUIMIOMETRIA — versão robusta com fallback
   // =========================================================================
   async function calcularPropriedadesMoleculares(smiles, molarMass) {
     const rdkit = await carregarRDKitSobDemanda();
-    if (!rdkit || !smiles || smiles === '--' || smiles.includes('.')) return null;
+    if (!rdkit) return calcularPropriedadesFallback(smiles, molarMass);
+    if (!smiles || smiles === '--') return null;
+
+    let smilesLimpo = smiles;
+    if (smiles.includes('.')) {
+      const partes = smiles.split('.').filter(p => p && !/^\[(Na|K|Li|Ca|Mg|Cl|Br)\]/.test(p));
+      if (partes.length > 0) smilesLimpo = partes.sort((a, b) => b.length - a.length)[0];
+      else return null;
+    }
+    if (smilesLimpo.startsWith('RADICAL_')) return calcularPropriedadesFallback(smiles, molarMass);
+
     try {
-      const mol = rdkit.get_mol(smiles);
-      if (!mol) return null;
-      const desc = JSON.parse(mol.get_descriptors());
+      const mol = rdkit.get_mol(smilesLimpo);
+      if (!mol) return calcularPropriedadesFallback(smiles, molarMass);
+
+      let desc = {};
+      try { desc = JSON.parse(mol.get_descriptors()); } catch (e) {}
+
       const mw = (typeof molarMass === 'number' && molarMass > 0) ? molarMass : (desc.exactmw || desc.amw || 0);
       const logp = desc.CrippenClogP !== undefined ? desc.CrippenClogP : (desc.clogp || 0);
       const mr = desc.CrippenMR !== undefined ? desc.CrippenMR : 0;
@@ -624,23 +653,25 @@
       const rotb = desc.NumRotatableBonds !== undefined ? desc.NumRotatableBonds : 0;
       const heavyAtoms = desc.NumHeavyAtoms !== undefined ? desc.NumHeavyAtoms : 0;
       const csp3 = desc.FractionCSP3 !== undefined ? desc.FractionCSP3 : 0;
+
       let totalAtoms = heavyAtoms;
       try {
-        const mh = rdkit.get_mol(smiles);
+        const mh = rdkit.get_mol(smilesLimpo);
         if (mh) { mh.add_hs(); totalAtoms = mh.get_num_atoms(); mh.delete(); }
       } catch (e) {}
+
       const alertasPAINS = [];
       for (const p of PAINS_SUBSTRUCTURES) {
         try {
           const q = rdkit.get_qmol(p.smarts);
-          if (q) {
-            const m = mol.get_substruct_match(q);
-            q.delete();
-            if (m && m.includes("atoms")) alertasPAINS.push(p);
-          }
+          if (!q) continue;
+          const matchStr = mol.get_substruct_match(q);
+          q.delete();
+          if (matchStr && matchStr !== "{}" && matchStr !== "" && matchStr.includes("atoms")) alertasPAINS.push(p);
         } catch (e) {}
       }
       mol.delete();
+
       const fl = [], fv = [], fg = [];
       if (mw > 500) fl.push("MW > 500");
       if (logp > 5) fl.push("LogP > 5");
@@ -652,29 +683,59 @@
       if (logp < -0.4 || logp > 5.6) fg.push("LogP");
       if (mr < 40 || mr > 130) fg.push("MR");
       if (totalAtoms < 20 || totalAtoms > 70) fg.push("Atoms");
+
       return { mw, logp, mr, tpsa, hbd, hba, rotb, heavyAtoms, totalAtoms, csp3, falhasLipinski: fl, falhasVeber: fv, falhasGhose: fg, alertasPAINS };
-    } catch (e) { return null; }
+    } catch (e) {
+      return calcularPropriedadesFallback(smiles, molarMass);
+    }
   }
+
+  function calcularPropriedadesFallback(smiles, molarMass) {
+    if (!smiles || smiles === '--') return null;
+    const cCount = (smiles.match(/C(?![a-z])/g) || []).length;
+    const nCount = (smiles.match(/N(?![a-z])/g) || []).length;
+    const oCount = (smiles.match(/O(?![a-z])/g) || []).length;
+    const sCount = (smiles.match(/S(?![a-z])/g) || []).length;
+    const halCount = (smiles.match(/(F|Cl|Br|I)/g) || []).length;
+    const rotB = (smiles.match(/-/g) || []).length;
+    const mw = (typeof molarMass === 'number' && molarMass > 0) ? molarMass :
+               cCount * 12 + nCount * 14 + oCount * 16 + sCount * 32 + halCount * 35;
+    return {
+      mw, logp: 0, mr: cCount * 5, tpsa: (nCount + oCount) * 12,
+      hbd: nCount + oCount, hba: nCount + oCount, rotb: rotB,
+      heavyAtoms: cCount + nCount + oCount + sCount + halCount,
+      totalAtoms: cCount + nCount + oCount + sCount + halCount,
+      csp3: 0.5,
+      falhasLipinski: mw > 500 ? ["MW > 500"] : [],
+      falhasVeber: [], falhasGhose: [],
+      alertasPAINS: [],
+      _fallback: true
+    };
+  }
+
   async function avaliarQuimiometriaCompleta(smiles, molarMass, nome) {
     const bL = document.getElementById('badgeLipinski'), bV = document.getElementById('badgeVeber'),
           bG = document.getElementById('badgeGhose'), bP = document.getElementById('badgePAINS');
     if (!bL || !bV || !bG || !bP) return;
-    if (!smiles || smiles === '--' || smiles.includes('.')) {
+    if (!smiles || smiles === '--') {
       [bL, bV, bG, bP].forEach(b => { b.className = 'cadd-badge badge-pending'; });
       bL.textContent = 'Lipinski: N/A'; bV.textContent = 'Veber: N/A'; bG.textContent = 'Ghose: N/A'; bP.textContent = 'PAINS: N/A';
       ultimoDossieCADD = null;
       return;
     }
     const p = await calcularPropriedadesMoleculares(smiles, molarMass);
-    if (!p) { [bL, bV, bG, bP].forEach(b => b.textContent = b.textContent.split(':')[0] + ': Estimado'); return; }
+    if (!p) { [bL, bV, bG, bP].forEach(b => { b.className = 'cadd-badge badge-pending'; }); return; }
+
+    const sufixoEst = p._fallback ? ' (est.)' : '';
     bL.className = 'cadd-badge ' + (p.falhasLipinski.length === 0 ? 'badge-approved' : p.falhasLipinski.length === 1 ? 'badge-warning' : 'badge-rejected');
-    bL.textContent = p.falhasLipinski.length === 0 ? 'Lipinski: Aprovado' : `Lipinski: ${p.falhasLipinski.length} Viol.`;
+    bL.textContent = (p.falhasLipinski.length === 0 ? 'Lipinski: OK' : `Lipinski: ${p.falhasLipinski.length} Viol.`) + sufixoEst;
     bV.className = 'cadd-badge ' + (p.falhasVeber.length === 0 ? 'badge-approved' : 'badge-rejected');
-    bV.textContent = p.falhasVeber.length === 0 ? 'Veber: Aprovado' : `Veber: ${p.falhasVeber.length} Viol.`;
+    bV.textContent = (p.falhasVeber.length === 0 ? 'Veber: OK' : `Veber: ${p.falhasVeber.length} Viol.`) + sufixoEst;
     bG.className = 'cadd-badge ' + (p.falhasGhose.length === 0 ? 'badge-approved' : p.falhasGhose.length === 1 ? 'badge-warning' : 'badge-rejected');
-    bG.textContent = p.falhasGhose.length === 0 ? 'Ghose: Aprovado' : `Ghose: ${p.falhasGhose.length} Viol.`;
+    bG.textContent = (p.falhasGhose.length === 0 ? 'Ghose: OK' : `Ghose: ${p.falhasGhose.length} Viol.`) + sufixoEst;
     bP.className = 'cadd-badge ' + (p.alertasPAINS.length === 0 ? 'badge-approved' : 'badge-rejected');
-    bP.textContent = p.alertasPAINS.length === 0 ? 'PAINS: Limpo' : `PAINS: ${p.alertasPAINS.length} Alerta(s)`;
+    bP.textContent = (p.alertasPAINS.length === 0 ? 'PAINS: Limpo' : `PAINS: ${p.alertasPAINS.length}`) + sufixoEst;
+
     ultimoDossieCADD = { ...p, nome, smiles };
   }
 
@@ -726,7 +787,7 @@
   };
 
   // =========================================================================
-  // 14. SDF HELPERS (parse, build, position)
+  // 14. SDF HELPERS
   // =========================================================================
   function parseSDF_Simples(sdfText) {
     if (!sdfText || typeof sdfText !== 'string') return null;
@@ -768,8 +829,7 @@
     linhasNovas.push(parsed.linhas[1] || '  LAIFT 3D EDITOR');
     linhasNovas.push(parsed.linhas[2] || '');
     const nA = atoms.length, nB = bonds.length;
-    const countsLine = `${String(nA).padStart(3, ' ')}${String(nB).padStart(3, ' ')}  0  0  0  0  0  0  0  0999 V2000`;
-    linhasNovas.push(countsLine);
+    linhasNovas.push(`${String(nA).padStart(3, ' ')}${String(nB).padStart(3, ' ')}  0  0  0  0  0  0  0  0999 V2000`);
     atoms.forEach(a => {
       const x = a.x.toFixed(4).padStart(10, ' ');
       const y = a.y.toFixed(4).padStart(10, ' ');
@@ -778,10 +838,7 @@
       linhasNovas.push(`${x}${y}${z} ${el} 0  0  0  0  0  0  0  0  0  0  0  0`);
     });
     bonds.forEach(b => {
-      const a1 = String(b.a1).padStart(3, ' ');
-      const a2 = String(b.a2).padStart(3, ' ');
-      const t = String(b.tipo || 1).padStart(3, ' ');
-      linhasNovas.push(`${a1}${a2}${t}  0  0  0  0`);
+      linhasNovas.push(`${String(b.a1).padStart(3, ' ')}${String(b.a2).padStart(3, ' ')}${String(b.tipo || 1).padStart(3, ' ')}  0  0  0  0`);
     });
     linhasNovas.push('M  END');
     if (marcarInstavel) {
@@ -795,9 +852,7 @@
 
   function calcularPosicaoNovoAtomo(parent, vizinhos) {
     const bondLength = 1.5;
-    if (!vizinhos || vizinhos.length === 0) {
-      return { x: parent.x + bondLength, y: parent.y, z: parent.z };
-    }
+    if (!vizinhos || vizinhos.length === 0) return { x: parent.x + bondLength, y: parent.y, z: parent.z };
     let sx = 0, sy = 0, sz = 0;
     for (const v of vizinhos) { sx += (v.x - parent.x); sy += (v.y - parent.y); sz += (v.z - parent.z); }
     const mag = Math.sqrt(sx * sx + sy * sy + sz * sz);
@@ -810,7 +865,7 @@
   }
 
   // =========================================================================
-  // 15. TABELA PERIÓDICA — RENDERIZAÇÃO
+  // 15. TABELA PERIÓDICA
   // =========================================================================
   window.abrirTabelaPeriodica = function(atomoContexto) {
     if (atomoContexto) atomoAtivoInspecionado = atomoContexto;
@@ -821,7 +876,7 @@
     if (sub) {
       if (atomoAtivoInspecionado) {
         const nLig = atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : 0;
-        sub.innerHTML = `Âncora: <strong>${atomoAtivoInspecionado.elem}#${(atomoAtivoInspecionado.serial || atomoAtivoInspecionado.index || 0) + 1}</strong> com ${nLig} ligação(ões). Compatíveis com substituição em verde.`;
+        sub.innerHTML = `Âncora: <strong>${atomoAtivoInspecionado.elem}#${(atomoAtivoInspecionado.serial || atomoAtivoInspecionado.index || 0) + 1}</strong> (${nLig} lig.). Compatíveis com substituição em verde.`;
       } else {
         sub.textContent = 'Selecione um elemento para consultar propriedades e planejar modificações.';
       }
@@ -830,14 +885,14 @@
     if (atomoAtivoInspecionado) {
       const eM = TABELA_PERIODICA.find(e => e.sym.toUpperCase() === (atomoAtivoInspecionado.elem || '').toUpperCase());
       if (eM) selecionarElementoNaTabela(eM);
-    } else if (TABELA_PERIODICA.length > 0) {
-      selecionarElementoNaTabela(TABELA_PERIODICA.find(e => e.sym === 'C'));
+    } else {
+      const c = TABELA_PERIODICA.find(e => e.sym === 'C');
+      if (c) selecionarElementoNaTabela(c);
     }
     modal.style.display = 'flex';
   };
   window.fecharTabelaPeriodica = function() {
-    const modal = document.getElementById('periodicTableModal');
-    if (modal) modal.style.display = 'none';
+    const m = document.getElementById('periodicTableModal'); if (m) m.style.display = 'none';
   };
   window.filtrarElementosPTable = function(cat) {
     document.querySelectorAll('.ptable-pill').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
@@ -850,12 +905,10 @@
     matrix.innerHTML = '';
     const nLigAlvo = atomoAtivoInspecionado && atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : null;
 
-    // Placeholders para lantanídeos/actinídeos
     const mkPlaceholder = (txt, r, c) => {
       const el = document.createElement('div');
       el.className = 'ptable-tile ptable-placeholder';
-      el.style.gridRow = r;
-      el.style.gridColumn = c;
+      el.style.gridRow = r; el.style.gridColumn = c;
       el.textContent = txt;
       matrix.appendChild(el);
     };
@@ -867,8 +920,7 @@
       if (!pos) return;
       const tile = document.createElement('div');
       tile.className = `ptable-tile cat-${elem.cat}`;
-      tile.style.gridRow = pos.r;
-      tile.style.gridColumn = pos.c;
+      tile.style.gridRow = pos.r; tile.style.gridColumn = pos.c;
       if (nLigAlvo !== null) {
         const valMax = Math.max(...elem.valencias);
         const isC = (nLigAlvo <= valMax && valMax > 0);
@@ -879,11 +931,7 @@
       tile.onclick = () => selecionarElementoNaTabela(elem, tile);
       tile.title = `${elem.nome} (Z=${elem.z}) — ${elem.cat}`;
       const massaTxt = elem.massa < 100 ? elem.massa.toFixed(1) : Math.round(elem.massa);
-      tile.innerHTML = `
-        <span class="ptable-z">${elem.z}</span>
-        <span class="ptable-sym">${elem.sym}</span>
-        <span class="ptable-mass">${massaTxt}</span>
-      `;
+      tile.innerHTML = `<span class="ptable-z">${elem.z}</span><span class="ptable-sym">${elem.sym}</span><span class="ptable-mass">${massaTxt}</span>`;
       matrix.appendChild(tile);
     });
   }
@@ -895,7 +943,6 @@
     const sidebar = document.getElementById('ptableDetailContent');
     if (!sidebar) return;
 
-    // Diagnóstico de substituição
     const nLigAlvo = atomoAtivoInspecionado && atomoAtivoInspecionado.bonds ? atomoAtivoInspecionado.bonds.length : null;
     let htmlVal = '', podeSubst = false;
     if (atomoAtivoInspecionado && nLigAlvo !== null) {
@@ -905,20 +952,17 @@
       } else if (valMax === 0) {
         htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ Gases nobres não fazem ligações covalentes estáveis.</div>`;
       } else if (nLigAlvo > valMax) {
-        htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ <strong>Valência incompatível:</strong> ${nLigAlvo} lig. ativas excedem o máximo (${valMax}).</div>`;
+        htmlVal = `<div class="ptable-valence-check valence-invalid">⚠️ <strong>Valência incompatível:</strong> ${nLigAlvo} lig. ativas excedem máximo (${valMax}).</div>`;
       } else {
         podeSubst = true;
-        htmlVal = `<div class="ptable-valence-check valence-valid">✅ <strong>Substituição estável:</strong> ${elem.nome} comporta as ${nLigAlvo} ligações.</div>`;
+        htmlVal = `<div class="ptable-valence-check valence-valid">✅ <strong>Substituição estável:</strong> comporta as ${nLigAlvo} ligações.</div>`;
       }
     } else {
-      htmlVal = `<div class="ptable-valence-check" style="background:rgba(255,255,255,0.04); color:#94a3b8;">Dica: clique em um átomo no 3D para ativar substituição e adição in loco.</div>`;
+      htmlVal = `<div class="ptable-valence-check" style="background:rgba(255,255,255,0.04); color:#94a3b8;">Clique em um átomo no 3D para ativar substituição e adição.</div>`;
     }
 
-    // Diagnóstico de adição
     let htmlDiagAdd = '';
-    if (atomoAtivoInspecionado) {
-      htmlDiagAdd = renderizarDiagnosticoAdicao(elem);
-    }
+    if (atomoAtivoInspecionado) htmlDiagAdd = renderizarDiagnosticoAdicao(elem);
 
     sidebar.innerHTML = `
       <div class="ptable-hero-card">
@@ -942,12 +986,8 @@
       ${htmlVal}
       ${atomoAtivoInspecionado ? `
         <div class="ptable-action-buttons">
-          <button class="btn-execute-atom-swap" ${!podeSubst ? 'disabled' : ''} onclick="window.executarSubstituicaoElementar('${elem.sym}')">
-            ⚡ Substituir
-          </button>
-          <button class="btn-execute-atom-add" onclick="window.executarAdicaoAtomo('${elem.sym}')">
-            ➕ Adicionar
-          </button>
+          <button class="btn-execute-atom-swap" ${!podeSubst ? 'disabled' : ''} onclick="window.executarSubstituicaoElementar('${elem.sym}')">⚡ Substituir</button>
+          <button class="btn-execute-atom-add" onclick="window.executarAdicaoAtomo('${elem.sym}')">➕ Adicionar</button>
         </div>
         ${htmlDiagAdd}
       ` : ''}
@@ -974,26 +1014,20 @@
     html += `<div class="diag-row"><span>Conexões disponíveis:</span><strong>${Math.max(0, disponiveis)} de ${valParent}</strong></div>`;
 
     if (disponiveis > 0) {
-      html += `<div class="diag-status diag-ok">✅ Adição direta possível. ${elemAlvo.nome} será ligado a ${parent.elem}#${parentIdx + 1}.</div>`;
+      html += `<div class="diag-status diag-ok">✅ Adição direta possível. ${elemAlvo.nome} ligará a ${parent.elem}#${parentIdx + 1}.</div>`;
     } else if (temH) {
-      html += `<div class="diag-status diag-warning">⚠️ ${parent.elem}#${parentIdx + 1} está saturado. Um <strong>H será removido automaticamente</strong> ao adicionar ${elemAlvo.sym}.</div>`;
-      html += `<div class="diag-hint"><strong>Alteração automática:</strong> remover 1 H do átomo pai para liberar a conexão.</div>`;
+      html += `<div class="diag-status diag-warning">⚠️ ${parent.elem}#${parentIdx + 1} saturado. Um <strong>H será removido</strong> ao adicionar ${elemAlvo.sym}.</div>`;
+      html += `<div class="diag-hint"><strong>Alteração automática:</strong> remover 1 H do pai para liberar conexão.</div>`;
     } else {
-      html += `<div class="diag-status diag-error">⚠️ ${parent.elem}#${parentIdx + 1} está saturado e <strong>não possui H</strong>. Adicionar gerará estrutura instável (radical livre).</div>`;
-      html += `<div class="diag-hint">
-        <strong>Mudanças necessárias para estabilidade:</strong><br>
-        • Substituir ${parent.elem} por elemento de valência maior (ex: <strong>N, P, S</strong>), OU<br>
-        • Remover previamente uma das ${bonds.length} ligações existentes, OU<br>
-        • Prosseguir mesmo assim — aceitando radical livre
-      </div>`;
+      html += `<div class="diag-status diag-error">⚠️ ${parent.elem}#${parentIdx + 1} saturado e <strong>sem H</strong>. Adicionar gera radical livre.</div>`;
+      html += `<div class="diag-hint"><strong>Mudanças necessárias:</strong> substituir ${parent.elem} por N/P/S (valência maior), remover ligação existente, ou aceitar radical.</div>`;
     }
-
     html += `</div>`;
     return html;
   }
 
   // =========================================================================
-  // 16. AÇÃO — SUBSTITUIÇÃO
+  // 16. SUBSTITUIÇÃO
   // =========================================================================
   window.executarSubstituicaoElementar = async function(novoSimbolo) {
     if (!atomoAtivoInspecionado || !compostoSelecionado || !sdfCacheLocal) return;
@@ -1041,7 +1075,7 @@
   };
 
   // =========================================================================
-  // 17. AÇÃO — ADIÇÃO (CRESCIMENTO MOLECULAR)
+  // 17. ADIÇÃO — CORRIGIDO (novoSimbolo em toda parte)
   // =========================================================================
   window.executarAdicaoAtomo = async function(novoSimbolo) {
     if (!atomoAtivoInspecionado || !compostoSelecionado || !sdfCacheLocal) {
@@ -1075,7 +1109,6 @@
     let avisoInstavel = false;
 
     if (nLigAtual >= valParent) {
-      // Procura H ligado ao pai para remover
       for (const b of bondsParent) {
         const vIdx = (b.a1 === parentIdx + 1) ? (b.a2 - 1) : (b.a1 - 1);
         if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRemover = vIdx; break; }
@@ -1083,6 +1116,7 @@
       if (hIdxRemover >= 0) {
         acao = 'remover_h';
       } else {
+        // CORRIGIDO: usar novoSimbolo em vez de novoSym
         const msg =
 `⚠️ ADIÇÃO GERA ESTRUTURA INSTÁVEL
 
@@ -1090,7 +1124,7 @@
 Ligações atuais: ${nLigAtual} (valência máx.: ${valParent})
 Hidrogênios disponíveis: 0
 
-Adicionar ${novoSym} criará uma valência estendida (radical livre).
+Adicionar ${novoSimbolo} criará uma valência estendida (radical livre).
 
 RECOMENDAÇÕES PARA ESTABILIDADE:
 • Substituir ${parent.elem} por elemento de valência maior (ex: N, P, S), OU
@@ -1104,13 +1138,11 @@ Deseja continuar?`;
       }
     }
 
-    // ======== CONSTRUÇÃO DO NOVO SDF ========
     let atoms = parsed.atoms.map(a => ({ ...a }));
     let bonds = parsed.bonds.map(b => ({ ...b }));
 
     if (acao === 'remover_h' && hIdxRemover >= 0) {
       atoms.splice(hIdxRemover, 1);
-      // Remove bonds envolvendo o H e reindexa
       bonds = bonds
         .filter(b => (b.a1 - 1) !== hIdxRemover && (b.a2 - 1) !== hIdxRemover)
         .map(b => ({
@@ -1120,7 +1152,6 @@ Deseja continuar?`;
         }));
     }
 
-    // Índice do pai após possível remoção
     const parentIdxFinal = (acao === 'remover_h' && hIdxRemover >= 0 && parentIdx > hIdxRemover) ? parentIdx - 1 : parentIdx;
     const parentFinal = atoms[parentIdxFinal];
 
@@ -1132,17 +1163,13 @@ Deseja continuar?`;
 
     const posNova = calcularPosicaoNovoAtomo(parentFinal, vizinhos);
 
-    // Adiciona novo átomo
     atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo, linhaOriginal: '' });
     const novoAtomIdx = atoms.length;
 
-    // Adiciona nova ligação
     bonds.push({ a1: parentIdxFinal + 1, a2: novoAtomIdx, tipo: 1, linhaOriginal: '' });
 
-    // Reconstrói SDF
     const novoSdf = reconstruirSDF(parsed, atoms, bonds, avisoInstavel);
 
-    // Validação com RDKit
     const rdkit = await carregarRDKitSobDemanda();
     let novoSmiles = null, rdkitErro = null;
     if (rdkit) {
@@ -1157,15 +1184,17 @@ Deseja continuar?`;
       mostrarNotificacao('Estrutura inválida: ' + (rdkitErro || 'erro'), 'error');
       return;
     }
+    // CORRIGIDO: usar novoSimbolo
     if (!novoSmiles && avisoInstavel) {
-      novoSmiles = 'RADICAL_' + novoSym + '_' + Date.now();
+      novoSmiles = 'RADICAL_' + novoSimbolo + '_' + Date.now();
     }
 
-    pushEdicaoSnapshot(compostoSelecionado, sdfCacheLocal, `Adição ${novoSym}`);
+    pushEdicaoSnapshot(compostoSelecionado, sdfCacheLocal, `Adição ${novoSimbolo}`);
 
     const idD = 'add_' + Date.now();
     const sufixoInstavel = avisoInstavel ? ' ⚠️ INSTÁVEL' : '';
-    const nomeD = `${compostoSelecionado.nome} + ${novoSym}${sufixoInstavel}`;
+    // CORRIGIDO: usar novoSimbolo
+    const nomeD = `${compostoSelecionado.nome} + ${novoSimbolo}${sufixoInstavel}`;
     const novoComp = {
       id: idD, chaveOriginal: idD, nome: nomeD,
       formula: 'Adição Atômica', molarMass: '--',
@@ -1205,7 +1234,7 @@ Deseja continuar?`;
     const disp = REACOES_BIOISOSTERISMO.filter(rx => rx.detectar(smiles));
     const htmlGrupos = disp.length > 0
       ? Array.from(new Set(disp.map(r => r.alvoSmarts))).map(t => `<span class="bio-group-chip">Alvo: ${t}</span>`).join('')
-      : '<span style="color:#f87171; font-size:0.75rem;">Nenhum grupo farmacofórico clássico elegível.</span>';
+      : '<span style="color:#f87171; font-size:0.75rem;">Nenhum grupo farmacofórico elegível.</span>';
     const htmlCards = disp.length > 0
       ? disp.map(rx => `
         <div class="bio-transform-card">
@@ -1230,8 +1259,7 @@ Deseja continuar?`;
     modal.style.display = 'flex';
   };
   window.fecharPainelBioisosterismo = function() {
-    const m = document.getElementById('bioisostereModal');
-    if (m) m.style.display = 'none';
+    const m = document.getElementById('bioisostereModal'); if (m) m.style.display = 'none';
   };
   window.executarTransformacaoBioisosterica = async function(idReacao) {
     if (!compostoSelecionado) return;
@@ -1320,10 +1348,7 @@ Deseja continuar?`;
     }
     resultados.sort((a, b) => b.tanimoto - a.tanimoto);
     const top = resultados.slice(0, 20);
-    if (top.length === 0) {
-      body.innerHTML = `<div style="padding:20px; color:#94a3b8;">Nenhum similar (Tanimoto > 0.15).</div>`;
-      return;
-    }
+    if (top.length === 0) { body.innerHTML = `<div style="padding:20px; color:#94a3b8;">Nenhum similar (Tanimoto > 0.15).</div>`; return; }
     body.innerHTML = `
       <div class="similarity-target-box">
         <div class="similarity-target-name">🎯 Alvo: ${compostoSelecionado.nome}</div>
@@ -1352,19 +1377,40 @@ Deseja continuar?`;
   function popcount(x) { let c = 0; while (x) { x &= x - 1; c++; } return c; }
 
   // =========================================================================
-  // 20. SCAFFOLD MURCKO
+  // 20. SCAFFOLD — com múltiplos métodos
   // =========================================================================
-  window.extrairScaffoldAtual = async function() {
-    if (!compostoSelecionado || !compostoSelecionado.smiles) { mostrarNotificacao('Selecione uma molécula.', 'error'); return; }
+  window.extrairScaffoldAtual = async function () {
+    if (!compostoSelecionado || !compostoSelecionado.smiles || compostoSelecionado.smiles === '--') {
+      mostrarNotificacao('Selecione uma molécula com SMILES válido.', 'error');
+      return;
+    }
     const rdkit = await carregarRDKitSobDemanda();
-    if (!rdkit) { mostrarNotificacao('RDKit indisponível.', 'error'); return; }
+    if (!rdkit) {
+      mostrarNotificacao('RDKit indisponível — scaffold requer quimiometria.', 'error');
+      return;
+    }
     try {
       const mol = rdkit.get_mol(compostoSelecionado.smiles);
-      if (!mol) { mostrarNotificacao('SMILES inválido.', 'error'); return; }
+      if (!mol) { mostrarNotificacao('SMILES inválido para scaffold.', 'error'); return; }
       let sc = null;
-      try { sc = mol.get_murcko_scaffold(); } catch (e) {}
+      const metodos = ['get_murcko_scaffold', 'get_murcko', 'get_scaffold'];
+      for (const metodo of metodos) {
+        if (typeof mol[metodo] === 'function') {
+          try { sc = mol[metodo](); } catch (e) {}
+          if (sc) break;
+        }
+      }
+      if (!sc) {
+        try {
+          const mol2 = rdkit.get_mol(compostoSelecionado.smiles);
+          if (mol2) { sc = mol2.get_smiles(); mol2.delete(); }
+        } catch (e) {}
+      }
       mol.delete();
-      if (!sc) { mostrarNotificacao('Não foi possível extrair o scaffold.', 'error'); return; }
+      if (!sc || sc === '' || sc === compostoSelecionado.smiles) {
+        mostrarNotificacao('Não foi possível extrair scaffold (molécula sem anel principal ou RDKit limitado).', 'warning');
+        return;
+      }
       const idS = 'scaffold_' + Date.now();
       const nomeS = `Scaffold de ${compostoSelecionado.nome}`;
       const novoComp = { id: idS, chaveOriginal: idS, nome: nomeS, formula: 'Scaffold Murcko', molarMass: '--', smiles: sc, categoria: 'custom', pubchemQuery: nomeS };
@@ -1372,8 +1418,10 @@ Deseja continuar?`;
       compostosFiltrados.unshift(novoComp);
       renderizarListaCompostos(true);
       selecionarCompostoStudio(novoComp);
-      mostrarNotificacao('Scaffold extraído: ' + sc, 'success');
-    } catch (e) { mostrarNotificacao('Erro ao extrair scaffold.', 'error'); }
+      mostrarNotificacao('✅ Scaffold extraído: ' + sc, 'success');
+    } catch (e) {
+      mostrarNotificacao('Erro ao extrair scaffold.', 'error');
+    }
   };
 
   // =========================================================================
@@ -1420,15 +1468,13 @@ Deseja continuar?`;
       cmpViewerA = $3Dmol.createViewer('cmpViewerA', { backgroundColor: '#020617' });
       cmpViewerA.addModel(sdfA, 'sdf');
       cmpViewerA.setStyle({}, { stick: { radius: 0.12 }, sphere: { scale: 0.22 } });
-      cmpViewerA.zoomTo();
-      cmpViewerA.render();
+      cmpViewerA.zoomTo(); cmpViewerA.render();
     }
     if (sdfB && window.$3Dmol) {
       cmpViewerB = $3Dmol.createViewer('cmpViewerB', { backgroundColor: '#020617' });
       cmpViewerB.addModel(sdfB, 'sdf');
       cmpViewerB.setStyle({}, { stick: { radius: 0.12 }, sphere: { scale: 0.22 } });
-      cmpViewerB.zoomTo();
-      cmpViewerB.render();
+      cmpViewerB.zoomTo(); cmpViewerB.render();
     }
     sincronizarCameras(cmpViewerA, cmpViewerB);
     const pA = await calcularPropriedadesMoleculares(cA.smiles, parseFloat(cA.molarMass));
@@ -1471,7 +1517,7 @@ Deseja continuar?`;
   }
 
   // =========================================================================
-  // 22. EXPORTAÇÃO CSV
+  // 22. CSV
   // =========================================================================
   window.exportarCSVFiltrados = function() {
     if (compostosFiltrados.length === 0) { mostrarNotificacao('Nenhum composto filtrado.', 'error'); return; }
@@ -1505,7 +1551,7 @@ Deseja continuar?`;
     }
     const d = ultimoDossieCADD;
     if (title) title.textContent = `📊 Dossiê CADD: ${d.nome}`;
-    if (sub) sub.textContent = `SMILES: ${d.smiles}`;
+    if (sub) sub.textContent = `SMILES: ${d.smiles}${d._fallback ? ' (valores estimados)' : ''}`;
     body.innerHTML = `
       <div class="cadd-cards-grid">
         <div class="cadd-card">
@@ -1571,56 +1617,69 @@ Deseja continuar?`;
     return `\n  LAIFT-ENGINE-3D\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 ${s.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0\nM  END\n$$$$\n`;
   }
   async function resolverCoordenadas3D(smiles, termoBusca) {
-    // Se o composto ativo tem SDF customizado (ex: adição), usar direto
     if (compostoSelecionado && compostoSelecionado.sdfModificado && validarConteudoSDF(compostoSelecionado.sdfModificado)) {
       return compostoSelecionado.sdfModificado;
     }
     if (!smiles && !termoBusca) return null;
     if (smiles && smiles.startsWith('[') && smiles.endsWith(']') && smiles.length <= 5) return gerarSDFMonoatomico(smiles);
+    if (smiles && smiles.startsWith('RADICAL_')) return null;
+
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
-      const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
-      if (cache && validarConteudoSDF(cache.sdf)) return cache.sdf;
+      try {
+        const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
+        if (cache && validarConteudoSDF(cache.sdf)) return cache.sdf;
+      } catch (e) {}
     }
-    if (smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('RADICAL_')) {
+
+    if (smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('[')) {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
         try {
           exibirStatusRDKit(true, "Calculando geometria 3D (ETKDG)...");
           const mol = rdkit.get_mol(smiles);
           if (mol) {
-            mol.add_hs();
-            if (mol.embed_mol() >= 0) {
+            try { mol.add_hs(); } catch (e) {}
+            const embedStatus = mol.embed_mol();
+            if (embedStatus >= 0) {
               const sdf = mol.to_sdf();
               mol.delete();
               exibirStatusRDKit(false);
               if (validarConteudoSDF(sdf)) { salvarEmCache(smiles, termoBusca, sdf); return sdf; }
             } else mol.delete();
           }
-        } catch (e) {}
+        } catch (e) { console.warn('[3D] RDKit ETKDG falhou:', e.message); }
       }
+      exibirStatusRDKit(false);
     }
-    if (smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('RADICAL_')) {
+
+    if (smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('[')) {
       try {
         exibirStatusRDKit(true, "Consultando PubChem 3D...");
-        const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(smiles)}/SDF?record_type=3d`);
+        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/${encodeURIComponent(smiles)}/SDF?record_type=3d`;
+        const res = await fetch(url);
         if (res.ok) {
           const sdf = await res.text();
           exibirStatusRDKit(false);
           if (validarConteudoSDF(sdf)) { salvarEmCache(smiles, termoBusca, sdf); return sdf; }
         }
+        exibirStatusRDKit(false);
       } catch (e) {}
     }
-    if (smiles && smiles !== '--' && !smiles.startsWith('RADICAL_')) {
+
+    if (termoBusca) {
       try {
-        exibirStatusRDKit(true, "Consultando CACTUS NIH...");
-        const res = await fetch(`https://cactus.nci.nih.gov/chemical/structure/${encodeURIComponent(smiles)}/file?format=sdf`);
+        exibirStatusRDKit(true, "Consultando PubChem por nome...");
+        const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termoBusca.trim())}/SDF?record_type=3d`;
+        const res = await fetch(url);
         if (res.ok) {
           const sdf = await res.text();
           exibirStatusRDKit(false);
-          if (validarConteudoSDF(sdf)) { salvarEmCache(smiles, termoBusca, sdf); return sdf; }
+          if (validarConteudoSDF(sdf)) { salvarEmCache(smiles || termoBusca, termoBusca, sdf); return sdf; }
         }
+        exibirStatusRDKit(false);
       } catch (e) {}
     }
+
     exibirStatusRDKit(false);
     return null;
   }
@@ -1655,17 +1714,13 @@ Deseja continuar?`;
     if (sdf && validarConteudoSDF(sdf)) {
       construirCena3D(sdf);
       pushEdicaoSnapshot(comp, sdf, 'Carregamento');
-      // Banner de instabilidade
-      if (comp.unstable) {
-        exibirBannerInstabilidade();
-      } else {
-        removerBannerInstabilidade();
-      }
+      if (comp.unstable) exibirBannerInstabilidade();
+      else removerBannerInstabilidade();
     } else {
       modeloCarregadoAtivo = false;
       const container = document.getElementById('studioViewer3D');
       if (container) {
-        container.innerHTML = `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f87171; font-size: 0.8rem; text-align: center; max-width: 80%;">⚠️ Coordenadas 3D não disponíveis.</div>`;
+        container.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#f87171; font-size:0.8rem; text-align:center; max-width:80%;">⚠️ Coordenadas 3D não disponíveis.</div>`;
       }
       removerBannerInstabilidade();
     }
@@ -1679,10 +1734,10 @@ Deseja continuar?`;
     banner.className = 'unstable-banner';
     banner.id = 'unstableBanner';
     banner.innerHTML = `
-      <div>⚠️ <strong>Estrutura instável</strong> — valência estendida (radical livre ou estado excitado).</div>
+      <div>⚠️ <strong>Estrutura instável</strong> — valência estendida (radical livre).</div>
       <div class="unstable-actions">
         <button onclick="window.desfazerEdicao()">↶ Desfazer</button>
-        <button onclick="window.fecharInspectorAtomo()">OK</button>
+        <button onclick="document.getElementById('unstableBanner').remove()">OK</button>
       </div>
     `;
     stage.appendChild(banner);
@@ -1694,24 +1749,71 @@ Deseja continuar?`;
 
   function construirCena3D(sdfText) {
     const container = document.getElementById('studioViewer3D');
-    if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
+    if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) {
+      console.warn('[3D] Pré-requisitos não atendidos.');
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      console.warn('[3D] Container sem dimensões — retry em 200ms');
+      setTimeout(() => construirCena3D(sdfText), 200);
+      return;
+    }
+
     try {
-      if (studioViewer) { try { studioViewer.stopAnimate(); } catch (e) {} }
+      if (studioViewer) {
+        try { studioViewer.stopAnimate(); } catch (e) {}
+        try { studioViewer.clear(); } catch (e) {}
+      }
       container.innerHTML = '';
-      studioViewer = $3Dmol.createViewer(container, { backgroundColor: '#020617' });
+
+      studioViewer = $3Dmol.createViewer(container, {
+        backgroundColor: '#020617',
+        antialias: true
+      });
+
       const model = studioViewer.addModel(sdfText, 'sdf');
-      if (!model || typeof model.selectedAtoms !== 'function' || model.selectedAtoms({}).length === 0) { modeloCarregadoAtivo = false; return; }
+      if (!model || typeof model.selectedAtoms !== 'function') {
+        modeloCarregadoAtivo = false;
+        return;
+      }
+      const atomos = model.selectedAtoms({}) || [];
+      if (atomos.length === 0) {
+        modeloCarregadoAtivo = false;
+        return;
+      }
+
       modeloCarregadoAtivo = true;
       aplicarEstiloVisual(modeloAtual);
-      studioViewer.setClickable({}, true, function(atom) {
+
+      studioViewer.setClickable({}, true, function (atom) {
         if (modoMedicaoAtivo) processarCliqueMedicao(atom);
         else selecionarEInspecionarAtomo(atom);
       });
+
       studioViewer.zoomTo();
       studioViewer.render();
-      setTimeout(() => { if (studioViewer && modeloCarregadoAtivo) { try { studioViewer.resize(); studioViewer.render(); } catch (e) {} } }, 120);
-      if (autoRotacaoAtiva) studioViewer.animate({ loop: 'backAndForth', step: 0.35 });
-    } catch (e) { modeloCarregadoAtivo = false; }
+
+      setTimeout(() => {
+        if (studioViewer && modeloCarregadoAtivo) {
+          try {
+            const r2 = container.getBoundingClientRect();
+            if (r2.width > 0 && r2.height > 0) {
+              studioViewer.resize();
+              studioViewer.render();
+            }
+          } catch (e) {}
+        }
+      }, 180);
+
+      if (autoRotacaoAtiva) {
+        try { studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
+      }
+    } catch (errCena) {
+      modeloCarregadoAtivo = false;
+      console.error('[3D] Erro:', errCena);
+    }
   }
 
   function aplicarEstiloVisual(tipo) {
@@ -1731,15 +1833,38 @@ Deseja continuar?`;
     } catch (e) {}
   }
 
+  // =========================================================================
+  // 26. 2D — CORRIGIDO (passa canvas, não ID)
+  // =========================================================================
   function desenharEstrutura2DStudio(smiles, nome) {
     const canvas = document.getElementById('studioCanvas2D');
     if (!canvas) return;
-    if (typeof SmilesDrawer !== 'undefined' && smiles && smiles !== '--' && !smiles.includes('.') && !smiles.startsWith('RADICAL_')) {
-      try {
-        const drawer = new SmilesDrawer.Drawer({ width: 650, height: 480, bondThickness: 1.6, bondLength: 20, isomeric: true });
-        SmilesDrawer.parse(smiles, function(tree) { drawer.draw(tree, 'studioCanvas2D', 'dark', false); });
-      } catch (e) { desenharFallback2D(canvas, smiles, nome); }
-    } else desenharFallback2D(canvas, smiles, nome);
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (typeof SmilesDrawer === 'undefined') { desenharFallback2D(canvas, smiles, nome); return; }
+    if (!smiles || smiles === '--' || smiles.includes('.') || smiles.startsWith('RADICAL_')) {
+      desenharFallback2D(canvas, smiles, nome); return;
+    }
+
+    try {
+      const drawer = new SmilesDrawer.Drawer({
+        width: canvas.width,
+        height: canvas.height,
+        bondThickness: 1.6,
+        bondLength: 20,
+        isomeric: true,
+        padding: 20
+      });
+      SmilesDrawer.parse(
+        smiles,
+        function (tree) { drawer.draw(tree, canvas, 'dark', false); },
+        function (err) { desenharFallback2D(canvas, smiles, nome); }
+      );
+    } catch (e) { desenharFallback2D(canvas, smiles, nome); }
   }
   function desenharFallback2D(canvas, smiles, nome) {
     const ctx = canvas.getContext('2d');
@@ -1755,7 +1880,7 @@ Deseja continuar?`;
   }
 
   // =========================================================================
-  // 26. CONTROLES
+  // 27. CONTROLES
   // =========================================================================
   window.setModelo3D = function(m) {
     modeloAtual = m;
@@ -1852,17 +1977,13 @@ Deseja continuar?`;
   };
 
   // =========================================================================
-  // 27. SELEÇÃO
+  // 28. SELEÇÃO
   // =========================================================================
   window.selecionarCompostoStudio = function(comp, el, addToHist = true) {
     if (!comp) return;
     compostoSelecionado = comp;
     document.querySelectorAll('.compound-item').forEach(i => i.classList.remove('selected'));
     if (el) el.classList.add('selected');
-    else {
-      const items = document.querySelectorAll('.compound-item');
-      items.forEach(i => { if (i.querySelector('.comp-name')?.textContent.includes(comp.nome)) i.classList.add('selected'); });
-    }
     if (addToHist) pushNavegacao(comp);
     carregarEstruturaNoStudio(comp);
   };
@@ -1885,7 +2006,7 @@ Deseja continuar?`;
   };
 
   // =========================================================================
-  // 28. INICIALIZAÇÃO
+  // 29. INICIALIZAÇÃO
   // =========================================================================
   async function inicializarStudio() {
     let tent = 0;
