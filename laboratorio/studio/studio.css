@@ -1586,3 +1586,89 @@ body.presentation-mode .studio-watermark-overlay { display: none !important; }
 .unstable-banner button:hover {
   background: rgba(255, 255, 255, 0.25);
 }
+
+/* =========================================================================
+   AJUSTES v3.1 — Toolbar compacta e proporções da tela
+   ========================================================================= */
+
+/* Toolbar ribbon: altura maior para caber confortavelmente */
+.studio-toolbar-ribbon {
+  height: 46px;
+  min-height: 46px;
+  max-height: 46px;
+  padding: 0 10px;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* Botões mais compactos */
+.tool-btn {
+  padding: 5px 8px;
+  font-size: 0.66rem;
+}
+
+.toolbar-cluster {
+  gap: 3px;
+}
+
+.cluster-label {
+  font-size: 0.58rem;
+  margin-right: 1px;
+}
+
+/* Header mais compacto */
+.studio-main-header {
+  padding: 0 10px;
+  gap: 8px;
+}
+
+.header-control-actions {
+  gap: 4px;
+}
+
+.studio-btn {
+  padding: 5px 8px;
+  font-size: 0.7rem;
+}
+
+.btn-nav-icon {
+  padding: 5px 7px;
+  min-width: 28px;
+  justify-content: center;
+}
+
+/* Canvas stage com altura mínima garantida */
+.studio-canvas-stage {
+  min-height: 400px;
+}
+
+/* Canvas 2D responsivo */
+#studioCanvas2D {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Ajuste do grid workspace */
+.studio-workspace-grid {
+  grid-template-columns: 340px 1fr;
+}
+
+@media (max-width: 1400px) {
+  .studio-workspace-grid {
+    grid-template-columns: 300px 1fr;
+  }
+  .cluster-label {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .studio-workspace-grid {
+    grid-template-columns: 260px 1fr;
+  }
+  .tool-btn {
+    padding: 4px 6px;
+    font-size: 0.62rem;
+  }
+}
