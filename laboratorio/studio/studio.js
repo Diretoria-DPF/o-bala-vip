@@ -2,7 +2,7 @@
  * ============================================================================
  * LAIFT — ESTÚDIO DE PROJEÇÃO & MODELAGEM MOLECULAR 3D
  * Arquivo: studio/studio.js
- * Versão: 4.1 FINAL ENGINEERING — ARQUIVO ÚNICO COMENTADO
+ * Versão: 4.5 FINAL ENGINEERING — ARQUIVO ÚNICO COMENTADO
  * ============================================================================
  *
  * ARQUITETURA EM CAMADAS:
@@ -22,10 +22,18 @@
  *   - SmilesDrawer → renderização 2D vetorial
  *   - 3Dmol.js     → renderização 3D WebGL
  *
+ * OTIMIZAÇÕES v4.5:
+ *   - Lazy load do RDKit (não pré-carrega no boot)
+ *   - Debounce CADD (300ms após seleção)
+ *   - Pré-filtro de SMILES triviais
+ *   - Reuso de viewer WebGL (evita GL_OUT_OF_MEMORY)
+ *   - Pausa animações quando aba inativa
+ *   - Device Profile adaptativo (mobile/low-end)
+ *   - WebGLManager (LRU de contextos)
  * ============================================================================
  */
 
-const STUDIO_VERSION = '4.1';
+const STUDIO_VERSION = '4.5';
 const STUDIO_BUILD = '2025-FINAL';
 
 console.log(
@@ -42,9 +50,6 @@ console.log(
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.0 — ESTADO GLOBAL (STATE MODULE) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Toda a mutabilidade do sistema vive aqui. Centralizar o estado evita
-  // closures espalhadas e facilita debug (STATE.X sempre visível no console).
   // ═══════════════════════════════════════════════════════════════════════════
   const STATE = {
     // Barramento inter-abas
@@ -67,6 +72,7 @@ console.log(
 
     // SDF ativo
     sdfCacheLocal: null,
+    _lastSDF: null,              // ✅ NOVO v4.5 — usado em construirCena3D para skip
 
     // Motores químicos
     RDKitModuleInstance: null,
@@ -101,6 +107,9 @@ console.log(
 
   const ITEMS_PER_CHUNK = 40;
 
+  // ✅ NOVO v4.5 — timer global para debounce do CADD
+  let _caddTimer = null;
+
   const STORAGE_KEYS = {
     prefs: 'laift_studio_prefs_v4',
     favoritos: 'laift_studio_favoritos_v4',
@@ -114,15 +123,63 @@ console.log(
   } catch (e) {
     console.warn('[Studio] BroadcastChannel indisponível.');
   }
-  // ››› FIM: STATE — estado global centralizado (toda mutabilidade do sistema).
-  // ››› FEEDBACK: se precisar adicionar novo campo mutável, declare aqui.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ››› FIM: STATE — estado global centralizado.
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ▓▓▓ L0 — PERFIL DE DISPOSITIVO (performance adaptativa) ▓▓▓
+  // ═══════════════════════════════════════════════════════════════════════════
+  var DEVICE_PROFILE = (function () {
+    var mem = navigator.deviceMemory || 4;
+    var cores = navigator.hardwareConcurrency || 4;
+    var isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+    var isLowEnd = mem <= 2 || cores <= 2;
+
+    var profile = {
+      isMobile: isMobile,
+      isLowEnd: isLowEnd,
+      maxWebGLContexts: isLowEnd ? 2 : (isMobile ? 3 : 6),
+      renderQuality: isLowEnd ? 'low' : (isMobile ? 'medium' : 'high'),
+      enableAutoRotation: !isLowEnd,
+      maxAtoms: isLowEnd ? 150 : (isMobile ? 300 : 1000)
+    };
+
+    console.log('[Device] Perfil:', profile);
+    return profile;
+  })();
+  // ››› FIM: DEVICE_PROFILE — capacidades de hardware detectadas.
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ▓▓▓ L0.1 — GERENCIADOR DE CONTEXTOS WEBGL (LRU) ▓▓▓
+  // ═══════════════════════════════════════════════════════════════════════════
+  var WebGLManager = (function () {
+    var activeContexts = [];
+
+    return {
+      registrar: function (viewer, id) {
+        activeContexts.push({ viewer: viewer, id: id, timestamp: Date.now() });
+        while (activeContexts.length > DEVICE_PROFILE.maxWebGLContexts) {
+          var antigo = activeContexts.shift();
+          try {
+            antigo.viewer.clear();
+            console.log('[WebGL] Contexto descartado:', antigo.id);
+          } catch (e) {}
+        }
+      },
+      destruir: function (id) {
+        for (var i = activeContexts.length - 1; i >= 0; i--) {
+          if (activeContexts[i].id === id) {
+            try { activeContexts[i].viewer.clear(); } catch (e) {}
+            activeContexts.splice(i, 1);
+          }
+        }
+      },
+      total: function () { return activeContexts.length; }
+    };
+  })();
+  // ››› FIM: WebGLManager — LRU de contextos WebGL.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L4.1 — TABELA PERIÓDICA (118 elementos) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Formato compacto: [Z, sym, nome, massa, eletroneg, raio, valências, cat, grupo, período, pharma]
   // ═══════════════════════════════════════════════════════════════════════════
   const TP_RAW = [
     [1,'H','Hidrogênio',1.008,2.20,37,[1],'nao-metal',1,1,'Essencial em pontes de H; bioisosterismo H↔F para bloquear oxidação por CYP450.'],
@@ -252,17 +309,8 @@ console.log(
       cat: a[7], grupo: a[8], periodo: a[9], pharma: a[10]
     };
   });
-  // ››› FIM: TABELA_PERIODICA — 118 elementos IUPAC com metadados físico-químicos e papel medicinal.
-  // ››› FEEDBACK: para adicionar coluna (ex.: densidade), estenda TP_RAW e ajuste o map.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ››› FIM: TABELA_PERIODICA — 118 elementos IUPAC.
 
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L4.1b — MAPA DE POSIÇÕES NA GRADE 18×9 ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Converte cada elemento em {linha, coluna} para o grid CSS.
-  // Lantanídeos (Z 57-71) → linha 8; Actinídeos (Z 89-103) → linha 9.
-  // ═══════════════════════════════════════════════════════════════════════════
   const POSICOES_PTABLE = (function () {
     const pos = {};
     TABELA_PERIODICA.forEach(function (e) {
@@ -276,22 +324,11 @@ console.log(
     });
     return pos;
   })();
-  // ››› FIM: POSICOES_PTABLE — coordenadas na grade para renderização da tabela.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ››› FIM: POSICOES_PTABLE — coordenadas na grade.
 
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L4.2 — REAÇÕES BIOISOSTÉRICAS ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // 7 classes de substituições bioisostéricas clássicas em química medicinal.
-  // Cada uma tem: id, nome, tag, esquema visual, descrição, alvoSmarts,
-  // detectar(smiles) → bool, transformar(smiles) → novoSmiles.
-  // ═══════════════════════════════════════════════════════════════════════════
   const REACOES_BIOISOSTERISMO = [
     {
-      id: 'carboxila_tetrazol',
-      nome: 'Bioisóstero de Tetrazol',
-      tag: 'Não-Clássico',
+      id: 'carboxila_tetrazol', nome: 'Bioisóstero de Tetrazol', tag: 'Não-Clássico',
       esquema: 'R-COOH ➔ R-(1H-Tetrazol-5-il)',
       descricao: 'Mantém carga negativa deslocalizada e acidez (pKa ~4.5); 10× mais lipofílico.',
       alvoSmarts: 'C(=O)[OH]',
@@ -299,9 +336,7 @@ console.log(
       transformar: function (s) { return s.replace(/C\(=O\)\[?OH?\]?/i, 'c1nnn[nH]1'); }
     },
     {
-      id: 'esterificacao_metilica',
-      nome: 'Éster Metílico (Pró-fármaco)',
-      tag: 'Pró-fármaco',
+      id: 'esterificacao_metilica', nome: 'Éster Metílico (Pró-fármaco)', tag: 'Pró-fármaco',
       esquema: 'R-COOH ➔ R-COOCH₃',
       descricao: 'Mascara a carga aniônica; regenerado no plasma por esterases.',
       alvoSmarts: 'C(=O)[OH]',
@@ -309,9 +344,7 @@ console.log(
       transformar: function (s) { return s.replace(/C\(=O\)\[?OH?\]?/i, 'C(=O)OC'); }
     },
     {
-      id: 'amidacao_primaria',
-      nome: 'Amidação de Carboxila',
-      tag: 'Clássico',
+      id: 'amidacao_primaria', nome: 'Amidação de Carboxila', tag: 'Clássico',
       esquema: 'R-COOH ➔ R-CONH₂',
       descricao: 'Neutraliza a acidez e estabiliza interações por ligações de hidrogênio.',
       alvoSmarts: 'C(=O)[OH]',
@@ -319,9 +352,7 @@ console.log(
       transformar: function (s) { return s.replace(/C\(=O\)\[?OH?\]?/i, 'C(=O)N'); }
     },
     {
-      id: 'o_metilacao',
-      nome: 'O-Metilação (Éter Metílico)',
-      tag: 'Bloqueio de Fase II',
+      id: 'o_metilacao', nome: 'O-Metilação (Éter Metílico)', tag: 'Bloqueio de Fase II',
       esquema: 'Ar-OH ➔ Ar-OCH₃',
       descricao: 'Protege hidroxilas/fenóis contra glicuronidação e sulfatação hepáticas.',
       alvoSmarts: '[OH]',
@@ -331,9 +362,7 @@ console.log(
       }
     },
     {
-      id: 'o_acetilacao',
-      nome: 'O-Acetilação (Esterificação)',
-      tag: 'Atenuação de Toxicidade',
+      id: 'o_acetilacao', nome: 'O-Acetilação (Esterificação)', tag: 'Atenuação de Toxicidade',
       esquema: 'Ar-OH ➔ Ar-OCOCH₃',
       descricao: 'Conversão clássica Salicílico → Aspirina; protege mucosa gástrica.',
       alvoSmarts: 'c[OH]',
@@ -343,9 +372,7 @@ console.log(
       }
     },
     {
-      id: 'n_acetilacao',
-      nome: 'N-Acetilação de Amina',
-      tag: 'Otimização Analgésica',
+      id: 'n_acetilacao', nome: 'N-Acetilação de Amina', tag: 'Otimização Analgésica',
       esquema: 'Ar-NH₂ ➔ Ar-NHCOCH₃',
       descricao: 'Conversão 4-aminofenol → Paracetamol; atenua toxicidade de aminas livres.',
       alvoSmarts: '[NH2]',
@@ -355,9 +382,7 @@ console.log(
       }
     },
     {
-      id: 'fluorizacao_aromatica',
-      nome: 'Fluorização Aromática (Bloqueio CYP)',
-      tag: 'H ➔ F',
+      id: 'fluorizacao_aromatica', nome: 'Fluorização Aromática (Bloqueio CYP)', tag: 'H ➔ F',
       esquema: 'Ar-H ➔ Ar-F',
       descricao: 'Flúor mimetiza H espacialmente; efeito indutivo bloqueia oxidação por CYP450.',
       alvoSmarts: 'c1ccccc1',
@@ -365,17 +390,8 @@ console.log(
       transformar: function (s) { return s.replace(/c1ccccc1/i, 'c1ccc(F)cc1'); }
     }
   ];
-  // ››› FIM: REACOES_BIOISOSTERISMO — 7 transformações clássicas de química medicinal.
-  // ››› FEEDBACK: cada transformação usa regex simples; para casos complexos, migrar para RDKit SMARTS.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ››› FIM: REACOES_BIOISOSTERISMO — 7 transformações.
 
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L4.3 — PAINS (Pan-Assay Interference Compounds) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Baseado em Baell & Holloway, J. Med. Chem. 2010.
-  // Detectores de grupos promíscuos que geram falsos positivos em HTS.
-  // ═══════════════════════════════════════════════════════════════════════════
   const PAINS_SUBSTRUCTURES = [
     { nome: 'Quinona',            smarts: 'O=C1C=CC(=O)C=C1',                       risco: 'Aceptor de Michael redox-cíclico; gera EROs.' },
     { nome: 'Catecol',            smarts: 'c1cc(O)c(O)cc1',                         risco: 'Oxida a orto-quinona; quela metais.' },
@@ -397,16 +413,10 @@ console.log(
     { nome: 'Hidrazina Livre',    smarts: '[NX3][NX3]',                               risco: 'Hidrazonas inespecíficas com carbonilas proteicas.' },
     { nome: 'Peróxido',           smarts: '[OX2][OX2]',                               risco: 'Fonte de radicais livres; degrada reagentes.' }
   ];
-  // ››› FIM: PAINS_SUBSTRUCTURES — 19 padrões promíscuos para alerta de HTS.
-  // ››› FEEDBACK: adicionar novas PAINS exige novo par {nome, smarts, risco}; o detector é automático.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: PAINS_SUBSTRUCTURES — 19 padrões promíscuos.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L2.1 — TOASTS (Sistema de Notificações) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Cria uma notificação flutuante no canto inferior direito.
-  // Tipos: 'info' | 'success' | 'error' | 'warning'.
+  // ▓▓▓ L2.1 — TOASTS ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
   function mostrarNotificacao(mensagem, tipo, duracaoMs) {
     tipo = tipo || 'info';
@@ -422,22 +432,11 @@ console.log(
     }, duracaoMs);
   }
   window.mostrarNotificacao = mostrarNotificacao;
-  // ››› FIM: mostrarNotificacao(msg, tipo, ms) — feedback visual não bloqueante.
-  // ››› FEEDBACK: cores definidas no CSS (.toast-info / .toast-success / etc.).
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: mostrarNotificacao() — feedback visual não bloqueante.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L2.2 — PERSISTÊNCIA (localStorage) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Salva preferências de UI (modo, estilo, rotação, categoria ativa) e
-  // favoritos. Não persiste estado de edição (esse vive em memória).
+  // ▓▓▓ L2.2 — PERSISTÊNCIA ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Persiste preferências de UI no localStorage.
-   * Chamada em qualquer alteração de modo, estilo ou categoria.
-   */
   function salvarPreferencias() {
     try {
       const categoriaAtiva = document.querySelector('.category-pill.active');
@@ -449,14 +448,7 @@ console.log(
       }));
     } catch (e) {}
   }
-  // ››› FIM: salvarPreferencias() — snapshot de UI no localStorage.
-  // ››› FEEDBACK: silencia erros de modo privado (Safari) onde localStorage lança.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Restaura preferências de UI no boot.
-   * Aplicada APÓS a indexação estar completa para evitar conflitos.
-   */
   function carregarPreferencias() {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.prefs);
@@ -470,15 +462,7 @@ console.log(
       }
     } catch (e) {}
   }
-  // ››› FIM: carregarPreferencias() — restaura UI salva anteriormente.
-  // ››› FEEDBACK: ordem importa — primeiro modo/estilo, depois categoria.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Carrega conjunto de favoritos do localStorage.
-   * Favoritos são IDs de compostos (não referências diretas) para sobreviver
-   * a reindexações.
-   */
   function carregarFavoritos() {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.favoritos);
@@ -490,28 +474,13 @@ console.log(
       STATE.favoritos = new Set();
     }
   }
-  // ››› FIM: carregarFavoritos() — popula Set de IDs favoritos.
-  // ››› FEEDBACK: sempre valida Array antes de construir Set (defesa contra corrupção).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Persiste conjunto de favoritos como array JSON.
-   */
   function salvarFavoritos() {
     try {
-      localStorage.setItem(
-        STORAGE_KEYS.favoritos,
-        JSON.stringify(Array.from(STATE.favoritos))
-      );
+      localStorage.setItem(STORAGE_KEYS.favoritos, JSON.stringify(Array.from(STATE.favoritos)));
     } catch (e) {}
   }
-  // ››› FIM: salvarFavoritos() — persiste Set como array (JSON não suporta Set nativo).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Atualiza o botão "Favoritar" no header para refletir o estado do composto
-   * atualmente selecionado.
-   */
   function atualizarBotaoFavorito() {
     const btn = document.getElementById('btnFavoriteCurrent');
     if (!btn || !STATE.compostoSelecionado) return;
@@ -521,14 +490,7 @@ console.log(
     btn.textContent = isFav ? '★' : '☆';
     btn.title = isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos';
   }
-  // ››› FIM: atualizarBotaoFavorito() — sincroniza botão ★/☆ com estado real.
-  // ››› FEEDBACK: chamado sempre que troca de composto selecionado.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do botão "Favoritar" no header.
-   * Alterna estado e re-renderiza a lista para refletir o marcador ★.
-   */
   window.alternarFavoritoAtual = function () {
     if (!STATE.compostoSelecionado) return;
     if (STATE.favoritos.has(STATE.compostoSelecionado.id)) {
@@ -542,36 +504,18 @@ console.log(
     atualizarBotaoFavorito();
     renderizarListaCompostos(true);
   };
-  // ››› FIM: alternarFavoritoAtual() — toggle com persistência + re-render.
-  // ››› FEEDBACK: exposto em window para inline onclick do HTML.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Persistência — preferências + favoritos.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L2.3 — UNDO / REDO DE EDIÇÕES ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Guarda snapshots completos (composto + SDF) em pilha dupla.
-  // Cada operação que modifica estrutura empilha um snapshot ANTES da mutação.
+  // ▓▓▓ L2.3 — UNDO / REDO ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Habilita/desabilita botões Undo/Redo conforme as pilhas.
-   */
   function atualizarBotoesUndoRedo() {
     const bU = document.getElementById('btnUndo');
     const bR = document.getElementById('btnRedo');
     if (bU) bU.disabled = STATE.edicaoHistory.undo.length === 0;
     if (bR) bR.disabled = STATE.edicaoHistory.redo.length === 0;
   }
-  // ››› FIM: atualizarBotoesUndoRedo() — sincroniza UI com estado das pilhas.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Empilha snapshot do estado atual ANTES de uma edição.
-   * @param {Object} composto - Cópia do composto atual (será clonado)
-   * @param {string} sdf      - String SDF correspondente
-   * @param {string} motivo   - Descrição legível (ex.: "Sub C→N")
-   */
   function pushEdicaoSnapshot(composto, sdf, motivo) {
     STATE.edicaoHistory.undo.push({
       composto: JSON.parse(JSON.stringify(composto)),
@@ -585,14 +529,7 @@ console.log(
     STATE.edicaoHistory.redo = [];
     atualizarBotoesUndoRedo();
   }
-  // ››› FIM: pushEdicaoSnapshot() — empilha estado antes de mutação.
-  // ››› FEEDBACK: clona composto via JSON para evitar referência compartilhada.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do botão Undo / Ctrl+Z.
-   * Retorna ao snapshot anterior. Não remove do redo (permite refazer).
-   */
   window.desfazerEdicao = function () {
     if (STATE.edicaoHistory.undo.length < 2) {
       mostrarNotificacao('Nada para desfazer.', 'info');
@@ -603,18 +540,11 @@ console.log(
     const anterior = STATE.edicaoHistory.undo[STATE.edicaoHistory.undo.length - 1];
     STATE.compostoSelecionado = anterior.composto;
     STATE.sdfCacheLocal = anterior.sdf;
-    if (STATE.sdfCacheLocal) construirCena3D(STATE.sdfCacheLocal);
+    if (STATE.sdfCacheLocal) construirCena3D(STATE.sdfCacheLocal, true);
     atualizarBotoesUndoRedo();
     mostrarNotificacao('Ação desfeita: ' + (atual.motivo || ''), 'info');
   };
-  // ››› FIM: desfazerEdicao() — retrocede na pilha undo, re-renderiza 3D.
-  // ››› FEEDBACK: requer mínimo de 2 snapshots (o atual + o anterior).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do botão Redo / Ctrl+Y / Ctrl+Shift+Z.
-   * Reaplica a próxima ação da pilha redo.
-   */
   window.refazerEdicao = function () {
     if (STATE.edicaoHistory.redo.length === 0) {
       mostrarNotificacao('Nada para refazer.', 'info');
@@ -624,23 +554,15 @@ console.log(
     STATE.edicaoHistory.undo.push(prox);
     STATE.compostoSelecionado = prox.composto;
     STATE.sdfCacheLocal = prox.sdf;
-    if (STATE.sdfCacheLocal) construirCena3D(STATE.sdfCacheLocal);
+    if (STATE.sdfCacheLocal) construirCena3D(STATE.sdfCacheLocal, true);
     atualizarBotoesUndoRedo();
     mostrarNotificacao('Ação refeita: ' + (prox.motivo || ''), 'info');
   };
-  // ››› FIM: refazerEdicao() — avança na pilha redo, re-renderiza 3D.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Undo/Redo — pilhas duplas com snapshots completos.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.4 — HISTÓRICO DE NAVEGAÇÃO ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Rastreia compostos visitados em sequência (◀ ▶). Independente do undo/redo.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Empilha entrada no histórico de navegação. Ignora duplicatas consecutivas.
-   */
   function pushNavegacao(comp) {
     if (!comp) return;
     const itens = STATE.historicoNavegacao.itens;
@@ -650,13 +572,7 @@ console.log(
     if (itens.length > STATE.historicoNavegacao.max) itens.shift();
     STATE.historicoNavegacao.indice = itens.length - 1;
   }
-  // ››› FIM: pushNavegacao() — empilha visita no histórico de navegação.
-  // ››› FEEDBACK: guarda referência direta ao composto (não cópia) para performance.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do botão ◀ / Alt+←. Retrocede uma posição no histórico.
-   */
   window.irParaAnterior = function () {
     if (STATE.historicoNavegacao.indice <= 0) {
       mostrarNotificacao('Início do histórico.', 'info');
@@ -666,12 +582,7 @@ console.log(
     const alvo = STATE.historicoNavegacao.itens[STATE.historicoNavegacao.indice].ref;
     selecionarCompostoStudio(alvo, null, false);
   };
-  // ››› FIM: irParaAnterior() — volta no histórico sem empilhar nova navegação.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do botão ▶ / Alt+→. Avança uma posição no histórico.
-   */
   window.irParaProximo = function () {
     if (STATE.historicoNavegacao.indice >= STATE.historicoNavegacao.itens.length - 1) {
       mostrarNotificacao('Fim do histórico.', 'info');
@@ -681,15 +592,10 @@ console.log(
     const alvo = STATE.historicoNavegacao.itens[STATE.historicoNavegacao.indice].ref;
     selecionarCompostoStudio(alvo, null, false);
   };
-  // ››› FIM: irParaProximo() — avança no histórico sem empilhar.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Histórico — navegação ◀ ▶.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.5 — MODO APRESENTAÇÃO ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Oculta header, sidebar, toolbar e HUDs, deixando só o canvas 3D/2D em
-  // tela cheia. Ideal para aulas e demonstrações.
   // ═══════════════════════════════════════════════════════════════════════════
   window.alternarModoApresentacao = function () {
     const ativo = document.body.classList.toggle('presentation-mode');
@@ -707,16 +613,10 @@ console.log(
       document.exitFullscreen();
     }
   };
-  // ››› FIM: alternarModoApresentacao() — toggle classe CSS + fullscreen nativo.
-  // ››› FEEDBACK: re-renderiza 3D após transição CSS (250ms) para evitar resize prematuro.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Modo Apresentação — fullscreen limpo.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L5.1 — WEB WORKER (Indexação Assíncrona) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Processa 2500+ compostos em thread separada, evitando travar a UI.
-  // Fallback síncrono se o Worker não estiver disponível.
+  // ▓▓▓ L5.1 — WEB WORKER ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
   function inicializarWorker() {
     if (STATE.indexerWorker) return STATE.indexerWorker;
@@ -753,15 +653,10 @@ console.log(
       return null;
     }
   }
-  // ››› FIM: inicializarWorker() — instancia Worker e configura handlers.
-  // ››› FEEDBACK: se Worker falhar (file:// ou browser antigo), retorna null e cai no fallback.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Web Worker — indexação assíncrona.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L5.2 — INGESTÃO DE DADOS ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Coleta as três bases de dados do laboratório (window → parent → opener).
   // ═══════════════════════════════════════════════════════════════════════════
   function obterFontesDeDados() {
     const labDb =
@@ -778,14 +673,7 @@ console.log(
       (window.opener && window.opener.BANCO_COMPOSTOS_EXPANDIDO) || null;
     return { labDb: labDb, synthDb: synthDb, expandidoDb: expandidoDb };
   }
-  // ››› FIM: obterFontesDeDados() — coleta bases de dados de 3 escopos possíveis.
-  // ››› FEEDBACK: prioriza window; pai/opener cobrem modais e popups.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Acervo de reserva — garante que o estúdio nunca abra vazio,
-   * mesmo sem bancos de dados externos carregados.
-   */
   const ACERVO_RESERVA = [
     { id: 'AAS', chaveOriginal: 'AAS_s', nome: 'Ácido Acetilsalicílico (Aspirina)', formula: 'C9H8O4', molarMass: 180.16, smiles: 'CC(=O)OC1=CC=CC=C1C(=O)O', categoria: 'farmacos', pubchemQuery: 'Aspirin' },
     { id: 'Paracetamol', chaveOriginal: 'Paracetamol_s', nome: 'Paracetamol (Acetaminofeno)', formula: 'C8H9NO2', molarMass: 151.16, smiles: 'CC(=O)NC1=CC=C(O)C=C1', categoria: 'farmacos', pubchemQuery: 'Acetaminophen' },
@@ -804,37 +692,24 @@ console.log(
     { id: 'AcetatoEtila', chaveOriginal: 'AcetatoEtila_l', nome: 'Acetato de Etila', formula: 'C4H8O2', molarMass: 88.11, smiles: 'CCOC(=O)C', categoria: 'solventes', pubchemQuery: 'Ethyl acetate' },
     { id: 'Na', chaveOriginal: 'Na_s', nome: 'Sódio Metálico', formula: 'Na', molarMass: 22.99, smiles: '[Na]', categoria: 'reagentes', pubchemQuery: 'Sodium' }
   ];
-  // ››› FIM: ACERVO_RESERVA — 16 compostos essenciais para nunca-vazio.
-  // ››› FEEDBACK: inclui 'Acetato de Etila' com pubchemQuery correto em inglês.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fallback síncrono para indexação (usado quando Worker não carrega).
-   * Realiza o mesmo trabalho do Worker mas na main thread.
-   */
   function indexarAcervoCompletoFallback() {
     const mapaUnico = new Map();
     const fontes = obterFontesDeDados();
 
-    // Fase 1: LAB_DATABASE (species)
     if (fontes.labDb && fontes.labDb.species) {
       Object.keys(fontes.labDb.species).forEach(function (chave) {
         const dados = fontes.labDb.species[chave];
         const id = chave.replace(/_s|_l|_aq|_g/g, '');
         mapaUnico.set(id.toLowerCase(), {
-          id: id,
-          chaveOriginal: chave,
-          nome: dados.label || id,
-          formula: dados.formula || '--',
-          molarMass: dados.molarMass || '--',
-          smiles: dados.smiles || '--',
-          categoria: classificarCategoria(chave, dados.label),
+          id: id, chaveOriginal: chave, nome: dados.label || id,
+          formula: dados.formula || '--', molarMass: dados.molarMass || '--',
+          smiles: dados.smiles || '--', categoria: classificarCategoria(chave, dados.label),
           pubchemQuery: dados.pubchemQuery || dados.label || id
         });
       });
     }
 
-    // Fase 2: BANCO_SINTESES_LAIFT
     if (fontes.synthDb && Array.isArray(fontes.synthDb)) {
       fontes.synthDb.forEach(function (synth) {
         if (!synth || !synth.nomeComposto) return;
@@ -842,46 +717,35 @@ console.log(
         const norm = id.toLowerCase();
         if (!mapaUnico.has(norm)) {
           mapaUnico.set(norm, {
-            id: id,
-            chaveOriginal: synth.produtoId || synth.id,
-            nome: synth.nomeComposto,
-            formula: synth.formula || '--',
-            molarMass: synth.molarMass || '--',
-            smiles: synth.smiles || '--',
-            categoria: 'farmacos',
-            pubchemQuery: synth.pubchemQuery || synth.nomeComposto
+            id: id, chaveOriginal: synth.produtoId || synth.id,
+            nome: synth.nomeComposto, formula: synth.formula || '--',
+            molarMass: synth.molarMass || '--', smiles: synth.smiles || '--',
+            categoria: 'farmacos', pubchemQuery: synth.pubchemQuery || synth.nomeComposto
           });
         }
       });
     }
 
-    // Fase 3: BANCO_COMPOSTOS_EXPANDIDO
     if (fontes.expandidoDb && Array.isArray(fontes.expandidoDb)) {
       fontes.expandidoDb.forEach(function (c) {
         if (!c || !c.nome) return;
         const norm = (c.id || c.nome).toLowerCase();
         if (!mapaUnico.has(norm)) {
           mapaUnico.set(norm, {
-            id: c.id || c.nome,
-            chaveOriginal: c.chave || c.id || c.nome,
-            nome: c.nome,
-            formula: c.formula || '--',
-            molarMass: c.molarMass || '--',
-            smiles: c.smiles || '--',
-            categoria: c.categoria || 'reagentes',
+            id: c.id || c.nome, chaveOriginal: c.chave || c.id || c.nome,
+            nome: c.nome, formula: c.formula || '--', molarMass: c.molarMass || '--',
+            smiles: c.smiles || '--', categoria: c.categoria || 'reagentes',
             pubchemQuery: c.pubchemQuery || c.nome
           });
         }
       });
     }
 
-    // Fase 4: Acervo de reserva
     ACERVO_RESERVA.forEach(function (comp) {
       const norm = comp.id.toLowerCase();
       if (!mapaUnico.has(norm)) mapaUnico.set(norm, comp);
     });
 
-    // Fase 5: Ordenação
     STATE.compostosIndexados = Array.from(mapaUnico.values()).sort(function (a, b) {
       return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
     });
@@ -896,14 +760,7 @@ console.log(
       selecionarCompostoStudio(STATE.compostosIndexados[0], primeiroEl);
     }
   }
-  // ››› FIM: indexarAcervoCompletoFallback() — versão síncrona da indexação.
-  // ››› FEEDBACK: replica exatamente a lógica do Worker para consistência total.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Classifica um composto em uma categoria semântica.
-   * Ordem: custom > toxicos > solventes > reagentes > farmacos.
-   */
   function classificarCategoria(chave, label) {
     const txt = ((chave || '') + ' ' + (label || '')).toLowerCase();
     if (/custom|derivado|editado|análogo|scaffold_/.test(txt)) return 'custom';
@@ -912,20 +769,11 @@ console.log(
     if (/acido|hidroxido|cloreto|sulfato|nitrato|anidrido|sodio|potassio|carbonato|fosfato/.test(txt)) return 'reagentes';
     return 'farmacos';
   }
-  // ››› FIM: classificarCategoria() — regex heurística de categorização.
-  // ››› FEEDBACK: mesma lógica replicada em workers/indexer.worker.js.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Ingestão — dados + ACERVO_RESERVA + indexação + classificação.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.6 — LISTA VIRTUALIZADA ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Renderiza em chunks de 40 itens. Scroll infinito. Debounce na busca.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Renderiza a lista de compostos. Se reset=true, limpa e reinicia do zero.
-   */
   function renderizarListaCompostos(reset) {
     if (reset === undefined) reset = true;
     const listContainer = document.getElementById('studioCompoundList');
@@ -989,13 +837,7 @@ console.log(
     const countEl = document.getElementById('studioFilteredCount');
     if (countEl) countEl.textContent = STATE.compostosFiltrados.length + ' compostos visíveis';
   }
-  // ››› FIM: renderizarListaCompostos(reset) — render em chunks de 40.
-  // ››› FEEDBACK: usa DocumentFragment para evitar reflow por item.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler de scroll da lista. Carrega próximo chunk a 70px do final.
-   */
   window.handleStudioScroll = function () {
     const listContainer = document.getElementById('studioCompoundList');
     if (!listContainer) return;
@@ -1006,12 +848,7 @@ console.log(
       }
     }
   };
-  // ››› FIM: handleStudioScroll() — scroll infinito com margem de 70px.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do input de busca. Debounce 120ms. Filtra por nome/fórmula/SMILES + categoria.
-   */
   window.filtrarCompostosStudio = function (termo) {
     clearTimeout(STATE.debounceBuscaTimer);
     STATE.debounceBuscaTimer = setTimeout(function () {
@@ -1034,14 +871,7 @@ console.log(
       renderizarListaCompostos(true);
     }, 120);
   };
-  // ››› FIM: filtrarCompostosStudio(termo) — busca com debounce.
-  // ››› FEEDBACK: combina filtro textual + categoria ativa simultaneamente.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler dos filtros de categoria (pills).
-   * @param {string} cat - 'todas' | 'favoritos' | 'farmacos' | 'custom' | ...
-   */
   window.filtrarCategoriaStudio = function (cat) {
     document.querySelectorAll('.category-pill').forEach(function (b) {
       b.classList.toggle('active', b.dataset.cat === cat);
@@ -1063,138 +893,127 @@ console.log(
     renderizarListaCompostos(true);
     salvarPreferencias();
   };
-  // ››› FIM: filtrarCategoriaStudio(cat) — filtro por categoria.
-  // ››› FEEDBACK: preserva termo de busca ativo ao trocar categoria.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ››› FIM: Lista virtualizada — render + scroll + filtros.
 
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L3.1 — ENGINE (RDKit WASM + OpenChemLib) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Gerencia carregamento dos dois motores químicos.
+  // ►►► FIM DA PARTE 1/2 ◄◄◄
+  // ►►► A PARTE 2/2 COMEÇA AQUI, NO MESMO ARQUIVO studio.js, SEM PARAR O IIFE ◄◄◄
+   // ═══════════════════════════════════════════════════════════════════════════
+  // ▓▓▓ L3.1 — ENGINE (RDKit + OpenChemLib) ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Carrega RDKit WASM sob demanda. Estratégia híbrida: tenta local (vendor/rdkit/)
-   * e cai automaticamente para CDN unpkg se o local falhar.
+   * ✅ v4.5 OTIMIZADO: aguarda window.__rdkitReady do index.html
+   * em vez de fazer polling próprio. Elimina race condition.
    */
- function carregarRDKitSobDemanda() {
-  if (STATE.RDKitModuleInstance) return Promise.resolve(STATE.RDKitModuleInstance);
-  if (STATE.rdkitFalhou) return Promise.resolve(null);
-  if (STATE.rdkitPromise) return STATE.rdkitPromise;
+  function carregarRDKitSobDemanda() {
+    if (STATE.RDKitModuleInstance) return Promise.resolve(STATE.RDKitModuleInstance);
+    if (STATE.rdkitFalhou) return Promise.resolve(null);
+    if (STATE.rdkitPromise) return STATE.rdkitPromise;
 
-  STATE.rdkitPromise = new Promise(function (resolve) {
-    exibirStatusRDKit(true, 'Carregando RDKit WASM...');
-    console.log('[RDKit] Iniciando carregamento...');
+    STATE.rdkitPromise = new Promise(function (resolve) {
+      exibirStatusRDKit(true, 'Carregando RDKit WASM...');
+      console.log('[RDKit] Iniciando carregamento...');
 
-    var resolvido = false;
-    function terminar(valor) {
-      if (resolvido) return;
-      resolvido = true;
-      exibirStatusRDKit(false);
-      resolve(valor);
-    }
-
-    // Timeout global de segurança — NUNCA deixa a promise pendurada
-    var timeoutGlobal = setTimeout(function () {
-      console.warn('[RDKit] ⏱️ Timeout global 30s — prosseguindo sem RDKit');
-      STATE.rdkitFalhou = true;
-      mostrarNotificacao('⚠️ RDKit demorou demais — funcionalidades limitadas', 'warning', 4000);
-      terminar(null);
-    }, 30000);
-
-    // Aguarda até 3 segundos que initRDKitModule apareça (script em paralelo)
-    function aguardarInitRDKit(tentativasRestantes, callback) {
-      if (typeof window.initRDKitModule === 'function') {
-        return callback(true);
+      var resolvido = false;
+      function terminar(valor) {
+        if (resolvido) return;
+        resolvido = true;
+        exibirStatusRDKit(false);
+        resolve(valor);
       }
-      if (tentativasRestantes <= 0) {
-        return callback(false);
-      }
-      setTimeout(function () {
-        aguardarInitRDKit(tentativasRestantes - 1, callback);
-      }, 300);
-    }
 
-    // Timeout curto por tentativa (não global)
-    function timeoutCurto(ms) {
-      return new Promise(function (_, rej) {
-        setTimeout(function () { rej(new Error('Timeout ' + ms + 'ms')); }, ms);
-      });
-    }
-
-    aguardarInitRDKit(10, function (initDisponivel) {
-      if (!initDisponivel) {
-        console.warn('[RDKit] ❌ initRDKitModule nunca apareceu após 3s');
+      // Timeout global de segurança (30s) — NUNCA deixa a promise pendurada
+      var timeoutGlobal = setTimeout(function () {
+        console.warn('[RDKit] ⏱️ Timeout global 30s — prosseguindo sem RDKit');
         STATE.rdkitFalhou = true;
-        clearTimeout(timeoutGlobal);
-        mostrarNotificacao('⚠️ RDKit offline — usando heurísticas', 'warning', 4000);
+        mostrarNotificacao('⚠️ RDKit demorou demais — funcionalidades limitadas', 'warning', 4000);
         terminar(null);
-        return;
+      }, 30000);
+
+      function timeoutCurto(ms) {
+        return new Promise(function (_, rej) {
+          setTimeout(function () { rej(new Error('Timeout ' + ms + 'ms')); }, ms);
+        });
       }
 
-      // ─── Tentativa 1: LOCAL ─────────────────────────────────────────
-      Promise.race([
-        window.initRDKitModule({ locateFile: function (f) { return 'vendor/rdkit/' + f; } }),
-        timeoutCurto(15000)
-      ])
-        .then(function (mod) {
-          if (mod && typeof mod.get_mol === 'function') {
-            STATE.RDKitModuleInstance = mod;
-            console.log('[RDKit] ✅ Carregado localmente');
-            mostrarNotificacao('✅ RDKit ativo', 'success', 2000);
-            clearTimeout(timeoutGlobal);
-            terminar(mod);
-          } else {
-            throw new Error('Módulo local inválido');
-          }
-        })
-        .catch(function (errLocal) {
-          console.warn('[RDKit] Local falhou:', errLocal.message);
+      // ✅ v4.5 — Aguarda window.__rdkitReady do index.html (promessa global)
+      var readyPromise = (typeof window.__rdkitReady !== 'undefined')
+        ? window.__rdkitReady
+        : Promise.resolve(typeof window.initRDKitModule === 'function' ? window.initRDKitModule : null);
 
-          // ─── Tentativa 2: CDN ───────────────────────────────────────
-          if (typeof window.initRDKitModule !== 'function') {
-            // Re-checa (pode ter sido redefinido pelo script do <head>)
-            console.warn('[RDKit] ❌ initRDKitModule desapareceu antes do CDN');
-            STATE.rdkitFalhou = true;
-            clearTimeout(timeoutGlobal);
-            terminar(null);
-            return;
-          }
+      readyPromise.then(function (initFn) {
+        // Fallback: se __rdkitReady não existir (index.html antigo), pega direto
+        if (!initFn && typeof window.initRDKitModule === 'function') {
+          initFn = window.initRDKitModule;
+        }
 
-          Promise.race([
-            window.initRDKitModule({ locateFile: function (f) { return 'https://unpkg.com/@rdkit/rdkit/dist/' + f; } }),
-            timeoutCurto(15000)
-          ])
-            .then(function (mod) {
-              if (mod && typeof mod.get_mol === 'function') {
-                STATE.RDKitModuleInstance = mod;
-                console.log('[RDKit] ✅ Carregado via CDN');
-                clearTimeout(timeoutGlobal);
-                terminar(mod);
-              } else {
-                throw new Error('Módulo CDN inválido');
-              }
-            })
-            .catch(function (errCdn) {
-              console.warn('[RDKit] ❌ CDN falhou:', errCdn.message);
+        if (!initFn) {
+          console.warn('[RDKit] ❌ initRDKitModule indisponível após aguardar');
+          STATE.rdkitFalhou = true;
+          clearTimeout(timeoutGlobal);
+          mostrarNotificacao('⚠️ RDKit offline — usando heurísticas', 'warning', 4000);
+          terminar(null);
+          return;
+        }
+
+        // ─── Tentativa: LOCAL ─────────────────────────────────────────
+        Promise.race([
+          initFn({ locateFile: function (f) { return 'vendor/rdkit/' + f; } }),
+          timeoutCurto(15000)
+        ])
+          .then(function (mod) {
+            if (mod && typeof mod.get_mol === 'function') {
+              STATE.RDKitModuleInstance = mod;
+              console.log('[RDKit] ✅ Carregado localmente');
+              mostrarNotificacao('✅ RDKit ativo', 'success', 2000);
+              clearTimeout(timeoutGlobal);
+              terminar(mod);
+            } else {
+              throw new Error('Módulo local inválido');
+            }
+          })
+          .catch(function (errLocal) {
+            console.warn('[RDKit] Local falhou:', errLocal.message);
+
+            if (typeof window.initRDKitModule !== 'function') {
+              console.warn('[RDKit] ❌ initRDKitModule desapareceu antes do CDN');
               STATE.rdkitFalhou = true;
               clearTimeout(timeoutGlobal);
-              mostrarNotificacao('⚠️ RDKit offline — funcionalidades limitadas', 'warning', 4000);
               terminar(null);
-            });
-        });
-    });
-  });
+              return;
+            }
 
-  return STATE.rdkitPromise;
-}
-// ››› FIM: carregarRDKitSobDemanda() — v4.3 SEMPRE resolve a promise.
-// ››› FEEDBACK: adiciona waitForInitRDKit (aguarda script em paralelo),
-//     timeout global (nunca deixa pendurado), e verificação typeof antes de chamar.
-  /**
-   * Detecta disponibilidade do OpenChemLib (carregado via <script>).
-   */
+            // ─── Tentativa: CDN ───────────────────────────────────────
+            Promise.race([
+              window.initRDKitModule({ locateFile: function (f) { return 'https://unpkg.com/@rdkit/rdkit/dist/' + f; } }),
+              timeoutCurto(15000)
+            ])
+              .then(function (mod) {
+                if (mod && typeof mod.get_mol === 'function') {
+                  STATE.RDKitModuleInstance = mod;
+                  console.log('[RDKit] ✅ Carregado via CDN');
+                  clearTimeout(timeoutGlobal);
+                  terminar(mod);
+                } else {
+                  throw new Error('Módulo CDN inválido');
+                }
+              })
+              .catch(function (errCdn) {
+                console.warn('[RDKit] ❌ CDN falhou:', errCdn.message);
+                STATE.rdkitFalhou = true;
+                clearTimeout(timeoutGlobal);
+                mostrarNotificacao('⚠️ RDKit offline — funcionalidades limitadas', 'warning', 4000);
+                terminar(null);
+              });
+          });
+      });
+    });
+
+    return STATE.rdkitPromise;
+  }
+  // ››› FIM: carregarRDKitSobDemanda() — v4.5 SEMPRE resolve a promise.
+  // ››› FEEDBACK: aguarda window.__rdkitReady do index.html; timeout global 30s.
+
   function carregarOCL() {
     if (STATE.OCLDisponivel) return true;
     if (typeof window.OCL !== 'undefined' && window.OCL.Molecule) {
@@ -1205,13 +1024,7 @@ console.log(
     console.warn('[OCL] ❌ OpenChemLib não carregado');
     return false;
   }
-  // ››› FIM: carregarOCL() — verifica disponibilidade do OpenChemLib.
-  // ››› FEEDBACK: OCL é sempre carregado via <script> no HTML; aqui só valida.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Exibe/oculta o indicador de status RDKit no canvas.
-   */
   function exibirStatusRDKit(visivel, texto) {
     texto = texto || '';
     const ind = document.getElementById('rdkitIndicator');
@@ -1219,13 +1032,7 @@ console.log(
     if (txt) txt.textContent = texto;
     if (ind) ind.style.display = visivel ? 'flex' : 'none';
   }
-  // ››› FIM: exibirStatusRDKit() — mostra spinner no canto superior direito.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Gera coordenadas 3D usando OpenChemLib (puro JS, sempre disponível).
-   * Retorna SDF (molfile + terminador) ou null se falhar.
-   */
   function gerar3DComOCL(smiles) {
     if (!carregarOCL()) return null;
     try {
@@ -1246,21 +1053,11 @@ console.log(
       return null;
     }
   }
-  // ››› FIM: gerar3DComOCL(smiles) — geração 3D local via OpenChemLib.
-  // ››› FEEDBACK: puro JavaScript, não depende de WASM — é o motor mais confiável.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Engine — RDKit + OCL.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L3.2 — CHEMINFO (Quimiometria) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Extração de componente principal, descritores, avaliação de drug-likeness.
+  // ▓▓▓ L3.2 — CHEMINFO ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Extrai componente principal de um SMILES multi-componente.
-   * Remove contra-íons comuns (Na+, K+, Cl-, etc.).
-   */
   function extrairSmilesPrincipal(smiles) {
     if (!smiles || smiles === '--') return null;
     if (smiles.indexOf('RADICAL_') === 0) return null;
@@ -1271,14 +1068,17 @@ console.log(
     if (partes.length === 0) return null;
     return partes.sort(function (a, b) { return b.length - a.length; })[0];
   }
-  // ››› FIM: extrairSmilesPrincipal(smiles) — separa sal em componente principal.
-  // ››› FEEDBACK: pega o fragmento mais longo; remove metais/haletos isolados.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Calcula propriedades moleculares via RDKit com fallback heurístico.
-   */
   async function calcularPropriedadesMoleculares(smiles, molarMass) {
+    // ✅ v4.5 — Pré-filtro: pula RDKit para SMILES triviais
+    if (!smiles || smiles === '--' || smiles.length < 2) {
+      return calcularPropriedadesFallback(smiles, molarMass);
+    }
+    // Compostos monoatômicos não precisam de RDKit
+    if (/^\[[A-Z][a-z]?\]$/.test(smiles)) {
+      return calcularPropriedadesFallback(smiles, molarMass);
+    }
+
     const rdkit = await carregarRDKitSobDemanda();
     const smilesLimpo = extrairSmilesPrincipal(smiles);
 
@@ -1347,13 +1147,7 @@ console.log(
       return calcularPropriedadesFallback(smiles, molarMass);
     }
   }
-  // ››› FIM: calcularPropriedadesMoleculares() — descritores via RDKit.
-  // ››› FEEDBACK: cai em fallback heurístico se RDKit indisponível ou SMILES inválido.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fallback heurístico quando RDKit indisponível. Conta átomos por regex.
-   */
   function calcularPropriedadesFallback(smiles, molarMass) {
     const sL = extrairSmilesPrincipal(smiles);
     if (!sL) return null;
@@ -1389,14 +1183,7 @@ console.log(
       _fallback: true
     };
   }
-  // ››› FIM: calcularPropriedadesFallback() — estimativas grosseiras sem RDKit.
-  // ››› FEEDBACK: marcado com _fallback para indicar "valores estimados" nos badges.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Avalia quimiometria completa (Lipinski, Veber, Ghose, PAINS) e atualiza
-   * os badges do HUD inferior.
-   */
   async function avaliarQuimiometriaCompleta(smiles, molarMass, nome) {
     const bL = document.getElementById('badgeLipinski');
     const bV = document.getElementById('badgeVeber');
@@ -1436,20 +1223,11 @@ console.log(
 
     STATE.ultimoDossieCADD = Object.assign({}, p, { nome: nome, smiles: smiles });
   }
-  // ››› FIM: avaliarQuimiometriaCompleta() — atualiza badges + guarda dossiê.
-  // ››› FEEDBACK: sufixo '·e' indica valores estimados (fallback heurístico).
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: ChemInfo — descritores + CADD.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L3.3 — ATOM (Inspeção Atômica) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Ao clicar em um átomo no 3D, mostra HUD com dados do elemento.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Seleciona e inspeciona átomo clicado no 3D.
-   */
   function selecionarEInspecionarAtomo(atom) {
     if (!STATE.studioViewer || !atom) return;
     STATE.atomoAtivoInspecionado = atom;
@@ -1493,13 +1271,7 @@ console.log(
     const l = document.getElementById('studioLastMeasurement');
     if (l) l.textContent = ed.nome + ' (' + ed.sym + ') • ' + nLig + ' ligações';
   }
-  // ››› FIM: selecionarEInspecionarAtomo(atom) — HUD atômico com propriedades.
-  // ››› FEEDBACK: adiciona esfera destacada ciano sobre o átomo clicado.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fecha o HUD do inspetor atômico e remove o destaque visual.
-   */
   window.fecharInspectorAtomo = function () {
     const hud = document.getElementById('atomInspectorHud');
     if (hud) hud.style.display = 'none';
@@ -1511,29 +1283,16 @@ console.log(
       } catch (e) {}
     }
   };
-  // ››› FIM: fecharInspectorAtomo() — limpa HUD + esfera de destaque.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Abre a tabela periódica contextualizada ao átomo inspecionado.
-   */
   window.substituirAtomoClicadoViaTabela = function () {
     if (!STATE.atomoAtivoInspecionado) return;
     window.abrirTabelaPeriodica(STATE.atomoAtivoInspecionado);
   };
-  // ››› FIM: substituirAtomoClicadoViaTabela() — atalho para abrir tabela no átomo atual.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Atom — inspeção + HUD.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L3.4 — SDF (Parse, Reconstrução, Geometria) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Utilitários de manipulação de arquivos SDF (formato V2000).
+  // ▓▓▓ L3.4 — SDF ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Parse de SDF simples (V2000) — extrai átomos, ligações e linhas originais.
-   */
   function parseSDF_Simples(sdfText) {
     if (!sdfText || typeof sdfText !== 'string') return null;
     const linhas = sdfText.split('\n');
@@ -1569,13 +1328,7 @@ console.log(
 
     return { atoms: atoms, bonds: bonds, numAtoms: numAtoms, numBonds: numBonds, linhas: linhas };
   }
-  // ››› FIM: parseSDF_Simples() — extrai estrutura de bloco SDF V2000.
-  // ››› FEEDBACK: assume formato padrão V2000 com coordenadas em colunas 0-30.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Reconstrói string SDF a partir de átomos/ligações modificados.
-   */
   function reconstruirSDF(parsed, atoms, bonds, marcarInstavel) {
     const L = [];
     L.push(parsed.linhas[0] || 'LAIFT-MODIFIED');
@@ -1613,14 +1366,7 @@ console.log(
     L.push('$$$$');
     return L.join('\n');
   }
-  // ››› FIM: reconstruirSDF() — serializa estrutura modificada para SDF V2000.
-  // ››› FEEDBACK: se marcarInstavel=true, adiciona tag <INSTABILITY> no bloco de dados.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Calcula posição 3D para novo átomo ligado a um pai existente.
-   * Usa direção oposta à média dos vizinhos (1.5 Å).
-   */
   function calcularPosicaoNovoAtomo(parent, vizinhos) {
     const BL = 1.5;
     if (!vizinhos || vizinhos.length === 0) {
@@ -1641,21 +1387,11 @@ console.log(
       z: parent.z + (-sz / mag) * BL
     };
   }
-  // ››› FIM: calcularPosicaoNovoAtomo() — geometria simples para adição.
-  // ››› FEEDBACK: heurística oposta aos vizinhos; para maior rigor, usar force field.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: SDF — parse, reconstrução, geometria.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L3.5 — PTABLE UI (Tabela Periódica) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Renderização da grade 18×9, filtros por família, dossiê lateral e ações
-  // de substituição/adição atômica.
+  // ▓▓▓ L3.5 — PTABLE UI ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Abre o modal da tabela periódica, opcionalmente contextualizado a um átomo.
-   */
   window.abrirTabelaPeriodica = function (atomoContexto) {
     if (atomoContexto) STATE.atomoAtivoInspecionado = atomoContexto;
     const modal = document.getElementById('periodicTableModal');
@@ -1688,36 +1424,19 @@ console.log(
 
     modal.style.display = 'flex';
   };
-  // ››› FIM: abrirTabelaPeriodica() — exibe modal com contexto opcional.
-  // ››› FEEDBACK: se átomo passado, pré-seleciona o elemento correspondente.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fecha o modal da tabela periódica.
-   */
   window.fecharTabelaPeriodica = function () {
     const m = document.getElementById('periodicTableModal');
     if (m) m.style.display = 'none';
   };
-  // ››› FIM: fecharTabelaPeriodica() — apenas oculta o modal.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Filtro por família química (nao-metal, halogenio, etc.).
-   */
   window.filtrarElementosPTable = function (cat) {
     document.querySelectorAll('.ptable-pill').forEach(function (b) {
       b.classList.toggle('active', b.dataset.cat === cat);
     });
     renderizarMatrizTabelaPeriodica(cat);
   };
-  // ››› FIM: filtrarElementosPTable(cat) — destaca pill + re-renderiza matriz.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Renderiza a matriz 18×9 da tabela periódica com todos os 118 elementos.
-   * Elementos incompatíveis com o átomo ativo são esmaecidos.
-   */
   function renderizarMatrizTabelaPeriodica(filtroCat) {
     const matrix = document.getElementById('ptableMatrix');
     if (!matrix) return;
@@ -1727,7 +1446,6 @@ console.log(
       ? STATE.atomoAtivoInspecionado.bonds.length
       : null;
 
-    // Placeholders para lantanídeos/actinídeos
     const mkP = function (txt, r, c) {
       const el = document.createElement('div');
       el.className = 'ptable-tile ptable-placeholder';
@@ -1769,13 +1487,7 @@ console.log(
       matrix.appendChild(tile);
     });
   }
-  // ››› FIM: renderizarMatrizTabelaPeriodica() — desenha 118 tiles na grade.
-  // ››› FEEDBACK: adiciona classes compatible/incompatible conforme valência disponível.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Seleciona um elemento e atualiza a sidebar com dossiê + ações.
-   */
   function selecionarElementoNaTabela(elem, tileEl) {
     STATE.elementoPTableSelecionado = elem;
     document.querySelectorAll('.ptable-tile').forEach(function (t) { t.classList.remove('selected'); });
@@ -1839,13 +1551,7 @@ console.log(
           '</div>' + htmlDiagAdd
         : '');
   }
-  // ››› FIM: selecionarElementoNaTabela() — atualiza sidebar com dossiê do elemento.
-  // ››› FEEDBACK: mostra validação de valência + botões de ação se átomo ativo.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Renderiza diagnóstico de adição (valência livre, H removível, radical).
-   */
   function renderizarDiagnosticoAdicao(elemAlvo) {
     if (!STATE.atomoAtivoInspecionado || !STATE.sdfCacheLocal) return '';
     const parsed = parseSDF_Simples(STATE.sdfCacheLocal);
@@ -1882,372 +1588,325 @@ console.log(
     h += '</div>';
     return h;
   }
-  // ››› FIM: renderizarDiagnosticoAdicao() — informa viabilidade da adição.
-  // ››› FEEDBACK: três estados — ok / remover H / gerar radical.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: PTABLE UI — matriz + dossiê + ações.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L3.6 — EDIT (Substituição e Adição) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Modifica a estrutura molecular trocando ou adicionando átomos.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Substitui átomo ativo por outro elemento.
-   * Valida via RDKit que a nova estrutura não é inválida.
-   */
   window.executarSubstituicaoElementar = async function (novoSimbolo) {
-  console.log('[EDIT-SUB] ▶ Início substituição:', novoSimbolo);
+    console.log('[EDIT-SUB] ▶ Início substituição:', novoSimbolo);
 
-  // ─── Guarda 1: estado mínimo ────────────────────────────────────────
-  if (!STATE.atomoAtivoInspecionado) {
-    console.warn('[EDIT-SUB] ❌ Nenhum átomo foi clicado antes');
-    mostrarNotificacao('Clique em um átomo no 3D antes de substituir.', 'warning', 4000);
-    return;
-  }
-  if (!STATE.compostoSelecionado) {
-    console.warn('[EDIT-SUB] ❌ Nenhum composto selecionado');
-    mostrarNotificacao('Selecione um composto no painel lateral.', 'warning', 4000);
-    return;
-  }
-  if (!STATE.sdfCacheLocal) {
-    console.warn('[EDIT-SUB] ❌ SDF não carregado');
-    mostrarNotificacao('Estrutura 3D ainda não foi carregada. Aguarde.', 'warning', 4000);
-    return;
-  }
-
-  const elemAntigo = STATE.atomoAtivoInspecionado.elem;
-  const atomIdx = STATE.atomoAtivoInspecionado.index !== undefined
-    ? STATE.atomoAtivoInspecionado.index
-    : (STATE.atomoAtivoInspecionado.serial - 1);
-
-  console.log('[EDIT-SUB] Átomo:', elemAntigo, '#', atomIdx + 1, '(idx:', atomIdx + ')');
-
-  // ─── Localiza linha do átomo no SDF ─────────────────────────────────
-  const linhas = STATE.sdfCacheLocal.split('\n');
-  let linhaIdx = -1, contador = 0;
-  for (let i = 4; i < linhas.length; i++) {
-    const l = linhas[i];
-    if (l.indexOf('M  END') >= 0 || l.indexOf('$$$$') >= 0) break;
-    if (l.length >= 31) {
-      if (contador === atomIdx) { linhaIdx = i; break; }
-      contador++;
+    if (!STATE.atomoAtivoInspecionado) {
+      console.warn('[EDIT-SUB] ❌ Nenhum átomo foi clicado antes');
+      mostrarNotificacao('Clique em um átomo no 3D antes de substituir.', 'warning', 4000);
+      return;
     }
-  }
+    if (!STATE.compostoSelecionado) {
+      console.warn('[EDIT-SUB] ❌ Nenhum composto selecionado');
+      mostrarNotificacao('Selecione um composto no painel lateral.', 'warning', 4000);
+      return;
+    }
+    if (!STATE.sdfCacheLocal) {
+      console.warn('[EDIT-SUB] ❌ SDF não carregado');
+      mostrarNotificacao('Estrutura 3D ainda não foi carregada. Aguarde.', 'warning', 4000);
+      return;
+    }
 
-  if (linhaIdx === -1) {
-    console.error('[EDIT-SUB] ❌ Linha do átomo não encontrada no SDF');
-    mostrarNotificacao('Não foi possível localizar o átomo no arquivo 3D.', 'error', 4000);
-    return;
-  }
+    const elemAntigo = STATE.atomoAtivoInspecionado.elem;
+    const atomIdx = STATE.atomoAtivoInspecionado.index !== undefined
+      ? STATE.atomoAtivoInspecionado.index
+      : (STATE.atomoAtivoInspecionado.serial - 1);
 
-  // ─── Substitui o símbolo do elemento na linha ───────────────────────
-  const orig = linhas[linhaIdx];
-  linhas[linhaIdx] = orig.substring(0, 31) + novoSimbolo.padEnd(3, ' ') + orig.substring(34);
-  const novoSdf = linhas.join('\n');
+    console.log('[EDIT-SUB] Átomo:', elemAntigo, '#', atomIdx + 1, '(idx:', atomIdx + ')');
 
-  console.log('[EDIT-SUB] Linha original:  "' + orig.substring(31, 34) + '"');
-  console.log('[EDIT-SUB] Linha modificada: "' + novoSimbolo + '"');
-
-  // ─── Validação com RDKit (com fallback) ─────────────────────────────
-  let novoSmiles = null;
-  let rdkit = null;
-
-  try {
-    rdkit = await carregarRDKitSobDemanda();
-  } catch (e) {
-    console.warn('[EDIT-SUB] RDKit load falhou:', e.message);
-  }
-
-  if (rdkit) {
-    try {
-      const mol = rdkit.get_mol(novoSdf);
-      if (mol) {
-        novoSmiles = mol.get_smiles();
-        mol.delete();
-        console.log('[EDIT-SUB] ✅ RDKit validou. SMILES:', novoSmiles);
-      } else {
-        console.warn('[EDIT-SUB] ⚠️ RDKit rejeitou a estrutura (mol=null)');
-        mostrarNotificacao(
-          'Substituição ' + elemAntigo + '→' + novoSimbolo + ' cria valência inválida.',
-          'error', 5000
-        );
-        return;
+    const linhas = STATE.sdfCacheLocal.split('\n');
+    let linhaIdx = -1, contador = 0;
+    for (let i = 4; i < linhas.length; i++) {
+      const l = linhas[i];
+      if (l.indexOf('M  END') >= 0 || l.indexOf('$$$$') >= 0) break;
+      if (l.length >= 31) {
+        if (contador === atomIdx) { linhaIdx = i; break; }
+        contador++;
       }
+    }
+
+    if (linhaIdx === -1) {
+      console.error('[EDIT-SUB] ❌ Linha do átomo não encontrada no SDF');
+      mostrarNotificacao('Não foi possível localizar o átomo no arquivo 3D.', 'error', 4000);
+      return;
+    }
+
+    const orig = linhas[linhaIdx];
+    linhas[linhaIdx] = orig.substring(0, 31) + novoSimbolo.padEnd(3, ' ') + orig.substring(34);
+    const novoSdf = linhas.join('\n');
+
+    console.log('[EDIT-SUB] Linha original:  "' + orig.substring(31, 34) + '"');
+    console.log('[EDIT-SUB] Linha modificada: "' + novoSimbolo + '"');
+
+    let novoSmiles = null;
+    let rdkit = null;
+
+    try {
+      rdkit = await carregarRDKitSobDemanda();
     } catch (e) {
-      console.warn('[EDIT-SUB] RDKit exceção:', e.message);
-    }
-  }
-
-  if (!novoSmiles) {
-    // RDKit offline ou não conseguiu gerar SMILES — aceita modificação mesmo assim
-    console.warn('[EDIT-SUB] ⚠️ Sem validação RDKit — aceitando modificação não-validada');
-    novoSmiles = 'EDIT_SUB_' + elemAntigo + '_' + novoSimbolo + '_' + Date.now();
-    mostrarNotificacao('⚠️ Modificação aplicada sem validação (RDKit offline)', 'warning', 4000);
-  }
-
-  // ─── Snapshot para undo ─────────────────────────────────────────────
-  pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Sub ' + elemAntigo + '→' + novoSimbolo);
-
-  // ─── Cria novo composto ─────────────────────────────────────────────
-  const idD = 'sub_' + Date.now();
-  const nomeD = STATE.compostoSelecionado.nome + ' (' + elemAntigo + '→' + novoSimbolo + ')';
-  const novoComp = {
-    id: idD,
-    chaveOriginal: idD,
-    nome: nomeD,
-    formula: 'Mod. Atômica',
-    molarMass: '--',
-    smiles: novoSmiles,
-    categoria: 'custom',
-    pubchemQuery: nomeD,
-    sdfModificado: novoSdf
-  };
-
-  console.log('[EDIT-SUB] Criado composto:', nomeD);
-
-  // ─── Insere no catálogo e seleciona ─────────────────────────────────
-  STATE.compostosIndexados.unshift(novoComp);
-  STATE.compostosFiltrados.unshift(novoComp);
-  renderizarListaCompostos(true);
-  selecionarCompostoStudio(novoComp);
-
-  // ─── Fecha modais ───────────────────────────────────────────────────
-  window.fecharTabelaPeriodica();
-  window.fecharInspectorAtomo();
-
-  console.log('[EDIT-SUB] ✅ Concluído');
-  mostrarNotificacao('✅ ' + nomeD, 'success', 3500);
-};
-// ››› FIM: executarSubstituicaoElementar() — substituição com logging + fallback.
-// ››› FEEDBACK v4.3: nunca falha em silêncio; aceita modificação sem RDKit;
-//     toast em cada caminho de erro; console.log rastreável.
-  /**
-   * Adiciona novo átomo ao composto selecionado, ligado ao átomo ativo.
-   * Regras: se valência livre → adiciona direto; se tem H → remove; se não → avisa.
-   */
-  window.executarAdicaoAtomo = async function (novoSimbolo) {
-  console.log('[EDIT-ADD] ▶ Início adição:', novoSimbolo);
-
-  // ─── Guarda 1: estado mínimo ────────────────────────────────────────
-  if (!STATE.atomoAtivoInspecionado) {
-    console.warn('[EDIT-ADD] ❌ Nenhum átomo foi clicado antes');
-    mostrarNotificacao('Clique em um átomo no 3D antes de adicionar.', 'warning', 4000);
-    return;
-  }
-  if (!STATE.compostoSelecionado) {
-    console.warn('[EDIT-ADD] ❌ Nenhum composto selecionado');
-    mostrarNotificacao('Selecione um composto no painel lateral.', 'warning', 4000);
-    return;
-  }
-  if (!STATE.sdfCacheLocal) {
-    console.warn('[EDIT-ADD] ❌ SDF não carregado');
-    mostrarNotificacao('Estrutura 3D ainda não foi carregada. Aguarde.', 'warning', 4000);
-    return;
-  }
-
-  const parsed = parseSDF_Simples(STATE.sdfCacheLocal);
-  if (!parsed) {
-    console.error('[EDIT-ADD] ❌ SDF inválido');
-    mostrarNotificacao('Não foi possível interpretar o arquivo 3D.', 'error', 4000);
-    return;
-  }
-
-  const parentIdx = STATE.atomoAtivoInspecionado.index !== undefined
-    ? STATE.atomoAtivoInspecionado.index
-    : (STATE.atomoAtivoInspecionado.serial - 1);
-
-  if (parentIdx < 0 || parentIdx >= parsed.atoms.length) {
-    console.error('[EDIT-ADD] ❌ Índice atômico inválido:', parentIdx);
-    mostrarNotificacao('Índice do átomo âncora inválido.', 'error', 4000);
-    return;
-  }
-
-  const parent = parsed.atoms[parentIdx];
-  const eP = TABELA_PERIODICA.find(function (e) { return e.sym === parent.elem; });
-  const valP = eP ? Math.max.apply(null, eP.valencias) : 4;
-  const eN = TABELA_PERIODICA.find(function (e) { return e.sym === novoSimbolo; });
-
-  if (!eN) {
-    console.error('[EDIT-ADD] ❌ Elemento inválido:', novoSimbolo);
-    mostrarNotificacao('Elemento desconhecido.', 'error');
-    return;
-  }
-
-  console.log('[EDIT-ADD] Pai:', parent.elem, '#', parentIdx + 1,
-              '| Valência máx:', valP,
-              '| Novo:', novoSimbolo);
-
-  const bondsP = parsed.bonds.filter(function (b) {
-    return b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1;
-  });
-  const nLig = bondsP.length;
-
-  let acao = 'direto';
-  let hIdxRem = -1;
-  let instavel = false;
-
-  if (nLig >= valP) {
-    for (let i = 0; i < bondsP.length; i++) {
-      const b = bondsP[i];
-      const vIdx = (b.a1 === parentIdx + 1) ? (b.a2 - 1) : (b.a1 - 1);
-      if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRem = vIdx; break; }
+      console.warn('[EDIT-SUB] RDKit load falhou:', e.message);
     }
 
-    if (hIdxRem >= 0) {
-      acao = 'remover_h';
-      console.log('[EDIT-ADD] Pai saturado, H#' + hIdxRem + ' será removido');
-    } else {
-      const msg =
-        '⚠️ ADIÇÃO GERA ESTRUTURA INSTÁVEL\n\n' +
-        'Átomo âncora: ' + parent.elem + '#' + (parentIdx + 1) + '\n' +
-        'Ligações atuais: ' + nLig + ' (valência máx.: ' + valP + ')\n' +
-        'Hidrogênios disponíveis: 0\n\n' +
-        'Adicionar ' + novoSimbolo + ' criará uma valência estendida (radical livre).\n\n' +
-        'Deseja continuar?';
-      if (!confirm(msg)) {
-        console.log('[EDIT-ADD] Usuário cancelou');
-        mostrarNotificacao('Adição cancelada.', 'info');
-        return;
-      }
-      acao = 'forcar_instavel';
-      instavel = true;
-      console.log('[EDIT-ADD] Modo forçado instável');
-    }
-  }
-
-  // ─── Aplica modificação ─────────────────────────────────────────────
-  let atoms = parsed.atoms.map(function (a) { return Object.assign({}, a); });
-  let bonds = parsed.bonds.map(function (b) { return Object.assign({}, b); });
-
-  if (acao === 'remover_h' && hIdxRem >= 0) {
-    atoms.splice(hIdxRem, 1);
-    bonds = bonds
-      .filter(function (b) { return (b.a1 - 1) !== hIdxRem && (b.a2 - 1) !== hIdxRem; })
-      .map(function (b) {
-        return Object.assign({}, b, {
-          a1: (b.a1 - 1) > hIdxRem ? b.a1 - 1 : b.a1,
-          a2: (b.a2 - 1) > hIdxRem ? b.a2 - 1 : b.a2
-        });
-      });
-  }
-
-  const pIdxFinal = (acao === 'remover_h' && hIdxRem >= 0 && parentIdx > hIdxRem)
-    ? parentIdx - 1 : parentIdx;
-  const parentFinal = atoms[pIdxFinal];
-
-  if (!parentFinal) {
-    console.error('[EDIT-ADD] ❌ Átomo pai desapareceu após remoção de H');
-    mostrarNotificacao('Erro interno: âncora perdida.', 'error');
-    return;
-  }
-
-  const bPF = bonds.filter(function (b) {
-    return b.a1 === pIdxFinal + 1 || b.a2 === pIdxFinal + 1;
-  });
-  const viz = bPF.map(function (b) {
-    const vIdx = (b.a1 === pIdxFinal + 1) ? (b.a2 - 1) : (b.a1 - 1);
-    return atoms[vIdx];
-  }).filter(Boolean);
-
-  const posNova = calcularPosicaoNovoAtomo(parentFinal, viz);
-
-  atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo });
-  bonds.push({ a1: pIdxFinal + 1, a2: atoms.length, tipo: 1 });
-
-  const novoSdf = reconstruirSDF(parsed, atoms, bonds, instavel);
-
-  console.log('[EDIT-ADD] SDF reconstruído. Átomos:', atoms.length, '| Ligações:', bonds.length);
-
-  // ─── Validação RDKit (com fallback) ─────────────────────────────────
-  let novoSmiles = null;
-  let rdkit = null;
-
-  try {
-    rdkit = await carregarRDKitSobDemanda();
-  } catch (e) {
-    console.warn('[EDIT-ADD] RDKit load falhou:', e.message);
-  }
-
-  if (rdkit) {
-    try {
-      const m = rdkit.get_mol(novoSdf);
-      if (m) {
-        novoSmiles = m.get_smiles();
-        m.delete();
-        console.log('[EDIT-ADD] ✅ RDKit validou. SMILES:', novoSmiles);
-      } else {
-        console.warn('[EDIT-ADD] ⚠️ RDKit rejeitou estrutura');
-        if (!instavel) {
-          mostrarNotificacao('Estrutura inválida após adição.', 'error', 4000);
+    if (rdkit) {
+      try {
+        const mol = rdkit.get_mol(novoSdf);
+        if (mol) {
+          novoSmiles = mol.get_smiles();
+          mol.delete();
+          console.log('[EDIT-SUB] ✅ RDKit validou. SMILES:', novoSmiles);
+        } else {
+          console.warn('[EDIT-SUB] ⚠️ RDKit rejeitou a estrutura (mol=null)');
+          mostrarNotificacao(
+            'Substituição ' + elemAntigo + '→' + novoSimbolo + ' cria valência inválida.',
+            'error', 5000
+          );
           return;
         }
+      } catch (e) {
+        console.warn('[EDIT-SUB] RDKit exceção:', e.message);
       }
-    } catch (e) {
-      console.warn('[EDIT-ADD] RDKit exceção:', e.message);
     }
-  }
 
-  if (!novoSmiles && !instavel) {
-    console.warn('[EDIT-ADD] ⚠️ Sem SMILES válido — usando placeholder');
-    novoSmiles = 'EDIT_ADD_' + novoSimbolo + '_' + Date.now();
-  }
-  if (!novoSmiles && instavel) {
-    novoSmiles = 'RADICAL_' + novoSimbolo + '_' + Date.now();
-  }
+    if (!novoSmiles) {
+      console.warn('[EDIT-SUB] ⚠️ Sem validação RDKit — aceitando modificação não-validada');
+      novoSmiles = 'EDIT_SUB_' + elemAntigo + '_' + novoSimbolo + '_' + Date.now();
+      mostrarNotificacao('⚠️ Modificação aplicada sem validação (RDKit offline)', 'warning', 4000);
+    }
 
-  // ─── Snapshot ───────────────────────────────────────────────────────
-  pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Add ' + novoSimbolo);
+    pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Sub ' + elemAntigo + '→' + novoSimbolo);
 
-  // ─── Cria novo composto ─────────────────────────────────────────────
-  const idD = 'add_' + Date.now();
-  const suf = instavel ? ' ⚠️ INSTÁVEL' : '';
-  const nomeD = STATE.compostoSelecionado.nome + ' + ' + novoSimbolo + suf;
+    const idD = 'sub_' + Date.now();
+    const nomeD = STATE.compostoSelecionado.nome + ' (' + elemAntigo + '→' + novoSimbolo + ')';
+    const novoComp = {
+      id: idD, chaveOriginal: idD, nome: nomeD,
+      formula: 'Mod. Atômica', molarMass: '--',
+      smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD,
+      sdfModificado: novoSdf
+    };
 
-  const novoComp = {
-    id: idD,
-    chaveOriginal: idD,
-    nome: nomeD,
-    formula: 'Adição Atômica',
-    molarMass: '--',
-    smiles: novoSmiles,
-    categoria: 'custom',
-    pubchemQuery: nomeD,
-    unstable: instavel,
-    sdfModificado: novoSdf
+    console.log('[EDIT-SUB] Criado composto:', nomeD);
+
+    STATE.compostosIndexados.unshift(novoComp);
+    STATE.compostosFiltrados.unshift(novoComp);
+    renderizarListaCompostos(true);
+    selecionarCompostoStudio(novoComp);
+
+    window.fecharTabelaPeriodica();
+    window.fecharInspectorAtomo();
+
+    console.log('[EDIT-SUB] ✅ Concluído');
+    mostrarNotificacao('✅ ' + nomeD, 'success', 3500);
   };
 
-  console.log('[EDIT-ADD] Criado composto:', nomeD);
+  window.executarAdicaoAtomo = async function (novoSimbolo) {
+    console.log('[EDIT-ADD] ▶ Início adição:', novoSimbolo);
 
-  STATE.compostosIndexados.unshift(novoComp);
-  STATE.compostosFiltrados.unshift(novoComp);
-  renderizarListaCompostos(true);
-  selecionarCompostoStudio(novoComp);
+    if (!STATE.atomoAtivoInspecionado) {
+      console.warn('[EDIT-ADD] ❌ Nenhum átomo foi clicado antes');
+      mostrarNotificacao('Clique em um átomo no 3D antes de adicionar.', 'warning', 4000);
+      return;
+    }
+    if (!STATE.compostoSelecionado) {
+      console.warn('[EDIT-ADD] ❌ Nenhum composto selecionado');
+      mostrarNotificacao('Selecione um composto no painel lateral.', 'warning', 4000);
+      return;
+    }
+    if (!STATE.sdfCacheLocal) {
+      console.warn('[EDIT-ADD] ❌ SDF não carregado');
+      mostrarNotificacao('Estrutura 3D ainda não foi carregada. Aguarde.', 'warning', 4000);
+      return;
+    }
 
-  window.fecharTabelaPeriodica();
-  window.fecharInspectorAtomo();
+    const parsed = parseSDF_Simples(STATE.sdfCacheLocal);
+    if (!parsed) {
+      console.error('[EDIT-ADD] ❌ SDF inválido');
+      mostrarNotificacao('Não foi possível interpretar o arquivo 3D.', 'error', 4000);
+      return;
+    }
 
-  if (instavel) {
-    console.log('[EDIT-ADD] ✅ Concluído (instável)');
-    mostrarNotificacao('⚠️ Instável: ' + nomeD, 'warning', 5000);
-  } else {
-    console.log('[EDIT-ADD] ✅ Concluído');
-    mostrarNotificacao('✅ Adicionado: ' + nomeD, 'success');
-  }
-};
-// ››› FIM: executarAdicaoAtomo() — adição com logging + fallback.
-// ››› FEEDBACK v4.3: todas as guardas avisam o usuário; aceita sem RDKit.
+    const parentIdx = STATE.atomoAtivoInspecionado.index !== undefined
+      ? STATE.atomoAtivoInspecionado.index
+      : (STATE.atomoAtivoInspecionado.serial - 1);
+
+    if (parentIdx < 0 || parentIdx >= parsed.atoms.length) {
+      console.error('[EDIT-ADD] ❌ Índice atômico inválido:', parentIdx);
+      mostrarNotificacao('Índice do átomo âncora inválido.', 'error', 4000);
+      return;
+    }
+
+    const parent = parsed.atoms[parentIdx];
+    const eP = TABELA_PERIODICA.find(function (e) { return e.sym === parent.elem; });
+    const valP = eP ? Math.max.apply(null, eP.valencias) : 4;
+    const eN = TABELA_PERIODICA.find(function (e) { return e.sym === novoSimbolo; });
+
+    if (!eN) {
+      console.error('[EDIT-ADD] ❌ Elemento inválido:', novoSimbolo);
+      mostrarNotificacao('Elemento desconhecido.', 'error');
+      return;
+    }
+
+    console.log('[EDIT-ADD] Pai:', parent.elem, '#', parentIdx + 1,
+                '| Valência máx:', valP,
+                '| Novo:', novoSimbolo);
+
+    const bondsP = parsed.bonds.filter(function (b) {
+      return b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1;
+    });
+    const nLig = bondsP.length;
+
+    let acao = 'direto';
+    let hIdxRem = -1;
+    let instavel = false;
+
+    if (nLig >= valP) {
+      for (let i = 0; i < bondsP.length; i++) {
+        const b = bondsP[i];
+        const vIdx = (b.a1 === parentIdx + 1) ? (b.a2 - 1) : (b.a1 - 1);
+        if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRem = vIdx; break; }
+      }
+
+      if (hIdxRem >= 0) {
+        acao = 'remover_h';
+        console.log('[EDIT-ADD] Pai saturado, H#' + hIdxRem + ' será removido');
+      } else {
+        const msg =
+          '⚠️ ADIÇÃO GERA ESTRUTURA INSTÁVEL\n\n' +
+          'Átomo âncora: ' + parent.elem + '#' + (parentIdx + 1) + '\n' +
+          'Ligações atuais: ' + nLig + ' (valência máx.: ' + valP + ')\n' +
+          'Hidrogênios disponíveis: 0\n\n' +
+          'Adicionar ' + novoSimbolo + ' criará uma valência estendida (radical livre).\n\n' +
+          'Deseja continuar?';
+        if (!confirm(msg)) {
+          console.log('[EDIT-ADD] Usuário cancelou');
+          mostrarNotificacao('Adição cancelada.', 'info');
+          return;
+        }
+        acao = 'forcar_instavel';
+        instavel = true;
+        console.log('[EDIT-ADD] Modo forçado instável');
+      }
+    }
+
+    let atoms = parsed.atoms.map(function (a) { return Object.assign({}, a); });
+    let bonds = parsed.bonds.map(function (b) { return Object.assign({}, b); });
+
+    if (acao === 'remover_h' && hIdxRem >= 0) {
+      atoms.splice(hIdxRem, 1);
+      bonds = bonds
+        .filter(function (b) { return (b.a1 - 1) !== hIdxRem && (b.a2 - 1) !== hIdxRem; })
+        .map(function (b) {
+          return Object.assign({}, b, {
+            a1: (b.a1 - 1) > hIdxRem ? b.a1 - 1 : b.a1,
+            a2: (b.a2 - 1) > hIdxRem ? b.a2 - 1 : b.a2
+          });
+        });
+    }
+
+    const pIdxFinal = (acao === 'remover_h' && hIdxRem >= 0 && parentIdx > hIdxRem)
+      ? parentIdx - 1 : parentIdx;
+    const parentFinal = atoms[pIdxFinal];
+
+    if (!parentFinal) {
+      console.error('[EDIT-ADD] ❌ Átomo pai desapareceu após remoção de H');
+      mostrarNotificacao('Erro interno: âncora perdida.', 'error');
+      return;
+    }
+
+    const bPF = bonds.filter(function (b) {
+      return b.a1 === pIdxFinal + 1 || b.a2 === pIdxFinal + 1;
+    });
+    const viz = bPF.map(function (b) {
+      const vIdx = (b.a1 === pIdxFinal + 1) ? (b.a2 - 1) : (b.a1 - 1);
+      return atoms[vIdx];
+    }).filter(Boolean);
+
+    const posNova = calcularPosicaoNovoAtomo(parentFinal, viz);
+
+    atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo });
+    bonds.push({ a1: pIdxFinal + 1, a2: atoms.length, tipo: 1 });
+
+    const novoSdf = reconstruirSDF(parsed, atoms, bonds, instavel);
+
+    console.log('[EDIT-ADD] SDF reconstruído. Átomos:', atoms.length, '| Ligações:', bonds.length);
+
+    let novoSmiles = null;
+    let rdkit = null;
+
+    try {
+      rdkit = await carregarRDKitSobDemanda();
+    } catch (e) {
+      console.warn('[EDIT-ADD] RDKit load falhou:', e.message);
+    }
+
+    if (rdkit) {
+      try {
+        const m = rdkit.get_mol(novoSdf);
+        if (m) {
+          novoSmiles = m.get_smiles();
+          m.delete();
+          console.log('[EDIT-ADD] ✅ RDKit validou. SMILES:', novoSmiles);
+        } else {
+          console.warn('[EDIT-ADD] ⚠️ RDKit rejeitou estrutura');
+          if (!instavel) {
+            mostrarNotificacao('Estrutura inválida após adição.', 'error', 4000);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('[EDIT-ADD] RDKit exceção:', e.message);
+      }
+    }
+
+    if (!novoSmiles && !instavel) {
+      console.warn('[EDIT-ADD] ⚠️ Sem SMILES válido — usando placeholder');
+      novoSmiles = 'EDIT_ADD_' + novoSimbolo + '_' + Date.now();
+    }
+    if (!novoSmiles && instavel) {
+      novoSmiles = 'RADICAL_' + novoSimbolo + '_' + Date.now();
+    }
+
+    pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Add ' + novoSimbolo);
+
+    const idD = 'add_' + Date.now();
+    const suf = instavel ? ' ⚠️ INSTÁVEL' : '';
+    const nomeD = STATE.compostoSelecionado.nome + ' + ' + novoSimbolo + suf;
+
+    const novoComp = {
+      id: idD, chaveOriginal: idD, nome: nomeD,
+      formula: 'Adição Atômica', molarMass: '--',
+      smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD,
+      unstable: instavel,
+      sdfModificado: novoSdf
+    };
+
+    console.log('[EDIT-ADD] Criado composto:', nomeD);
+
+    STATE.compostosIndexados.unshift(novoComp);
+    STATE.compostosFiltrados.unshift(novoComp);
+    renderizarListaCompostos(true);
+    selecionarCompostoStudio(novoComp);
+
+    window.fecharTabelaPeriodica();
+    window.fecharInspectorAtomo();
+
+    if (instavel) {
+      console.log('[EDIT-ADD] ✅ Concluído (instável)');
+      mostrarNotificacao('⚠️ Instável: ' + nomeD, 'warning', 5000);
+    } else {
+      console.log('[EDIT-ADD] ✅ Concluído');
+      mostrarNotificacao('✅ Adicionado: ' + nomeD, 'success');
+    }
+  };
+  // ››› FIM: EDIT — substituição + adição com logging completo.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L3.7 — BIO-UI (Bioisosterismo) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Painel de transformações bioisostéricas + preview do delta de propriedades.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Abre painel de bioisosterismo para o composto ativo.
-   */
   window.abrirPainelBioisosterismo = function () {
     const modal = document.getElementById('bioisostereModal');
     const body = document.getElementById('bioisostereModalBody');
@@ -2295,23 +1954,12 @@ console.log(
 
     modal.style.display = 'flex';
   };
-  // ››› FIM: abrirPainelBioisosterismo() — detecta grupos elegíveis e lista opções.
-  // ››› FEEDBACK: só mostra transformações cujo .detectar() retornou true.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fecha o painel de bioisosterismo.
-   */
   window.fecharPainelBioisosterismo = function () {
     const m = document.getElementById('bioisostereModal');
     if (m) m.style.display = 'none';
   };
-  // ››› FIM: fecharPainelBioisosterismo() — apenas oculta o modal.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Aplica transformação bioisostérica e mostra delta de propriedades.
-   */
   window.executarTransformacaoBioisosterica = async function (idReacao) {
     if (!STATE.compostoSelecionado) return;
     const rx = REACOES_BIOISOSTERISMO.find(function (r) { return r.id === idReacao; });
@@ -2365,13 +2013,7 @@ console.log(
         '</div>';
     }
   };
-  // ››› FIM: executarTransformacaoBioisosterica() — aplica reação + delta comparativo.
-  // ››› FEEDBACK: guarda novo SMILES no botão "Injetar" para adicionar ao catálogo.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Adiciona análogo bioisostérico ao catálogo.
-   */
   window.adicionarDerivadoAoCatalogo = function (nomeT, nS, nMW) {
     if (!STATE.compostoSelecionado) return;
     const idU = 'deriv_' + Date.now();
@@ -2388,19 +2030,11 @@ console.log(
     window.fecharPainelBioisosterismo();
     mostrarNotificacao('Análogo adicionado.', 'success');
   };
-  // ››› FIM: adicionarDerivadoAoCatalogo() — injeta análogo no catálogo principal.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: BIO-UI — painel + transformações + injeção.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L3.8 — ANALYSIS-UI (Similaridade, Scaffold, Comparação, CADD, CSV) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Ferramentas analíticas sobre o composto ativo.
+  // ▓▓▓ L3.8 — ANALYSIS-UI ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Busca por similaridade estrutural (Tanimoto Morgan FP) contra o catálogo.
-   */
   window.abrirSimilaridade = async function () {
     const modal = document.getElementById('similarityModal');
     const body = document.getElementById('similarityModalBody');
@@ -2486,23 +2120,12 @@ console.log(
         }).join('') +
       '</div>';
   };
-  // ››› FIM: abrirSimilaridade() — top 20 análogos por Tanimoto.
-  // ››› FEEDBACK: clicar em um resultado seleciona o composto automaticamente.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fecha o modal de similaridade.
-   */
   window.fecharSimilaridade = function () {
     const m = document.getElementById('similarityModal');
     if (m) m.style.display = 'none';
   };
-  // ››› FIM: fecharSimilaridade() — apenas oculta o modal.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Calcula coeficiente de Tanimoto entre dois fingerprints Morgan.
-   */
   function tanimotoBits(a, b) {
     if (!a || !b) return 0;
     let inter = 0, uni = 0;
@@ -2514,25 +2137,13 @@ console.log(
     }
     return uni === 0 ? 0 : inter / uni;
   }
-  // ››› FIM: tanimotoBits() — similaridade [0,1] entre fingerprints.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Conta bits 1 em um inteiro (Brian Kernighan).
-   */
   function popcount(x) {
     let c = 0;
     while (x) { x &= x - 1; c++; }
     return c;
   }
-  // ››› FIM: popcount() — conta bits 1 (helper do Tanimoto).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Extrai scaffold de Murcko do composto ativo.
-   * Estratégia: tenta get_murcko_scaffold() e, se indisponível, aplica
-   * remoção manual de grupos terminais via regex.
-   */
   window.extrairScaffoldAtual = async function () {
     if (!STATE.compostoSelecionado || !STATE.compostoSelecionado.smiles || STATE.compostoSelecionado.smiles === '--') {
       mostrarNotificacao('Selecione uma molécula.', 'error');
@@ -2591,13 +2202,7 @@ console.log(
       mostrarNotificacao('Erro: ' + e.message, 'error');
     }
   };
-  // ››› FIM: extrairScaffoldAtual() — extrai esqueleto de Murcko.
-  // ››› FEEDBACK: 2 métodos em cascata (get_murcko_scaffold → regex manual).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Abre o modal de comparação lado a lado.
-   */
   window.abrirComparacao = function () {
     const modal = document.getElementById('comparisonModal');
     const selA = document.getElementById('cmpSelectA');
@@ -2625,25 +2230,34 @@ console.log(
     document.getElementById('comparisonMetrics').innerHTML =
       '<div style="text-align:center; padding: 20px; color: #64748b; font-size: 0.78rem;">Clique em Comparar.</div>';
   };
-  // ››› FIM: abrirComparacao() — preenche selects com até 500 compostos.
-  // ››› FEEDBACK: pré-seleciona composto ativo em A e sugere outro em B.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fecha o modal de comparação e limpa os viewers.
-   */
   window.fecharComparacao = function () {
     const m = document.getElementById('comparisonModal');
     if (m) m.style.display = 'none';
-    if (STATE.cmpViewerA) { try { STATE.cmpViewerA.clear(); } catch (e) {} STATE.cmpViewerA = null; }
-    if (STATE.cmpViewerB) { try { STATE.cmpViewerB.clear(); } catch (e) {} STATE.cmpViewerB = null; }
-  };
-  // ››› FIM: fecharComparacao() — oculta modal + destrói viewers 3D.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Executa a comparação entre dois compostos selecionados.
-   */
+    if (STATE.cmpViewerA) {
+      try {
+        STATE.cmpViewerA.stopAnimate();
+        STATE.cmpViewerA.clear();
+        WebGLManager.destruir('cmpA');
+      } catch (e) {}
+      STATE.cmpViewerA = null;
+    }
+    if (STATE.cmpViewerB) {
+      try {
+        STATE.cmpViewerB.stopAnimate();
+        STATE.cmpViewerB.clear();
+        WebGLManager.destruir('cmpB');
+      } catch (e) {}
+      STATE.cmpViewerB = null;
+    }
+
+    const va = document.getElementById('cmpViewerA');
+    const vb = document.getElementById('cmpViewerB');
+    if (va) va.innerHTML = '';
+    if (vb) vb.innerHTML = '';
+  };
+
   window.executarComparacao = async function () {
     const idA = document.getElementById('cmpSelectA') ? document.getElementById('cmpSelectA').value : '';
     const idB = document.getElementById('cmpSelectB') ? document.getElementById('cmpSelectB').value : '';
@@ -2667,6 +2281,7 @@ console.log(
 
     if (sdfA && window.$3Dmol) {
       STATE.cmpViewerA = $3Dmol.createViewer('cmpViewerA', { backgroundColor: '#020617' });
+      WebGLManager.registrar(STATE.cmpViewerA, 'cmpA');
       STATE.cmpViewerA.addModel(sdfA, 'sdf');
       STATE.cmpViewerA.setStyle({}, { stick: { radius: 0.12 }, sphere: { scale: 0.22 } });
       STATE.cmpViewerA.zoomTo();
@@ -2674,6 +2289,7 @@ console.log(
     }
     if (sdfB && window.$3Dmol) {
       STATE.cmpViewerB = $3Dmol.createViewer('cmpViewerB', { backgroundColor: '#020617' });
+      WebGLManager.registrar(STATE.cmpViewerB, 'cmpB');
       STATE.cmpViewerB.addModel(sdfB, 'sdf');
       STATE.cmpViewerB.setStyle({}, { stick: { radius: 0.12 }, sphere: { scale: 0.22 } });
       STATE.cmpViewerB.zoomTo();
@@ -2706,12 +2322,7 @@ console.log(
         '</table>';
     }
   };
-  // ››› FIM: executarComparacao() — renderiza 2 viewers + tabela de deltas.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Exporta catálogo filtrado como CSV (UTF-8 com BOM).
-   */
   window.exportarCSVFiltrados = function () {
     if (STATE.compostosFiltrados.length === 0) {
       mostrarNotificacao('Sem compostos.', 'error');
@@ -2737,13 +2348,7 @@ console.log(
     URL.revokeObjectURL(url);
     mostrarNotificacao(STATE.compostosFiltrados.length + ' exportados.', 'success');
   };
-  // ››› FIM: exportarCSVFiltrados() — download de CSV do catálogo visível.
-  // ››› FEEDBACK: BOM \ufeff garante acentuação correta no Excel.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Abre o modal do dossiê CADD (Lipinski, Veber, Ghose, PAINS).
-   */
   window.abrirModalCADD = function () {
     const modal = document.getElementById('caddModal');
     const body = document.getElementById('caddModalBody');
@@ -2814,66 +2419,40 @@ console.log(
 
     modal.style.display = 'flex';
   };
-  // ››› FIM: abrirModalCADD() — dossiê completo das 4 regras de drug-likeness.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Fecha o modal CADD.
-   */
   window.fecharModalCADD = function () {
     const m = document.getElementById('caddModal');
     if (m) m.style.display = 'none';
   };
-  // ››› FIM: fecharModalCADD() — apenas oculta o modal.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: ANALYSIS-UI — Tanimoto + Scaffold + Comparação + CADD + CSV.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L3.9 — RENDER (3D + 2D + Controles + Exportação) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Pipeline de renderização molecular e exportação.
+  // ▓▓▓ L3.9 — RENDER ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Valida se uma string contém SDF real (não página HTML de erro).
-   */
   function validarConteudoSDF(sdf) {
-  if (!sdf || typeof sdf !== 'string') return false;
-  if (sdf.indexOf('<!DOCTYPE') >= 0 || sdf.indexOf('<html') >= 0) return false;
-  if (sdf.indexOf('<') === 0) return false;            // ← novo: HTML puro
-  if (sdf.length < 50) return false;
-  if (sdf.indexOf('$$$$') < 0 && sdf.indexOf('M  END') < 0) return false;
+    if (!sdf || typeof sdf !== 'string') return false;
+    if (sdf.indexOf('<!DOCTYPE') >= 0 || sdf.indexOf('<html') >= 0) return false;
+    if (sdf.indexOf('<') === 0) return false;
+    if (sdf.length < 50) return false;
+    if (sdf.indexOf('$$$$') < 0 && sdf.indexOf('M  END') < 0) return false;
 
-  // Verifica se a linha de contagem (linha 4, índice 3) tem átomos > 0
-  var linhas = sdf.split('\n');
-  if (linhas.length < 4) return false;
-  var countsLine = linhas[3] || '';
-  var numAtoms = parseInt(countsLine.substring(0, 3).trim(), 10);
-  if (isNaN(numAtoms) || numAtoms <= 0) return false;
+    var linhas = sdf.split('\n');
+    if (linhas.length < 4) return false;
+    var countsLine = linhas[3] || '';
+    var numAtoms = parseInt(countsLine.substring(0, 3).trim(), 10);
+    if (isNaN(numAtoms) || numAtoms <= 0) return false;
 
-  return true;
-}
-// ››› FIM: validarConteudoSDF() — v4.3 exige numAtoms > 0.
-// ››› FEEDBACK: evita que o 3Dmol receba SDF com 0 átomos (causa do TypeError).
-  /**
-   * Gera SDF mínimo para átomo monoatômico (ex.: [Na], [K]).
-   */
+    return true;
+  }
+
   function gerarSDFMonoatomico(simbolo) {
     const s = simbolo.replace(/\[|\]|\+|\-/g, '').trim();
     return '\n  LAIFT-MONOATOMIC\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n' +
       '    0.0000    0.0000    0.0000 ' + s.padEnd(3, ' ') + ' 0  0  0  0  0  0  0  0  0  0  0  0\n' +
       'M  END\n$$$$\n';
   }
-  // ››› FIM: gerarSDFMonoatomico() — cria SDF de 1 átomo na origem.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Pipeline de resolução 3D com 8 níveis de fallback (v4.1).
-   * Ordem corrigida: SDF custom → monoatômico → IndexedDB → OCL → RDKit →
-   * PubChem SMILES → CACTUS → PubChem Nome (só se nome em inglês).
-   */
   async function resolverCoordenadas3D(smiles, termoBusca) {
-    // Nível 1: SDF customizado (editado pelo usuário)
     if (STATE.compostoSelecionado && STATE.compostoSelecionado.sdfModificado &&
         validarConteudoSDF(STATE.compostoSelecionado.sdfModificado)) {
       return STATE.compostoSelecionado.sdfModificado;
@@ -2881,15 +2460,12 @@ console.log(
 
     if (!smiles && !termoBusca) return null;
 
-    // Nível 2: Monoatômico
     if (smiles && smiles.charAt(0) === '[' && smiles.charAt(smiles.length - 1) === ']' && smiles.length <= 6) {
       return gerarSDFMonoatomico(smiles);
     }
 
-    // Radical livre sem estrutura: retorna null
     if (smiles && smiles.indexOf('RADICAL_') === 0) return null;
 
-    // Nível 3: Cache IndexedDB
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.obterCompostoLocal === 'function') {
       try {
         const cache = await LabStorageEngine.obterCompostoLocal(smiles || termoBusca);
@@ -2899,7 +2475,6 @@ console.log(
 
     const sL = extrairSmilesPrincipal(smiles);
 
-    // Nível 4: OpenChemLib (geração local JS pura)
     if (sL) {
       try {
         exibirStatusRDKit(true, 'Gerando 3D local (OCL)...');
@@ -2914,7 +2489,6 @@ console.log(
       }
     }
 
-    // Nível 5: RDKit ETKDG (pode não estar disponível na versão minimal)
     if (sL && sL.charAt(0) !== '[') {
       const rdkit = await carregarRDKitSobDemanda();
       if (rdkit) {
@@ -2939,7 +2513,6 @@ console.log(
       exibirStatusRDKit(false);
     }
 
-    // Nível 6: PubChem SMILES
     if (sL && sL.charAt(0) !== '[') {
       try {
         exibirStatusRDKit(true, 'PubChem 3D (SMILES)...');
@@ -2957,7 +2530,6 @@ console.log(
       } catch (e) {}
     }
 
-    // Nível 7: CACTUS NIH (por SMILES — mais confiável que PubChem por nome)
     if (sL && sL !== '--') {
       try {
         exibirStatusRDKit(true, 'CACTUS NIH...');
@@ -2975,8 +2547,6 @@ console.log(
       } catch (e) {}
     }
 
-    // Nível 8: PubChem por NOME (só se o nome estiver em inglês)
-    // Evita 404 em nomes PT-BR como "Acetato de Etila", "Ácido Salicílico"
     const nomeEhIngles = termoBusca &&
       termoBusca !== '--' &&
       termoBusca.indexOf('Scaffold') !== 0 &&
@@ -3004,24 +2574,15 @@ console.log(
     exibirStatusRDKit(false);
     return null;
   }
-  // ››› FIM: resolverCoordenadas3D() — pipeline com 8 níveis de fallback.
-  // ››› FEEDBACK v4.1: CACTUS movido para antes do PubChem nome; PubChem nome
-  //     agora só roda se o nome não tem acentos nem sufixos PT-BR.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Persiste SDF no cache IndexedDB (via LabStorageEngine).
-   */
   function salvarEmCache(smiles, nome, sdf) {
     if (typeof LabStorageEngine !== 'undefined' && typeof LabStorageEngine.salvarCompostoLocal === 'function') {
       try { LabStorageEngine.salvarCompostoLocal(smiles || nome, { sdf: sdf, nome: nome }); } catch (e) {}
     }
   }
-  // ››› FIM: salvarEmCache() — write-through no IndexedDB.
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Carrega estrutura completa (2D + 3D + CADD) do composto.
+   * ✅ v4.5 OTIMIZADO: CADD com debounce de 300ms
    */
   async function carregarEstruturaNoStudio(comp) {
     if (!comp) return;
@@ -3040,7 +2601,12 @@ console.log(
 
     atualizarBotaoFavorito();
     desenharEstrutura2DStudio(comp.smiles, comp.nome);
-    avaliarQuimiometriaCompleta(comp.smiles, parseFloat(comp.molarMass), comp.nome);
+
+    // ✅ v4.5 — CADD com debounce (evita chamadas RDKit em troca rápida)
+    clearTimeout(_caddTimer);
+    _caddTimer = setTimeout(function () {
+      avaliarQuimiometriaCompleta(comp.smiles, parseFloat(comp.molarMass), comp.nome);
+    }, 300);
 
     const sdf = await resolverCoordenadas3D(comp.smiles, comp.pubchemQuery || comp.nome);
     STATE.sdfCacheLocal = sdf;
@@ -3063,13 +2629,7 @@ console.log(
       removerBannerInstabilidade();
     }
   }
-  // ››› FIM: carregarEstruturaNoStudio() — orquestra 2D + 3D + CADD.
-  // ››› FEEDBACK: prioriza SDF customizado se composto tem sdfModificado.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Exibe banner de aviso para estruturas instáveis (radicais).
-   */
   function exibirBannerInstabilidade() {
     removerBannerInstabilidade();
     const stage = document.getElementById('studioCanvasWrapper');
@@ -3085,48 +2645,103 @@ console.log(
       '</div>';
     stage.appendChild(banner);
   }
-  // ››› FIM: exibirBannerInstabilidade() — banner com botão desfazer.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Remove o banner de instabilidade.
-   */
   function removerBannerInstabilidade() {
     const b = document.getElementById('unstableBanner');
     if (b) b.remove();
   }
-  // ››› FIM: removerBannerInstabilidade() — remove elemento do DOM.
-  // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Constrói cena 3D no viewer 3Dmol.js.
-   * Reutiliza o viewer existente se possível; recria se container zerou.
+   * ✅ v4.5 — construirCena3D com skip de SDF idêntico (guard após check de dimensão)
    */
-  function construirCena3D(sdfText) {
-  const container = document.getElementById('studioViewer3D');
-  if (!container || !window.$3Dmol) return;
+  function construirCena3D(sdfText, forceRedraw) {
+    const container = document.getElementById('studioViewer3D');
+    if (!container || !window.$3Dmol) return;
 
-  // Validação reforçada — aborta ANTES de tocar no 3Dmol
-  if (!validarConteudoSDF(sdfText)) {
-    console.warn('[3D] SDF inválido rejeitado por validarConteudoSDF');
-    STATE.modeloCarregadoAtivo = false;
-    return;
-  }
+    if (!validarConteudoSDF(sdfText)) {
+      console.warn('[3D] SDF inválido rejeitado');
+      STATE.modeloCarregadoAtivo = false;
+      STATE._lastSDF = null;
+      return;
+    }
 
-  const rect = container.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) {
-    setTimeout(function () { construirCena3D(sdfText); }, 250);
-    return;
-  }
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      setTimeout(function () { construirCena3D(sdfText, forceRedraw); }, 250);
+      return;
+    }
 
-  // ─── Caminho 1: reutilizar viewer existente ─────────────────────────
-  if (STATE.studioViewer && container.querySelector('canvas')) {
+    var viewerSaudavel = STATE.studioViewer &&
+                         STATE.modeloCarregadoAtivo &&
+                         container.querySelector('canvas');
+
+    if (!forceRedraw &&
+        STATE._lastSDF === sdfText &&
+        viewerSaudavel) {
+      return;
+    }
+
+    if (STATE.studioViewer && container.querySelector('canvas')) {
+      try {
+        STATE.studioViewer.removeAllModels();
+        STATE.studioViewer.removeAllSurfaces();
+        STATE.studioViewer.addModel(sdfText, 'sdf');
+
+        STATE.modeloCarregadoAtivo = true;
+        STATE._lastSDF = sdfText;
+
+        aplicarEstiloVisual(STATE.modeloAtual);
+
+        STATE.studioViewer.setClickable({}, true, function (atom) {
+          if (STATE.modoMedicaoAtivo) processarCliqueMedicao(atom);
+          else selecionarEInspecionarAtomo(atom);
+        });
+
+        STATE.studioViewer.zoomTo();
+        STATE.studioViewer.render();
+
+        if (STATE.autoRotacaoAtiva) {
+          try { STATE.studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
+        }
+        return;
+      } catch (reuseErr) {
+        console.warn('[3D] Reuso falhou, recriando:', reuseErr.message);
+        STATE._lastSDF = null;
+      }
+    }
+
     try {
-      STATE.studioViewer.removeAllModels();
-      STATE.studioViewer.removeAllSurfaces();
-      STATE.studioViewer.addModel(sdfText, 'sdf');
+      if (STATE.studioViewer) {
+        try { STATE.studioViewer.stopAnimate(); } catch (e) {}
+        try { STATE.studioViewer.clear(); } catch (e) {}
+        STATE.studioViewer = null;
+      }
+
+      STATE._lastSDF = null;
+      container.innerHTML = '';
+
+      STATE.studioViewer = $3Dmol.createViewer(container, {
+        backgroundColor: '#020617',
+        antialias: true
+      });
+
+      var model = STATE.studioViewer.addModel(sdfText, 'sdf');
+      if (!model || typeof model.selectedAtoms !== 'function') {
+        STATE.modeloCarregadoAtivo = false;
+        STATE._lastSDF = null;
+        return;
+      }
+
+      var ats = model.selectedAtoms({}) || [];
+      if (ats.length === 0) {
+        STATE.modeloCarregadoAtivo = false;
+        STATE._lastSDF = null;
+        return;
+      }
 
       STATE.modeloCarregadoAtivo = true;
+      STATE._lastSDF = sdfText;
+
       aplicarEstiloVisual(STATE.modeloAtual);
 
       STATE.studioViewer.setClickable({}, true, function (atom) {
@@ -3137,87 +2752,41 @@ console.log(
       STATE.studioViewer.zoomTo();
       STATE.studioViewer.render();
 
+      setTimeout(function () {
+        if (STATE.studioViewer && STATE.modeloCarregadoAtivo) {
+          try {
+            var r2 = container.getBoundingClientRect();
+            if (r2.width > 0 && r2.height > 0) {
+              STATE.studioViewer.resize();
+              STATE.studioViewer.render();
+            }
+          } catch (e) {}
+        }
+      }, 180);
+
       if (STATE.autoRotacaoAtiva) {
         try { STATE.studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
       }
-      return;
-    } catch (reuseErr) {
-      console.warn('[3D] Reuso falhou, recriando:', reuseErr.message);
+    } catch (errCena) {
+      STATE.modeloCarregadoAtivo = false;
+      STATE._lastSDF = null;
+      console.warn('[3D] Erro:', errCena);
     }
   }
 
-  // ─── Caminho 2: criar viewer novo ───────────────────────────────────
-  try {
-    if (STATE.studioViewer) {
-      try { STATE.studioViewer.stopAnimate(); } catch (e) {}
-      try { STATE.studioViewer.clear(); } catch (e) {}
-      STATE.studioViewer = null;
-    }
-
-    container.innerHTML = '';
-
-    STATE.studioViewer = $3Dmol.createViewer(container, {
-      backgroundColor: '#020617',
-      antialias: true
-    });
-
-    var model = STATE.studioViewer.addModel(sdfText, 'sdf');
-    if (!model || typeof model.selectedAtoms !== 'function') {
-      STATE.modeloCarregadoAtivo = false;
-      return;
-    }
-
-    var ats = model.selectedAtoms({}) || [];
-    if (ats.length === 0) {
-      STATE.modeloCarregadoAtivo = false;
-      return;
-    }
-
-    STATE.modeloCarregadoAtivo = true;
-    aplicarEstiloVisual(STATE.modeloAtual);
-
-    STATE.studioViewer.setClickable({}, true, function (atom) {
-      if (STATE.modoMedicaoAtivo) processarCliqueMedicao(atom);
-      else selecionarEInspecionarAtomo(atom);
-    });
-
-    STATE.studioViewer.zoomTo();
-    STATE.studioViewer.render();
-
-    setTimeout(function () {
-      if (STATE.studioViewer && STATE.modeloCarregadoAtivo) {
-        try {
-          var r2 = container.getBoundingClientRect();
-          if (r2.width > 0 && r2.height > 0) {
-            STATE.studioViewer.resize();
-            STATE.studioViewer.render();
-          }
-        } catch (e) {}
-      }
-    }, 180);
-
-    if (STATE.autoRotacaoAtiva) {
-      try { STATE.studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
-    }
-  } catch (errCena) {
-    STATE.modeloCarregadoAtivo = false;
-    console.warn('[3D] Erro:', errCena);
-  }
-}
-// ››› FIM: construirCena3D() — v4.3 valida SDF antes de tocar no 3Dmol.
-
-  /**
-   * Aplica estilo visual 3D (ballstick, cpk, wireframe, surface).
-   */
   function aplicarEstiloVisual(tipo) {
     if (!STATE.studioViewer || !STATE.modeloCarregadoAtivo) return;
     try {
       STATE.studioViewer.removeAllSurfaces();
+
+      var stickRadius = DEVICE_PROFILE.renderQuality === 'low' ? 0.18 : 0.15;
+      var sphereScale = DEVICE_PROFILE.renderQuality === 'low' ? 0.32 : 0.28;
+
       switch (tipo) {
         case 'ballstick':
           STATE.studioViewer.setStyle({}, {
-            stick: { radius: 0.15, colorscheme: 'Jmol' },
-            sphere: { scale: 0.28, colorscheme: 'Jmol' }
+            stick: { radius: stickRadius, colorscheme: 'Jmol' },
+            sphere: { scale: sphereScale, colorscheme: 'Jmol' }
           });
           break;
         case 'cpk':
@@ -3228,91 +2797,81 @@ console.log(
           break;
         case 'surface':
           STATE.studioViewer.setStyle({}, {
-            stick: { radius: 0.12, colorscheme: 'Jmol' },
-            sphere: { scale: 0.22, colorscheme: 'Jmol' }
+            stick: { radius: stickRadius, colorscheme: 'Jmol' },
+            sphere: { scale: sphereScale, colorscheme: 'Jmol' }
           });
-          STATE.studioViewer.addSurface($3Dmol.SurfaceType.VDW, {
-            opacity: 0.65, color: '#38bdf8'
-          });
+          if (DEVICE_PROFILE.renderQuality !== 'low') {
+            STATE.studioViewer.addSurface($3Dmol.SurfaceType.VDW, {
+              opacity: 0.65, color: '#38bdf8'
+            });
+          }
           break;
       }
       STATE.studioViewer.render();
     } catch (e) {}
   }
-  // ››› FIM: aplicarEstiloVisual() — 4 estilos de representação 3D.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Desenha estrutura 2D no canvas via SmilesDrawer.
-   */
   function desenharEstrutura2DStudio(smiles, nome) {
-  const canvas = document.getElementById('studioCanvas2D');
-  if (!canvas) return;
+    const canvas = document.getElementById('studioCanvas2D');
+    if (!canvas) return;
 
-  // ─── Sizing defensivo: nunca aceita 0×0 ────────────────────────────
-  const wrapper = canvas.parentElement;
-  if (wrapper) {
-    const w = Math.max(wrapper.clientWidth - 40, 400);
-    const h = Math.max(wrapper.clientHeight - 40, 300);
-    if (canvas.width !== Math.min(1200, w) || canvas.height !== Math.min(900, h)) {
-      canvas.width = Math.min(1200, w);
-      canvas.height = Math.min(900, h);
+    const wrapper = canvas.parentElement;
+    if (wrapper) {
+      const w = Math.max(wrapper.clientWidth - 40, 400);
+      const h = Math.max(wrapper.clientHeight - 40, 300);
+      if (canvas.width !== Math.min(1200, w) || canvas.height !== Math.min(900, h)) {
+        canvas.width = Math.min(1200, w);
+        canvas.height = Math.min(900, h);
+      }
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (typeof SmilesDrawer === 'undefined') {
+      desenharFallback2D(canvas, smiles, nome, 'SmilesDrawer não carregado');
+      return;
+    }
+
+    const sL = extrairSmilesPrincipal(smiles);
+    if (!sL) {
+      desenharFallback2D(canvas, smiles, nome, 'Molécula inorgânica ou radical');
+      return;
+    }
+
+    try {
+      const drawer = new SmilesDrawer.Drawer({
+        width: canvas.width,
+        height: canvas.height,
+        bondThickness: 1.8,
+        bondLength: 22,
+        isomeric: true,
+        padding: 30
+      });
+
+      SmilesDrawer.parse(
+        sL,
+        function (tree) {
+          try {
+            drawer.draw(tree, canvas, 'dark', false);
+          } catch (drawErr) {
+            console.warn('[SmilesDrawer] Erro ao desenhar:', drawErr);
+            desenharFallback2D(canvas, sL, nome, 'Erro de desenho');
+          }
+        },
+        function (parseErr) {
+          console.warn('[SmilesDrawer] Parse erro:', parseErr);
+          desenharFallback2D(canvas, sL, nome, 'SMILES não suportado');
+        }
+      );
+    } catch (e) {
+      console.warn('[SmilesDrawer] Exceção:', e);
+      desenharFallback2D(canvas, sL, nome, 'Erro inesperado');
     }
   }
 
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#020617';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  if (typeof SmilesDrawer === 'undefined') {
-    desenharFallback2D(canvas, smiles, nome, 'SmilesDrawer não carregado');
-    return;
-  }
-
-  const sL = extrairSmilesPrincipal(smiles);
-  if (!sL) {
-    desenharFallback2D(canvas, smiles, nome, 'Molécula inorgânica ou radical');
-    return;
-  }
-
-  try {
-    const drawer = new SmilesDrawer.Drawer({
-      width: canvas.width,
-      height: canvas.height,
-      bondThickness: 1.8,
-      bondLength: 22,
-      isomeric: true,
-      padding: 30
-    });
-
-    SmilesDrawer.parse(
-      sL,
-      function (tree) {
-        try {
-          drawer.draw(tree, canvas, 'dark', false);
-        } catch (drawErr) {
-          console.warn('[SmilesDrawer] Erro ao desenhar:', drawErr);
-          desenharFallback2D(canvas, sL, nome, 'Erro de desenho');
-        }
-      },
-      function (parseErr) {
-        console.warn('[SmilesDrawer] Parse erro:', parseErr);
-        desenharFallback2D(canvas, sL, nome, 'SMILES não suportado');
-      }
-    );
-  } catch (e) {
-    console.warn('[SmilesDrawer] Exceção:', e);
-    desenharFallback2D(canvas, sL, nome, 'Erro inesperado');
-  }
-}
-  // ››› FIM: desenharEstrutura2DStudio() — renderização 2D vetorial.
-  // ››› FEEDBACK: fallback desenha nome + SMILES quando SmilesDrawer falha.
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Fallback 2D: desenha nome do composto e SMILES em texto.
-   */
   function desenharFallback2D(canvas, smiles, nome, motivo) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -3342,19 +2901,11 @@ console.log(
       ctx.fillText('(' + motivo + ')', canvas.width / 2, canvas.height / 2 + linhas.length * 20 + 30);
     }
   }
-  // ››› FIM: desenharFallback2D() — texto quando estrutura não renderiza.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: RENDER — pipeline 3D + 2D + estilos adaptativos.
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L2.7 — CONTROLES (Handlers de UI) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Handlers dos botões da toolbar e interação com o canvas.
+  // ▓▓▓ L2.7 — CONTROLES ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Handler de troca de modelo 3D (ballstick/cpk/wireframe/surface).
-   */
   window.setModelo3D = function (m) {
     STATE.modeloAtual = m;
     document.querySelectorAll('#group3DStyles .tool-btn').forEach(function (b) { b.classList.remove('active'); });
@@ -3364,12 +2915,7 @@ console.log(
     if (STATE.modeloCarregadoAtivo && STATE.modoExibicaoAtual === '3D') aplicarEstiloVisual(m);
     salvarPreferencias();
   };
-  // ››› FIM: setModelo3D() — alterna estilo + persiste preferência.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler de troca de modo 2D/3D.
-   */
   window.setStudioModoVisual = function (m) {
     STATE.modoExibicaoAtual = m;
     const v3 = document.getElementById('studioViewer3D');
@@ -3400,12 +2946,7 @@ console.log(
     }
     salvarPreferencias();
   };
-  // ››› FIM: setStudioModoVisual() — alterna 2D/3D + re-renderiza se necessário.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler do modo medição (distâncias e ângulos).
-   */
   window.toggleModoMedicao = function () {
     STATE.modoMedicaoAtivo = !STATE.modoMedicaoAtivo;
     STATE.atomosSelecionadosParaMedicao = [];
@@ -3416,12 +2957,7 @@ console.log(
     if (hud) hud.style.display = STATE.modoMedicaoAtivo ? 'flex' : 'none';
     if (!STATE.modoMedicaoAtivo) limparMedicoes3D();
   };
-  // ››› FIM: toggleModoMedicao() — ativa/desativa modo medição geométrica.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Processa clique em átomo no modo medição (2 = distância, 3 = ângulo).
-   */
   function processarCliqueMedicao(atom) {
     if (!STATE.studioViewer || !atom || !STATE.modeloCarregadoAtivo) return;
     STATE.atomosSelecionadosParaMedicao.push(atom);
@@ -3469,26 +3005,16 @@ console.log(
       STATE.atomosSelecionadosParaMedicao = [];
     }
   }
-  // ››› FIM: processarCliqueMedicao() — mede distâncias (2) e ângulos (3).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Limpa todas as medições geométricas.
-   */
   window.limparMedicoes3D = function () {
     STATE.atomosSelecionadosParaMedicao = [];
     const l = document.getElementById('studioLastMeasurement');
     if (l) l.textContent = 'Medições redefinidas.';
     if (STATE.sdfCacheLocal && STATE.studioViewer && STATE.modeloCarregadoAtivo) {
-      construirCena3D(STATE.sdfCacheLocal);
+      construirCena3D(STATE.sdfCacheLocal, true);
     }
   };
-  // ››› FIM: limparMedicoes3D() — remove esferas/linhas e reseta cena.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Handler de rotação automática 3D.
-   */
   window.toggleAutoRotacao3D = function () {
     STATE.autoRotacaoAtiva = !STATE.autoRotacaoAtiva;
     const b = document.getElementById('btnAutoRotate');
@@ -3501,25 +3027,17 @@ console.log(
     }
     salvarPreferencias();
   };
-  // ››› FIM: toggleAutoRotacao3D() — ativa/desativa rotação automática.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Reseta câmera 3D (zoom + centralização).
-   */
   window.resetarCamera3D = function () {
     if (STATE.studioViewer && STATE.modeloCarregadoAtivo) {
       STATE.studioViewer.zoomTo();
       STATE.studioViewer.render();
       STATE.studioViewer.resize();
+    } else if (STATE.sdfCacheLocal) {
+      construirCena3D(STATE.sdfCacheLocal, true);
     }
   };
-  // ››› FIM: resetarCamera3D() — zoom + resize.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Exporta imagem PNG do viewport atual (3D ou 2D).
-   */
   window.exportarImagemPNG = function () {
     const nb = (STATE.compostoSelecionado ? STATE.compostoSelecionado.nome : 'molecula').replace(/\s+/g, '_');
     if (STATE.modoExibicaoAtual === '3D' && STATE.studioViewer && STATE.modeloCarregadoAtivo) {
@@ -3537,12 +3055,7 @@ console.log(
       }
     }
   };
-  // ››› FIM: exportarImagemPNG() — PNG 3D (viewer.pngURI) ou 2D (canvas.toDataURL).
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Exporta arquivo SDF 3D do composto ativo.
-   */
   window.exportarArquivoSDF = function () {
     if (!STATE.sdfCacheLocal) {
       mostrarNotificacao('Sem SDF.', 'error');
@@ -3557,19 +3070,11 @@ console.log(
     a.click();
     URL.revokeObjectURL(url);
   };
-  // ››› FIM: exportarArquivoSDF() — download de SDF via Blob.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  // ››› FIM: Controles — handlers de UI.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.8 — SELEÇÃO E TRANSFERÊNCIA ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Handlers de seleção de composto e transferência para a bancada.
   // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Seleciona um composto e carrega sua estrutura completa.
-   */
   window.selecionarCompostoStudio = function (comp, el, addToHist) {
     if (addToHist === undefined) addToHist = true;
     if (!comp) return;
@@ -3581,14 +3086,7 @@ console.log(
     if (addToHist) pushNavegacao(comp);
     carregarEstruturaNoStudio(comp);
   };
-  // ››› FIM: selecionarCompostoStudio() — atualiza seleção + carrega estrutura.
-  // ››› FEEDBACK: addToHist=false evita empilhar navegação duplicada ao voltar/avançar.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Transfere o composto ativo para a bancada principal do laboratório.
-   * Suporta 3 modos de comunicação: BroadcastChannel, postMessage, localStorage.
-   */
   window.carregarCompostoDoStudioNaBancada = function () {
     if (!STATE.compostoSelecionado) return;
 
@@ -3619,45 +3117,35 @@ console.log(
       window.location.href = '../index.html';
     }
   };
-  // ››› FIM: carregarCompostoDoStudioNaBancada() — envia composto para bancada.
-  // ››› FEEDBACK: 3 canais redundantes — BroadcastChannel + postMessage + localStorage.
-  // ═══════════════════════════════════════════════════════════════════════════
-
- /**
- * Helper de diagnóstico — chame window._diag() no console para ver o estado.
- */
-window._diag = function () {
-  console.group('🔍 DIAGNÓSTICO LAIFT');
-  console.log('Composto selecionado:', STATE.compostoSelecionado
-    ? STATE.compostoSelecionado.nome + ' (id=' + STATE.compostoSelecionado.id + ')'
-    : '❌ NENHUM');
-  console.log('SDF carregado:', STATE.sdfCacheLocal
-    ? '✅ ' + STATE.sdfCacheLocal.length + ' bytes'
-    : '❌ NULO');
-  console.log('Átomo inspecionado:', STATE.atomoAtivoInspecionado
-    ? STATE.atomoAtivoInspecionado.elem + ' (idx=' + STATE.atomoAtivoInspecionado.index + ')'
-    : '❌ NENHUM');
-  console.log('RDKit carregado:', STATE.RDKitModuleInstance ? '✅' : '❌');
-  console.log('OCL carregado:', STATE.OCLDisponivel ? '✅' : '❌');
-  console.log('Viewer 3D:', STATE.studioViewer ? '✅' : '❌');
-  console.log('Modelo 3D ativo:', STATE.modeloCarregadoAtivo ? '✅' : '❌');
-  console.log('Total de compostos:', STATE.compostosIndexados.length);
-  console.log('Filtrados:', STATE.compostosFiltrados.length);
-  console.log('Modo exibição:', STATE.modoExibicaoAtual);
-  console.groupEnd();
-};
-// ››› FIM: _diag() — snapshot do estado completo no console.
- 
-  
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ▓▓▓ L2.9 — BOOT (Inicialização) ▓▓▓
-  // ───────────────────────────────────────────────────────────────────────────
-  // Sequência de inicialização: OCL → bases → favoritos → Worker → RDKit.
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ››› FIM: Seleção + transferência.
 
   /**
-   * Inicialização principal do estúdio.
+   * Helper de diagnóstico — chame window._diag() no console.
    */
+  window._diag = function () {
+    console.group('🔍 DIAGNÓSTICO LAIFT');
+    console.log('Composto selecionado:', STATE.compostoSelecionado
+      ? STATE.compostoSelecionado.nome + ' (id=' + STATE.compostoSelecionado.id + ')'
+      : '❌ NENHUM');
+    console.log('SDF carregado:', STATE.sdfCacheLocal
+      ? '✅ ' + STATE.sdfCacheLocal.length + ' bytes'
+      : '❌ NULO');
+    console.log('Átomo inspecionado:', STATE.atomoAtivoInspecionado
+      ? STATE.atomoAtivoInspecionado.elem + ' (idx=' + STATE.atomoAtivoInspecionado.index + ')'
+      : '❌ NENHUM');
+    console.log('RDKit carregado:', STATE.RDKitModuleInstance ? '✅' : '❌');
+    console.log('OCL carregado:', STATE.OCLDisponivel ? '✅' : '❌');
+    console.log('Viewer 3D:', STATE.studioViewer ? '✅' : '❌');
+    console.log('Modelo 3D ativo:', STATE.modeloCarregadoAtivo ? '✅' : '❌');
+    console.log('Total de compostos:', STATE.compostosIndexados.length);
+    console.log('Filtrados:', STATE.compostosFiltrados.length);
+    console.log('Modo exibição:', STATE.modoExibicaoAtual);
+    console.groupEnd();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ▓▓▓ L2.9 — BOOT (Inicialização) ▓▓▓
+  // ═══════════════════════════════════════════════════════════════════════════
   async function inicializarStudio() {
     console.log('[Studio] 🚀 Iniciando v' + STUDIO_VERSION);
 
@@ -3689,16 +3177,13 @@ window._diag = function () {
       indexarAcervoCompletoFallback();
     }
 
-    carregarRDKitSobDemanda();
+    // ✅ v4.5 — RDKit NÃO é pré-carregado. Carrega sob demanda quando
+    // uma análise CADD, Tanimoto, Scaffold ou edição for solicitada.
+    // Isso economiza 2-5s de boot e ~5MB de memória.
+
     atualizarBotoesUndoRedo();
   }
-  // ››› FIM: inicializarStudio() — sequência de boot com polling de bases.
-  // ››› FEEDBACK: tenta Worker primeiro; se indisponível, cai em fallback síncrono.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Listener de resize — recria viewports 3D/2D/comparação com debounce.
-   */
   window.addEventListener('resize', function () {
     clearTimeout(STATE.resizeTimer);
     STATE.resizeTimer = setTimeout(function () {
@@ -3713,12 +3198,7 @@ window._diag = function () {
       }
     }, 200);
   });
-  // ››› FIM: resize listener — sincroniza viewers 3D/2D a cada 200ms.
-  // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Listener de mensagens inter-janela.
-   */
   window.addEventListener('message', function (e) {
     if (e.data && e.data.acao === 'studioAberto') {
       setTimeout(function () {
@@ -3729,8 +3209,23 @@ window._diag = function () {
       }, 120);
     }
   });
-  // ››› FIM: message listener — re-renderiza 3D ao abrir estúdio em modal.
-  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ✅ v4.5 — Pausa animações quando aba inativa (economia de GPU/bateria)
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (STATE.studioViewer && STATE.autoRotacaoAtiva) {
+        try { STATE.studioViewer.stopAnimate(); } catch (e) {}
+      }
+    } else {
+      if (STATE.studioViewer && STATE.autoRotacaoAtiva && STATE.modeloCarregadoAtivo) {
+        try { STATE.studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
+      }
+      // Ao voltar para a aba, força redraw para restaurar WebGL se necessário
+      if (STATE.sdfCacheLocal && STATE._lastSDF) {
+        construirCena3D(STATE.sdfCacheLocal, true);
+      }
+    }
+  });
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DISPARO DO BOOT
@@ -3740,22 +3235,17 @@ window._diag = function () {
   } else {
     inicializarStudio();
   }
-  // ››› FIM: boot — espera DOMContentLoaded se ainda carregando.
-  // ═══════════════════════════════════════════════════════════════════════════
 
 })();
-// FIM DO ARQUIVO studio.js — v4.1 COMPLETO
+// FIM DO ARQUIVO studio.js — v4.5 COMPLETO
 // ═══════════════════════════════════════════════════════════════════════════════
-// RESUMO DE MUDANÇAS v4.0 → v4.1:
-//   1. Pipeline 3D: CACTUS movido para antes de PubChem nome (mais confiável)
-//   2. PubChem nome agora filtra por acentos/sufixos PT-BR (evita 404)
-//   3. ACERVO_RESERVA ganhou 'Acetato de Etila' com pubchemQuery em inglês
-//   4. Comentários delimitadores ▓▓▓ no início de cada módulo
-//   5. Comentários ››› FIM: após cada função com feedback/resumo
-//
-// PRÓXIMOS PASSOS RECOMENDADOS:
-//   - Testar com Ctrl+Shift+R (hard refresh) para limpar cache
-//   - Verificar console para "[OCL] ✅ OpenChemLib disponível"
-//   - Se OCL não carregar, verificar URL do CDN no index.html
-//   - Baixar RDKit localmente para produção (vendor/rdkit/)
+// MUDANÇAS v4.1 → v4.5:
+//   1. STATE._lastSDF adicionado (corrige bug de skip em construirCena3D)
+//   2. carregarRDKitSobDemanda aguarda window.__rdkitReady do index.html
+//   3. calcularPropriedadesMoleculares pré-filtra SMILES triviais
+//   4. carregarEstruturaNoStudio aplica debounce 300ms no CADD
+//   5. inicializarStudio NÃO pré-carrega RDKit (lazy load)
+//   6. visibilitychange força redraw ao voltar para a aba
+//   7. resetarCamera3D com fallback forçado se viewer não saudável
+//   8. construirCena3D com forceRedraw propagado no retry
 // ═══════════════════════════════════════════════════════════════════════════════
