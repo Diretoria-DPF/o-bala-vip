@@ -2915,38 +2915,21 @@ console.log(
    * Reutiliza o viewer existente se possível; recria se container zerou.
    */
   function construirCena3D(sdfText) {
-    const container = document.getElementById('studioViewer3D');
-    if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
+  const container = document.getElementById('studioViewer3D');
+  if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
 
-    const rect = container.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) {
-      setTimeout(function () { construirCena3D(sdfText); }, 250);
-      return;
-    }
+  const rect = container.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) {
+    setTimeout(function () { construirCena3D(sdfText); }, 250);
+    return;
+  }
 
+  // ─── Caminho 1: reutilizar viewer existente (evita leak WebGL) ──────
+  if (STATE.studioViewer && container.querySelector('canvas')) {
     try {
-      if (STATE.studioViewer) {
-        try { STATE.studioViewer.stopAnimate(); } catch (e) {}
-        try { STATE.studioViewer.clear(); } catch (e) {}
-      }
-      container.innerHTML = '';
-
-      STATE.studioViewer = $3Dmol.createViewer(container, {
-        backgroundColor: '#020617',
-        antialias: true
-      });
-
-      const model = STATE.studioViewer.addModel(sdfText, 'sdf');
-      if (!model || typeof model.selectedAtoms !== 'function') {
-        STATE.modeloCarregadoAtivo = false;
-        return;
-      }
-
-      const ats = model.selectedAtoms({}) || [];
-      if (ats.length === 0) {
-        STATE.modeloCarregadoAtivo = false;
-        return;
-      }
+      STATE.studioViewer.removeAllModels();
+      STATE.studioViewer.removeAllSurfaces();
+      STATE.studioViewer.addModel(sdfText, 'sdf');
 
       STATE.modeloCarregadoAtivo = true;
       aplicarEstiloVisual(STATE.modeloAtual);
@@ -2959,26 +2942,75 @@ console.log(
       STATE.studioViewer.zoomTo();
       STATE.studioViewer.render();
 
-      setTimeout(function () {
-        if (STATE.studioViewer && STATE.modeloCarregadoAtivo) {
-          try {
-            const r2 = container.getBoundingClientRect();
-            if (r2.width > 0 && r2.height > 0) {
-              STATE.studioViewer.resize();
-              STATE.studioViewer.render();
-            }
-          } catch (e) {}
-        }
-      }, 180);
-
       if (STATE.autoRotacaoAtiva) {
         try { STATE.studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
       }
-    } catch (errCena) {
-      STATE.modeloCarregadoAtivo = false;
-      console.warn('[3D] Erro:', errCena);
+      return;
+    } catch (reuseErr) {
+      console.warn('[3D] Reuso falhou, recriando:', reuseErr.message);
+      // Cai no caminho 2
     }
   }
+
+  // ─── Caminho 2: criar viewer novo (só na primeira vez ou se reuso falhou) ────
+  try {
+    // Destrói viewer antigo ANTES de criar novo
+    if (STATE.studioViewer) {
+      try { STATE.studioViewer.stopAnimate(); } catch (e) {}
+      try { STATE.studioViewer.clear(); } catch (e) {}
+      STATE.studioViewer = null;
+    }
+
+    container.innerHTML = '';
+
+    STATE.studioViewer = $3Dmol.createViewer(container, {
+      backgroundColor: '#020617',
+      antialias: true
+    });
+
+    const model = STATE.studioViewer.addModel(sdfText, 'sdf');
+    if (!model || typeof model.selectedAtoms !== 'function') {
+      STATE.modeloCarregadoAtivo = false;
+      return;
+    }
+
+    const ats = model.selectedAtoms({}) || [];
+    if (ats.length === 0) {
+      STATE.modeloCarregadoAtivo = false;
+      return;
+    }
+
+    STATE.modeloCarregadoAtivo = true;
+    aplicarEstiloVisual(STATE.modeloAtual);
+
+    STATE.studioViewer.setClickable({}, true, function (atom) {
+      if (STATE.modoMedicaoAtivo) processarCliqueMedicao(atom);
+      else selecionarEInspecionarAtomo(atom);
+    });
+
+    STATE.studioViewer.zoomTo();
+    STATE.studioViewer.render();
+
+    setTimeout(function () {
+      if (STATE.studioViewer && STATE.modeloCarregadoAtivo) {
+        try {
+          const r2 = container.getBoundingClientRect();
+          if (r2.width > 0 && r2.height > 0) {
+            STATE.studioViewer.resize();
+            STATE.studioViewer.render();
+          }
+        } catch (e) {}
+      }
+    }, 180);
+
+    if (STATE.autoRotacaoAtiva) {
+      try { STATE.studioViewer.animate({ loop: 'backAndForth', step: 0.35 }); } catch (e) {}
+    }
+  } catch (errCena) {
+    STATE.modeloCarregadoAtivo = false;
+    console.warn('[3D] Erro:', errCena);
+  }
+}
   // ››› FIM: construirCena3D() — recria viewer WebGL com SDF.
   // ››› FEEDBACK: retry a 250ms se container tem 0×0 (troca de aba, resize).
   // ═══════════════════════════════════════════════════════════════════════════
@@ -3023,70 +3055,66 @@ console.log(
    * Desenha estrutura 2D no canvas via SmilesDrawer.
    */
   function desenharEstrutura2DStudio(smiles, nome) {
-    const canvas = document.getElementById('studioCanvas2D');
-    if (!canvas) return;
+  const canvas = document.getElementById('studioCanvas2D');
+  if (!canvas) return;
 
-    const wrapper = canvas.parentElement;
-    if (wrapper) {
-      const w = wrapper.clientWidth - 40;
-      const h = wrapper.clientHeight - 40;
-      if (w > 100 && h > 100) {
-        canvas.width = Math.min(1200, w);
-        canvas.height = Math.min(900, h);
-      }
-    }
-
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    if (typeof SmilesDrawer === 'undefined') {
-      desenharFallback2D(canvas, smiles, nome, 'SmilesDrawer não carregado');
-      return;
-    }
-
-    const sL = extrairSmilesPrincipal(smiles);
-    if (!sL) {
-      desenharFallback2D(canvas, smiles, nome, 'Molécula inorgânica ou radical');
-      return;
-    }
-
-    if (sL.length < 1) {
-      desenharFallback2D(canvas, smiles, nome, 'SMILES vazio');
-      return;
-    }
-
-    try {
-      const drawer = new SmilesDrawer.Drawer({
-        width: canvas.width,
-        height: canvas.height,
-        bondThickness: 1.8,
-        bondLength: 22,
-        isomeric: true,
-        padding: 30
-      });
-
-      SmilesDrawer.parse(
-        sL,
-        function (tree) {
-          try {
-            drawer.draw(tree, canvas, 'dark', false);
-          } catch (drawErr) {
-            console.warn('[SmilesDrawer] Erro ao desenhar:', drawErr);
-            desenharFallback2D(canvas, sL, nome, 'Erro de desenho');
-          }
-        },
-        function (parseErr) {
-          console.warn('[SmilesDrawer] Parse erro:', parseErr);
-          desenharFallback2D(canvas, sL, nome, 'SMILES não suportado');
-        }
-      );
-    } catch (e) {
-      console.warn('[SmilesDrawer] Exceção:', e);
-      desenharFallback2D(canvas, sL, nome, 'Erro inesperado');
+  // ─── Sizing defensivo: nunca aceita 0×0 ────────────────────────────
+  const wrapper = canvas.parentElement;
+  if (wrapper) {
+    const w = Math.max(wrapper.clientWidth - 40, 400);
+    const h = Math.max(wrapper.clientHeight - 40, 300);
+    if (canvas.width !== Math.min(1200, w) || canvas.height !== Math.min(900, h)) {
+      canvas.width = Math.min(1200, w);
+      canvas.height = Math.min(900, h);
     }
   }
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#020617';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (typeof SmilesDrawer === 'undefined') {
+    desenharFallback2D(canvas, smiles, nome, 'SmilesDrawer não carregado');
+    return;
+  }
+
+  const sL = extrairSmilesPrincipal(smiles);
+  if (!sL) {
+    desenharFallback2D(canvas, smiles, nome, 'Molécula inorgânica ou radical');
+    return;
+  }
+
+  try {
+    const drawer = new SmilesDrawer.Drawer({
+      width: canvas.width,
+      height: canvas.height,
+      bondThickness: 1.8,
+      bondLength: 22,
+      isomeric: true,
+      padding: 30
+    });
+
+    SmilesDrawer.parse(
+      sL,
+      function (tree) {
+        try {
+          drawer.draw(tree, canvas, 'dark', false);
+        } catch (drawErr) {
+          console.warn('[SmilesDrawer] Erro ao desenhar:', drawErr);
+          desenharFallback2D(canvas, sL, nome, 'Erro de desenho');
+        }
+      },
+      function (parseErr) {
+        console.warn('[SmilesDrawer] Parse erro:', parseErr);
+        desenharFallback2D(canvas, sL, nome, 'SMILES não suportado');
+      }
+    );
+  } catch (e) {
+    console.warn('[SmilesDrawer] Exceção:', e);
+    desenharFallback2D(canvas, sL, nome, 'Erro inesperado');
+  }
+}
   // ››› FIM: desenharEstrutura2DStudio() — renderização 2D vetorial.
   // ››› FEEDBACK: fallback desenha nome + SMILES quando SmilesDrawer falha.
   // ═══════════════════════════════════════════════════════════════════════════
