@@ -28,14 +28,40 @@
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
 
   <!-- OpenChemLib — geração local de coordenadas 3D (JS puro, engine primária) -->
-  <script src="https://unpkg.com/openchemlib@8.19.0/dist/openchemlib.js"></script>
+  <script src="https://unpkg.com/openchemlib@9.25.0/dist/openchemlib-full.js"></script>
 
   <!-- RDKit WASM — engine secundária (descritores, SMARTS, fingerprints, scaffold)
-       ⚠️ Carregado LOCALMENTE para evitar falhas de CORS/WASM.
-       Baixe os arquivos com:
-         mkdir -p studio/vendor/rdkit
-         curl -L "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js" -o studio/vendor/rdkit/RDKit_minimal.js
-         curl -L "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.wasm" -o studio/vendor/rdkit/RDKit_minimal.wasm
+       Estratégia: tenta local primeiro; se falhar, carrega do CDN automaticamente.
+       Para usar local, coloque RDKit_minimal.js e RDKit_minimal.wasm em studio/vendor/rdkit/ -->
+  <script>
+    (function () {
+      var RDKIT_LOCAL = 'vendor/rdkit/RDKit_minimal.js';
+      var RDKIT_CDN = 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js';
+
+      // Testa se o arquivo local existe via fetch HEAD (evita 404 como script)
+      fetch(RDKIT_LOCAL, { method: 'HEAD' })
+        .then(function (res) {
+          var url = res.ok ? RDKIT_LOCAL : RDKIT_CDN;
+          console.log('[RDKit Loader] Usando: ' + (res.ok ? 'LOCAL' : 'CDN'));
+          var s = document.createElement('script');
+          s.src = url;
+          s.onerror = function () {
+            console.warn('[RDKit Loader] Falhou, tentando CDN...');
+            var s2 = document.createElement('script');
+            s2.src = RDKIT_CDN;
+            document.head.appendChild(s2);
+          };
+          document.head.appendChild(s);
+        })
+        .catch(function () {
+          // Se HEAD falhar (CORS ou arquivo ausente), usa CDN
+          console.log('[RDKit Loader] HEAD falhou, usando CDN');
+          var s = document.createElement('script');
+          s.src = RDKIT_CDN;
+          document.head.appendChild(s);
+        });
+    })();
+  </script>
   -->
   <script src="vendor/rdkit/RDKit_minimal.js"></script>
 
