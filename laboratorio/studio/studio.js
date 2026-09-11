@@ -1856,209 +1856,346 @@ console.log(
    * Valida via RDKit que a nova estrutura não é inválida.
    */
   window.executarSubstituicaoElementar = async function (novoSimbolo) {
-    if (!STATE.atomoAtivoInspecionado || !STATE.compostoSelecionado || !STATE.sdfCacheLocal) return;
+  console.log('[EDIT-SUB] ▶ Início substituição:', novoSimbolo);
 
-    const elemAntigo = STATE.atomoAtivoInspecionado.elem;
-    const atomIdx = STATE.atomoAtivoInspecionado.index !== undefined
-      ? STATE.atomoAtivoInspecionado.index
-      : (STATE.atomoAtivoInspecionado.serial - 1);
+  // ─── Guarda 1: estado mínimo ────────────────────────────────────────
+  if (!STATE.atomoAtivoInspecionado) {
+    console.warn('[EDIT-SUB] ❌ Nenhum átomo foi clicado antes');
+    mostrarNotificacao('Clique em um átomo no 3D antes de substituir.', 'warning', 4000);
+    return;
+  }
+  if (!STATE.compostoSelecionado) {
+    console.warn('[EDIT-SUB] ❌ Nenhum composto selecionado');
+    mostrarNotificacao('Selecione um composto no painel lateral.', 'warning', 4000);
+    return;
+  }
+  if (!STATE.sdfCacheLocal) {
+    console.warn('[EDIT-SUB] ❌ SDF não carregado');
+    mostrarNotificacao('Estrutura 3D ainda não foi carregada. Aguarde.', 'warning', 4000);
+    return;
+  }
 
-    const linhas = STATE.sdfCacheLocal.split('\n');
-    let linhaIdx = -1, contador = 0;
-    for (let i = 4; i < linhas.length; i++) {
-      const l = linhas[i];
-      if (l.indexOf('M  END') >= 0 || l.indexOf('$$$$') >= 0) break;
-      if (l.length >= 31) {
-        if (contador === atomIdx) { linhaIdx = i; break; }
-        contador++;
-      }
+  const elemAntigo = STATE.atomoAtivoInspecionado.elem;
+  const atomIdx = STATE.atomoAtivoInspecionado.index !== undefined
+    ? STATE.atomoAtivoInspecionado.index
+    : (STATE.atomoAtivoInspecionado.serial - 1);
+
+  console.log('[EDIT-SUB] Átomo:', elemAntigo, '#', atomIdx + 1, '(idx:', atomIdx + ')');
+
+  // ─── Localiza linha do átomo no SDF ─────────────────────────────────
+  const linhas = STATE.sdfCacheLocal.split('\n');
+  let linhaIdx = -1, contador = 0;
+  for (let i = 4; i < linhas.length; i++) {
+    const l = linhas[i];
+    if (l.indexOf('M  END') >= 0 || l.indexOf('$$$$') >= 0) break;
+    if (l.length >= 31) {
+      if (contador === atomIdx) { linhaIdx = i; break; }
+      contador++;
     }
-    if (linhaIdx === -1) { mostrarNotificacao('Posição não mapeada.', 'error'); return; }
+  }
 
-    const orig = linhas[linhaIdx];
-    linhas[linhaIdx] = orig.substring(0, 31) + novoSimbolo.padEnd(3, ' ') + orig.substring(34);
-    const novoSdf = linhas.join('\n');
+  if (linhaIdx === -1) {
+    console.error('[EDIT-SUB] ❌ Linha do átomo não encontrada no SDF');
+    mostrarNotificacao('Não foi possível localizar o átomo no arquivo 3D.', 'error', 4000);
+    return;
+  }
 
-    const rdkit = await carregarRDKitSobDemanda();
-    if (rdkit) {
-      try {
-        const mol = rdkit.get_mol(novoSdf);
-        if (!mol) {
-          mostrarNotificacao('Substituição ' + elemAntigo + '→' + novoSimbolo + ' instável.', 'error');
-          return;
-        }
-        const novoSmiles = mol.get_smiles();
+  // ─── Substitui o símbolo do elemento na linha ───────────────────────
+  const orig = linhas[linhaIdx];
+  linhas[linhaIdx] = orig.substring(0, 31) + novoSimbolo.padEnd(3, ' ') + orig.substring(34);
+  const novoSdf = linhas.join('\n');
+
+  console.log('[EDIT-SUB] Linha original:  "' + orig.substring(31, 34) + '"');
+  console.log('[EDIT-SUB] Linha modificada: "' + novoSimbolo + '"');
+
+  // ─── Validação com RDKit (com fallback) ─────────────────────────────
+  let novoSmiles = null;
+  let rdkit = null;
+
+  try {
+    rdkit = await carregarRDKitSobDemanda();
+  } catch (e) {
+    console.warn('[EDIT-SUB] RDKit load falhou:', e.message);
+  }
+
+  if (rdkit) {
+    try {
+      const mol = rdkit.get_mol(novoSdf);
+      if (mol) {
+        novoSmiles = mol.get_smiles();
         mol.delete();
-
-        pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Sub ' + elemAntigo + '→' + novoSimbolo);
-
-        const idD = 'sub_' + Date.now();
-        const nomeD = STATE.compostoSelecionado.nome + ' (' + elemAntigo + '→' + novoSimbolo + ')';
-        const novoComp = {
-          id: idD, chaveOriginal: idD, nome: nomeD,
-          formula: 'Mod. Atômica', molarMass: '--',
-          smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD,
-          sdfModificado: novoSdf
-        };
-
-        STATE.compostosIndexados.unshift(novoComp);
-        STATE.compostosFiltrados.unshift(novoComp);
-        renderizarListaCompostos(true);
-        selecionarCompostoStudio(novoComp);
-        window.fecharTabelaPeriodica();
-        window.fecharInspectorAtomo();
-        mostrarNotificacao('✅ ' + nomeD, 'success');
-      } catch (err) {
-        mostrarNotificacao('Erro de valência.', 'error');
+        console.log('[EDIT-SUB] ✅ RDKit validou. SMILES:', novoSmiles);
+      } else {
+        console.warn('[EDIT-SUB] ⚠️ RDKit rejeitou a estrutura (mol=null)');
+        mostrarNotificacao(
+          'Substituição ' + elemAntigo + '→' + novoSimbolo + ' cria valência inválida.',
+          'error', 5000
+        );
+        return;
       }
+    } catch (e) {
+      console.warn('[EDIT-SUB] RDKit exceção:', e.message);
     }
-  };
-  // ››› FIM: executarSubstituicaoElementar() — troca átomo preservando valência.
-  // ››› FEEDBACK: valida via RDKit antes de aceitar; rejeita se estrutura inválida.
-  // ═══════════════════════════════════════════════════════════════════════════
+  }
 
+  if (!novoSmiles) {
+    // RDKit offline ou não conseguiu gerar SMILES — aceita modificação mesmo assim
+    console.warn('[EDIT-SUB] ⚠️ Sem validação RDKit — aceitando modificação não-validada');
+    novoSmiles = 'EDIT_SUB_' + elemAntigo + '_' + novoSimbolo + '_' + Date.now();
+    mostrarNotificacao('⚠️ Modificação aplicada sem validação (RDKit offline)', 'warning', 4000);
+  }
+
+  // ─── Snapshot para undo ─────────────────────────────────────────────
+  pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Sub ' + elemAntigo + '→' + novoSimbolo);
+
+  // ─── Cria novo composto ─────────────────────────────────────────────
+  const idD = 'sub_' + Date.now();
+  const nomeD = STATE.compostoSelecionado.nome + ' (' + elemAntigo + '→' + novoSimbolo + ')';
+  const novoComp = {
+    id: idD,
+    chaveOriginal: idD,
+    nome: nomeD,
+    formula: 'Mod. Atômica',
+    molarMass: '--',
+    smiles: novoSmiles,
+    categoria: 'custom',
+    pubchemQuery: nomeD,
+    sdfModificado: novoSdf
+  };
+
+  console.log('[EDIT-SUB] Criado composto:', nomeD);
+
+  // ─── Insere no catálogo e seleciona ─────────────────────────────────
+  STATE.compostosIndexados.unshift(novoComp);
+  STATE.compostosFiltrados.unshift(novoComp);
+  renderizarListaCompostos(true);
+  selecionarCompostoStudio(novoComp);
+
+  // ─── Fecha modais ───────────────────────────────────────────────────
+  window.fecharTabelaPeriodica();
+  window.fecharInspectorAtomo();
+
+  console.log('[EDIT-SUB] ✅ Concluído');
+  mostrarNotificacao('✅ ' + nomeD, 'success', 3500);
+};
+// ››› FIM: executarSubstituicaoElementar() — substituição com logging + fallback.
+// ››› FEEDBACK v4.3: nunca falha em silêncio; aceita modificação sem RDKit;
+//     toast em cada caminho de erro; console.log rastreável.
   /**
    * Adiciona novo átomo ao composto selecionado, ligado ao átomo ativo.
    * Regras: se valência livre → adiciona direto; se tem H → remove; se não → avisa.
    */
   window.executarAdicaoAtomo = async function (novoSimbolo) {
-    if (!STATE.atomoAtivoInspecionado || !STATE.compostoSelecionado || !STATE.sdfCacheLocal) {
-      mostrarNotificacao('Selecione um átomo âncora.', 'error');
-      return;
+  console.log('[EDIT-ADD] ▶ Início adição:', novoSimbolo);
+
+  // ─── Guarda 1: estado mínimo ────────────────────────────────────────
+  if (!STATE.atomoAtivoInspecionado) {
+    console.warn('[EDIT-ADD] ❌ Nenhum átomo foi clicado antes');
+    mostrarNotificacao('Clique em um átomo no 3D antes de adicionar.', 'warning', 4000);
+    return;
+  }
+  if (!STATE.compostoSelecionado) {
+    console.warn('[EDIT-ADD] ❌ Nenhum composto selecionado');
+    mostrarNotificacao('Selecione um composto no painel lateral.', 'warning', 4000);
+    return;
+  }
+  if (!STATE.sdfCacheLocal) {
+    console.warn('[EDIT-ADD] ❌ SDF não carregado');
+    mostrarNotificacao('Estrutura 3D ainda não foi carregada. Aguarde.', 'warning', 4000);
+    return;
+  }
+
+  const parsed = parseSDF_Simples(STATE.sdfCacheLocal);
+  if (!parsed) {
+    console.error('[EDIT-ADD] ❌ SDF inválido');
+    mostrarNotificacao('Não foi possível interpretar o arquivo 3D.', 'error', 4000);
+    return;
+  }
+
+  const parentIdx = STATE.atomoAtivoInspecionado.index !== undefined
+    ? STATE.atomoAtivoInspecionado.index
+    : (STATE.atomoAtivoInspecionado.serial - 1);
+
+  if (parentIdx < 0 || parentIdx >= parsed.atoms.length) {
+    console.error('[EDIT-ADD] ❌ Índice atômico inválido:', parentIdx);
+    mostrarNotificacao('Índice do átomo âncora inválido.', 'error', 4000);
+    return;
+  }
+
+  const parent = parsed.atoms[parentIdx];
+  const eP = TABELA_PERIODICA.find(function (e) { return e.sym === parent.elem; });
+  const valP = eP ? Math.max.apply(null, eP.valencias) : 4;
+  const eN = TABELA_PERIODICA.find(function (e) { return e.sym === novoSimbolo; });
+
+  if (!eN) {
+    console.error('[EDIT-ADD] ❌ Elemento inválido:', novoSimbolo);
+    mostrarNotificacao('Elemento desconhecido.', 'error');
+    return;
+  }
+
+  console.log('[EDIT-ADD] Pai:', parent.elem, '#', parentIdx + 1,
+              '| Valência máx:', valP,
+              '| Novo:', novoSimbolo);
+
+  const bondsP = parsed.bonds.filter(function (b) {
+    return b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1;
+  });
+  const nLig = bondsP.length;
+
+  let acao = 'direto';
+  let hIdxRem = -1;
+  let instavel = false;
+
+  if (nLig >= valP) {
+    for (let i = 0; i < bondsP.length; i++) {
+      const b = bondsP[i];
+      const vIdx = (b.a1 === parentIdx + 1) ? (b.a2 - 1) : (b.a1 - 1);
+      if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRem = vIdx; break; }
     }
 
-    const parsed = parseSDF_Simples(STATE.sdfCacheLocal);
-    if (!parsed) { mostrarNotificacao('SDF inválido.', 'error'); return; }
-
-    const parentIdx = STATE.atomoAtivoInspecionado.index !== undefined
-      ? STATE.atomoAtivoInspecionado.index
-      : (STATE.atomoAtivoInspecionado.serial - 1);
-
-    if (parentIdx < 0 || parentIdx >= parsed.atoms.length) {
-      mostrarNotificacao('Índice inválido.', 'error');
-      return;
-    }
-
-    const parent = parsed.atoms[parentIdx];
-    const eP = TABELA_PERIODICA.find(function (e) { return e.sym === parent.elem; });
-    const valP = eP ? Math.max.apply(null, eP.valencias) : 4;
-    const eN = TABELA_PERIODICA.find(function (e) { return e.sym === novoSimbolo; });
-    if (!eN) { mostrarNotificacao('Elemento inválido.', 'error'); return; }
-
-    const bondsP = parsed.bonds.filter(function (b) {
-      return b.a1 === parentIdx + 1 || b.a2 === parentIdx + 1;
-    });
-    const nLig = bondsP.length;
-
-    let acao = 'direto';
-    let hIdxRem = -1;
-    let instavel = false;
-
-    if (nLig >= valP) {
-      for (let i = 0; i < bondsP.length; i++) {
-        const b = bondsP[i];
-        const vIdx = (b.a1 === parentIdx + 1) ? (b.a2 - 1) : (b.a1 - 1);
-        if (parsed.atoms[vIdx] && parsed.atoms[vIdx].elem === 'H') { hIdxRem = vIdx; break; }
+    if (hIdxRem >= 0) {
+      acao = 'remover_h';
+      console.log('[EDIT-ADD] Pai saturado, H#' + hIdxRem + ' será removido');
+    } else {
+      const msg =
+        '⚠️ ADIÇÃO GERA ESTRUTURA INSTÁVEL\n\n' +
+        'Átomo âncora: ' + parent.elem + '#' + (parentIdx + 1) + '\n' +
+        'Ligações atuais: ' + nLig + ' (valência máx.: ' + valP + ')\n' +
+        'Hidrogênios disponíveis: 0\n\n' +
+        'Adicionar ' + novoSimbolo + ' criará uma valência estendida (radical livre).\n\n' +
+        'Deseja continuar?';
+      if (!confirm(msg)) {
+        console.log('[EDIT-ADD] Usuário cancelou');
+        mostrarNotificacao('Adição cancelada.', 'info');
+        return;
       }
-
-      if (hIdxRem >= 0) {
-        acao = 'remover_h';
-      } else {
-        const msg =
-          '⚠️ ADIÇÃO GERA ESTRUTURA INSTÁVEL\n\n' +
-          'Átomo âncora: ' + parent.elem + '#' + (parentIdx + 1) + '\n' +
-          'Ligações atuais: ' + nLig + ' (valência máx.: ' + valP + ')\n' +
-          'Hidrogênios disponíveis: 0\n\n' +
-          'Adicionar ' + novoSimbolo + ' criará uma valência estendida (radical livre).\n\n' +
-          'RECOMENDAÇÕES:\n' +
-          '• Substituir ' + parent.elem + ' por elemento de valência maior (N, P, S), OU\n' +
-          '• Remover previamente uma ligação existente, OU\n' +
-          '• Prosseguir — estrutura marcada como instável\n\n' +
-          'Deseja continuar?';
-        if (!confirm(msg)) { mostrarNotificacao('Adição cancelada.', 'info'); return; }
-        acao = 'forcar_instavel';
-        instavel = true;
-      }
+      acao = 'forcar_instavel';
+      instavel = true;
+      console.log('[EDIT-ADD] Modo forçado instável');
     }
+  }
 
-    let atoms = parsed.atoms.map(function (a) { return Object.assign({}, a); });
-    let bonds = parsed.bonds.map(function (b) { return Object.assign({}, b); });
+  // ─── Aplica modificação ─────────────────────────────────────────────
+  let atoms = parsed.atoms.map(function (a) { return Object.assign({}, a); });
+  let bonds = parsed.bonds.map(function (b) { return Object.assign({}, b); });
 
-    if (acao === 'remover_h' && hIdxRem >= 0) {
-      atoms.splice(hIdxRem, 1);
-      bonds = bonds
-        .filter(function (b) { return (b.a1 - 1) !== hIdxRem && (b.a2 - 1) !== hIdxRem; })
-        .map(function (b) {
-          return Object.assign({}, b, {
-            a1: (b.a1 - 1) > hIdxRem ? b.a1 - 1 : b.a1,
-            a2: (b.a2 - 1) > hIdxRem ? b.a2 - 1 : b.a2
-          });
+  if (acao === 'remover_h' && hIdxRem >= 0) {
+    atoms.splice(hIdxRem, 1);
+    bonds = bonds
+      .filter(function (b) { return (b.a1 - 1) !== hIdxRem && (b.a2 - 1) !== hIdxRem; })
+      .map(function (b) {
+        return Object.assign({}, b, {
+          a1: (b.a1 - 1) > hIdxRem ? b.a1 - 1 : b.a1,
+          a2: (b.a2 - 1) > hIdxRem ? b.a2 - 1 : b.a2
         });
+      });
+  }
+
+  const pIdxFinal = (acao === 'remover_h' && hIdxRem >= 0 && parentIdx > hIdxRem)
+    ? parentIdx - 1 : parentIdx;
+  const parentFinal = atoms[pIdxFinal];
+
+  if (!parentFinal) {
+    console.error('[EDIT-ADD] ❌ Átomo pai desapareceu após remoção de H');
+    mostrarNotificacao('Erro interno: âncora perdida.', 'error');
+    return;
+  }
+
+  const bPF = bonds.filter(function (b) {
+    return b.a1 === pIdxFinal + 1 || b.a2 === pIdxFinal + 1;
+  });
+  const viz = bPF.map(function (b) {
+    const vIdx = (b.a1 === pIdxFinal + 1) ? (b.a2 - 1) : (b.a1 - 1);
+    return atoms[vIdx];
+  }).filter(Boolean);
+
+  const posNova = calcularPosicaoNovoAtomo(parentFinal, viz);
+
+  atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo });
+  bonds.push({ a1: pIdxFinal + 1, a2: atoms.length, tipo: 1 });
+
+  const novoSdf = reconstruirSDF(parsed, atoms, bonds, instavel);
+
+  console.log('[EDIT-ADD] SDF reconstruído. Átomos:', atoms.length, '| Ligações:', bonds.length);
+
+  // ─── Validação RDKit (com fallback) ─────────────────────────────────
+  let novoSmiles = null;
+  let rdkit = null;
+
+  try {
+    rdkit = await carregarRDKitSobDemanda();
+  } catch (e) {
+    console.warn('[EDIT-ADD] RDKit load falhou:', e.message);
+  }
+
+  if (rdkit) {
+    try {
+      const m = rdkit.get_mol(novoSdf);
+      if (m) {
+        novoSmiles = m.get_smiles();
+        m.delete();
+        console.log('[EDIT-ADD] ✅ RDKit validou. SMILES:', novoSmiles);
+      } else {
+        console.warn('[EDIT-ADD] ⚠️ RDKit rejeitou estrutura');
+        if (!instavel) {
+          mostrarNotificacao('Estrutura inválida após adição.', 'error', 4000);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[EDIT-ADD] RDKit exceção:', e.message);
     }
+  }
 
-    const pIdxFinal = (acao === 'remover_h' && hIdxRem >= 0 && parentIdx > hIdxRem) ? parentIdx - 1 : parentIdx;
-    const parentFinal = atoms[pIdxFinal];
-    const bPF = bonds.filter(function (b) {
-      return b.a1 === pIdxFinal + 1 || b.a2 === pIdxFinal + 1;
-    });
-    const viz = bPF.map(function (b) {
-      const vIdx = (b.a1 === pIdxFinal + 1) ? (b.a2 - 1) : (b.a1 - 1);
-      return atoms[vIdx];
-    }).filter(Boolean);
+  if (!novoSmiles && !instavel) {
+    console.warn('[EDIT-ADD] ⚠️ Sem SMILES válido — usando placeholder');
+    novoSmiles = 'EDIT_ADD_' + novoSimbolo + '_' + Date.now();
+  }
+  if (!novoSmiles && instavel) {
+    novoSmiles = 'RADICAL_' + novoSimbolo + '_' + Date.now();
+  }
 
-    const posNova = calcularPosicaoNovoAtomo(parentFinal, viz);
+  // ─── Snapshot ───────────────────────────────────────────────────────
+  pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Add ' + novoSimbolo);
 
-    atoms.push({ x: posNova.x, y: posNova.y, z: posNova.z, elem: novoSimbolo });
-    bonds.push({ a1: pIdxFinal + 1, a2: atoms.length, tipo: 1 });
+  // ─── Cria novo composto ─────────────────────────────────────────────
+  const idD = 'add_' + Date.now();
+  const suf = instavel ? ' ⚠️ INSTÁVEL' : '';
+  const nomeD = STATE.compostoSelecionado.nome + ' + ' + novoSimbolo + suf;
 
-    const novoSdf = reconstruirSDF(parsed, atoms, bonds, instavel);
-
-    const rdkit = await carregarRDKitSobDemanda();
-    let novoSmiles = null, rdkitErro = null;
-    if (rdkit) {
-      try {
-        const m = rdkit.get_mol(novoSdf);
-        if (m) { novoSmiles = m.get_smiles(); m.delete(); }
-        else rdkitErro = 'RDKit não parseou.';
-      } catch (e) { rdkitErro = e.message; }
-    }
-
-    if (!novoSmiles && !instavel) {
-      mostrarNotificacao('Estrutura inválida: ' + (rdkitErro || 'erro'), 'error');
-      return;
-    }
-    if (!novoSmiles && instavel) {
-      novoSmiles = 'RADICAL_' + novoSimbolo + '_' + Date.now();
-    }
-
-    pushEdicaoSnapshot(STATE.compostoSelecionado, STATE.sdfCacheLocal, 'Add ' + novoSimbolo);
-
-    const idD = 'add_' + Date.now();
-    const suf = instavel ? ' ⚠️ INSTÁVEL' : '';
-    const nomeD = STATE.compostoSelecionado.nome + ' + ' + novoSimbolo + suf;
-
-    const novoComp = {
-      id: idD, chaveOriginal: idD, nome: nomeD,
-      formula: 'Adição Atômica', molarMass: '--',
-      smiles: novoSmiles, categoria: 'custom', pubchemQuery: nomeD,
-      unstable: instavel,
-      sdfModificado: novoSdf
-    };
-
-    STATE.compostosIndexados.unshift(novoComp);
-    STATE.compostosFiltrados.unshift(novoComp);
-    renderizarListaCompostos(true);
-    selecionarCompostoStudio(novoComp);
-    window.fecharTabelaPeriodica();
-    window.fecharInspectorAtomo();
-
-    if (instavel) mostrarNotificacao('⚠️ Instável: ' + nomeD, 'warning', 5000);
-    else mostrarNotificacao('✅ Adicionado: ' + nomeD, 'success');
+  const novoComp = {
+    id: idD,
+    chaveOriginal: idD,
+    nome: nomeD,
+    formula: 'Adição Atômica',
+    molarMass: '--',
+    smiles: novoSmiles,
+    categoria: 'custom',
+    pubchemQuery: nomeD,
+    unstable: instavel,
+    sdfModificado: novoSdf
   };
-  // ››› FIM: executarAdicaoAtomo() — cresce molécula com validação de valência.
-  // ››› FEEDBACK: 3 caminhos — direto / remove H / força radical (com confirmação).
-  // ═══════════════════════════════════════════════════════════════════════════
 
+  console.log('[EDIT-ADD] Criado composto:', nomeD);
+
+  STATE.compostosIndexados.unshift(novoComp);
+  STATE.compostosFiltrados.unshift(novoComp);
+  renderizarListaCompostos(true);
+  selecionarCompostoStudio(novoComp);
+
+  window.fecharTabelaPeriodica();
+  window.fecharInspectorAtomo();
+
+  if (instavel) {
+    console.log('[EDIT-ADD] ✅ Concluído (instável)');
+    mostrarNotificacao('⚠️ Instável: ' + nomeD, 'warning', 5000);
+  } else {
+    console.log('[EDIT-ADD] ✅ Concluído');
+    mostrarNotificacao('✅ Adicionado: ' + nomeD, 'success');
+  }
+};
+// ››› FIM: executarAdicaoAtomo() — adição com logging + fallback.
+// ››› FEEDBACK v4.3: todas as guardas avisam o usuário; aceita sem RDKit.
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L3.7 — BIO-UI (Bioisosterismo) ▓▓▓
@@ -3432,7 +3569,32 @@ console.log(
   // ››› FEEDBACK: 3 canais redundantes — BroadcastChannel + postMessage + localStorage.
   // ═══════════════════════════════════════════════════════════════════════════
 
-
+ /**
+ * Helper de diagnóstico — chame window._diag() no console para ver o estado.
+ */
+window._diag = function () {
+  console.group('🔍 DIAGNÓSTICO LAIFT');
+  console.log('Composto selecionado:', STATE.compostoSelecionado
+    ? STATE.compostoSelecionado.nome + ' (id=' + STATE.compostoSelecionado.id + ')'
+    : '❌ NENHUM');
+  console.log('SDF carregado:', STATE.sdfCacheLocal
+    ? '✅ ' + STATE.sdfCacheLocal.length + ' bytes'
+    : '❌ NULO');
+  console.log('Átomo inspecionado:', STATE.atomoAtivoInspecionado
+    ? STATE.atomoAtivoInspecionado.elem + ' (idx=' + STATE.atomoAtivoInspecionado.index + ')'
+    : '❌ NENHUM');
+  console.log('RDKit carregado:', STATE.RDKitModuleInstance ? '✅' : '❌');
+  console.log('OCL carregado:', STATE.OCLDisponivel ? '✅' : '❌');
+  console.log('Viewer 3D:', STATE.studioViewer ? '✅' : '❌');
+  console.log('Modelo 3D ativo:', STATE.modeloCarregadoAtivo ? '✅' : '❌');
+  console.log('Total de compostos:', STATE.compostosIndexados.length);
+  console.log('Filtrados:', STATE.compostosFiltrados.length);
+  console.log('Modo exibição:', STATE.modoExibicaoAtual);
+  console.groupEnd();
+};
+// ››› FIM: _diag() — snapshot do estado completo no console.
+ 
+  
   // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.9 — BOOT (Inicialização) ▓▓▓
   // ───────────────────────────────────────────────────────────────────────────
