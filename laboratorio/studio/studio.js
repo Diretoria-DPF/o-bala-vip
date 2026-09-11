@@ -1014,16 +1014,24 @@ console.log(
   // ››› FIM: carregarRDKitSobDemanda() — v4.5 SEMPRE resolve a promise.
   // ››› FEEDBACK: aguarda window.__rdkitReady do index.html; timeout global 30s.
 
-  function carregarOCL() {
-    if (STATE.OCLDisponivel) return true;
-    if (typeof window.OCL !== 'undefined' && window.OCL.Molecule) {
-      STATE.OCLDisponivel = true;
-      console.log('[OCL] ✅ OpenChemLib disponível');
-      return true;
-    }
-    console.warn('[OCL] ❌ OpenChemLib não carregado');
+  async function carregarOCL() {
+  if (STATE.OCLDisponivel) return true;
+
+  if (typeof window.carregarOCL !== 'function') {
+    console.warn('[OCL] window.carregarOCL não definida no index.html');
     return false;
   }
+
+  try {
+    await window.carregarOCL();
+    STATE.OCLDisponivel = true;
+    console.log('[OCL] ✅ OpenChemLib disponível (via lazy load)');
+    return true;
+  } catch (e) {
+    console.warn('[OCL] ❌ Falha ao carregar:', e.message);
+    return false;
+  }
+}
 
   function exibirStatusRDKit(visivel, texto) {
     texto = texto || '';
@@ -1033,10 +1041,11 @@ console.log(
     if (ind) ind.style.display = visivel ? 'flex' : 'none';
   }
 
-  function gerar3DComOCL(smiles) {
-    if (!carregarOCL()) return null;
-    try {
-      const mol = OCL.Molecule.fromSmiles(smiles);
+  async function gerar3DComOCL(smiles) {
+  const oclOk = await carregarOCL();
+  if (!oclOk) return null;
+  try {
+    const mol = OCL.Molecule.fromSmiles(smiles);
       if (!mol) return null;
 
       const gen = new OCL.ConformerGenerator(0);
@@ -1423,6 +1432,7 @@ console.log(
     }
 
     modal.style.display = 'flex';
+      anexarCrossReferencesCADD();
   };
 
   window.fecharTabelaPeriodica = function () {
@@ -2478,7 +2488,7 @@ console.log(
     if (sL) {
       try {
         exibirStatusRDKit(true, 'Gerando 3D local (OCL)...');
-        const sdf = gerar3DComOCL(sL);
+        const sdf = await gerar3DComOCL(sL);
         exibirStatusRDKit(false);
         if (sdf && validarConteudoSDF(sdf)) {
           salvarEmCache(sL, termoBusca, sdf);
@@ -3073,6 +3083,219 @@ console.log(
   // ››› FIM: Controles — handlers de UI.
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // ▓▓▓ L3.10 — CHEMBL (Dossiê de Atividades Biológicas) ▓▓▓
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Abre o dossiê ChEMBL para o composto ativo.
+   * Consulta a API pública do ChEMBL (gratuita, sem chave) e exibe
+   * informações moleculares + atividades biológicas conhecidas.
+   */
+  window.abrirDossieChEMBL = async function () {
+    const modal = document.getElementById('chemblModal');
+    const body = document.getElementById('chemblModalBody');
+    const title = document.getElementById('chemblModalTitle');
+    const sub = document.getElementById('chemblModalSubtitle');
+
+    if (!modal || !body) return;
+
+    if (!STATE.compostoSelecionado) {
+      mostrarNotificacao('Selecione um composto primeiro.', 'warning');
+      return;
+    }
+
+    modal.style.display = 'flex';
+    body.innerHTML =
+      '<div style="text-align:center; padding:40px; color:#64748b;">' +
+        '<span class="spinner-inline" style="margin-right:8px;"></span>' +
+        'Consultando ChEMBL...' +
+      '</div>';
+
+    const nome = STATE.compostoSelecionado.pubchemQuery || STATE.compostoSelecionado.nome;
+
+    try {
+      // Etapa 1 — Busca composto por nome
+      const urlBusca =
+        'https://www.ebi.ac.uk/chembl/api/data/molecule/search.json?q=' +
+        encodeURIComponent(nome) + '&limit=1';
+
+      const resBusca = await fetch(urlBusca);
+      if (!resBusca.ok) throw new Error('HTTP ' + resBusca.status);
+
+      const dados = await resBusca.json();
+      const moleculas = dados.molecules || [];
+
+      if (moleculas.length === 0) {
+        body.innerHTML =
+          '<div style="padding:20px; color:#94a3b8;">' +
+            'Composto não encontrado na base ChEMBL.<br>' +
+            '<span style="font-size:0.7rem;">Tente um nome em inglês (ex.: "Aspirin", "Paracetamol").</span>' +
+          '</div>';
+        return;
+      }
+
+      const mol = moleculas[0];
+      const chemblId = mol.molecule_chembl_id;
+      const nomeChEMBL = mol.pref_name || nome;
+
+      if (title) title.textContent = '💊 ' + nomeChEMBL;
+      if (sub) sub.textContent = 'ChEMBL ID: ' + chemblId;
+
+      // Etapa 2 — Busca atividades biológicas
+      const urlAtiv =
+        'https://www.ebi.ac.uk/chembl/api/data/activity.json?' +
+        'molecule_chembl_id=' + chemblId + '&limit=50';
+
+      const resAtiv = await fetch(urlAtiv);
+      const dadosAtiv = await resAtiv.json();
+      const atividades = dadosAtiv.activities || [];
+
+      // Etapa 3 — Renderização
+      const props = mol.molecule_properties || {};
+
+      let htmlAtividades;
+      if (atividades.length === 0) {
+        htmlAtividades =
+          '<div class="pains-clean-box">✅ Nenhuma atividade biológica registrada para este composto.</div>';
+      } else {
+        htmlAtividades =
+          '<div style="max-height:400px; overflow-y:auto; border:1px solid var(--border-subtle); border-radius:6px;">' +
+            '<table class="chembl-activity-table">' +
+              '<thead><tr>' +
+                '<th>Alvo</th><th>Tipo</th><th>Valor</th><th>Unidade</th>' +
+              '</tr></thead><tbody>' +
+              atividades.slice(0, 40).map(function (a) {
+                return '<tr>' +
+                  '<td>' + (a.target_pref_name || 'N/A') + '</td>' +
+                  '<td>' + (a.standard_type || 'N/A') + '</td>' +
+                  '<td>' + (a.standard_value || 'N/A') + '</td>' +
+                  '<td>' + (a.standard_units || '') + '</td>' +
+                '</tr>';
+              }).join('') +
+              '</tbody>' +
+            '</table>' +
+          '</div>';
+      }
+
+      body.innerHTML =
+        '<div class="chembl-summary">' +
+          '<div class="chembl-stat"><span>Fórmula</span><strong>' +
+            (props.full_molformula || '--') +
+          '</strong></div>' +
+          '<div class="chembl-stat"><span>Massa Molar</span><strong>' +
+            (props.full_mwt ? props.full_mwt + ' g/mol' : '--') +
+          '</strong></div>' +
+          '<div class="chembl-stat"><span>Fase Máxima</span><strong>' +
+            (mol.max_phase ? 'Fase ' + mol.max_phase : 'N/A') +
+          '</strong></div>' +
+          '<div class="chembl-stat"><span>Atividades</span><strong>' +
+            atividades.length +
+          '</strong></div>' +
+        '</div>' +
+        '<h4 style="color:#f8fafc; margin:16px 0 8px; font-size:0.82rem;">' +
+          'Atividades Biológicas' +
+        '</h4>' +
+        htmlAtividades;
+
+    } catch (e) {
+      console.error('[ChEMBL] Erro:', e);
+      body.innerHTML =
+        '<div style="padding:20px; color:#f87171;">' +
+          'Erro ao consultar ChEMBL: ' + e.message +
+        '</div>';
+    }
+  };
+  // ››› FIM: abrirDossieChEMBL() — dossiê completo de atividades biológicas.
+
+  window.fecharDossieChEMBL = function () {
+    const m = document.getElementById('chemblModal');
+    if (m) m.style.display = 'none';
+  };
+  // ››› FIM: fecharDossieChEMBL() — apenas oculta o modal.
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ▓▓▓ L3.11 — UNCHEM (Interoperabilidade de Identificadores) ▓▓▓
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Resolve identificadores cruzados (PubChem CID, ChEMBL ID, DrugBank ID)
+   * usando a API pública do UniChem.
+   *
+   * @param {string} inchiKey - InChIKey no formato AAAAAAAAAAAAAA-BBBBBBBBBB-C
+   * @returns {Promise<Object|null>} - { fonte: id, ... } ou null se falhar
+   */
+  async function resolverIdentificadoresUniChem(inchiKey) {
+    if (!inchiKey) return null;
+
+    try {
+      const res = await fetch('https://www.ebi.ac.uk/unichem/api/v1/compounds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'inchikey', compound: inchiKey })
+      });
+
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+
+      const dados = await res.json();
+      const compostos = dados.compounds || [];
+      if (compostos.length === 0) return null;
+
+      const mapaFontes = {};
+      (compostos[0].sources || []).forEach(function (src) {
+        mapaFontes[src.shortName] = src.compoundId;
+      });
+
+      return mapaFontes;
+    } catch (e) {
+      console.warn('[UniChem] Erro:', e.message);
+      return null;
+    }
+  }
+  // ››› FIM: resolverIdentificadoresUniChem() — cross-reference via UniChem.
+
+  /**
+   * Anexa o bloco de identificadores cruzados (UniChem) ao final do dossiê CADD.
+   * Chamada internamente por window.abrirModalCADD.
+   */
+  function anexarCrossReferencesCADD() {
+    if (!STATE.compostoSelecionado) return;
+
+    const inchiKey = STATE.compostoSelecionado.inchiKey ||
+                     STATE.compostoSelecionado.inchi_key || null;
+
+    if (!inchiKey) {
+      console.log('[UniChem] Composto sem InChIKey — pulando cross-reference');
+      return;
+    }
+
+    resolverIdentificadoresUniChem(inchiKey).then(function (ids) {
+      if (!ids || Object.keys(ids).length === 0) return;
+
+      const container = document.getElementById('caddModalBody');
+      if (!container) return;
+
+      const bloco = document.createElement('div');
+      bloco.className = 'cadd-card';
+      bloco.style.marginTop = '12px';
+      bloco.innerHTML =
+        '<div class="cadd-card-title-row">' +
+          '<span class="cadd-card-title">🔗 Identificadores Cruzados (UniChem)</span>' +
+        '</div>' +
+        '<div class="crossref-list">' +
+          Object.keys(ids).map(function (k) {
+            return '<div class="crossref-item">' +
+              '<span>' + k + ':</span>' +
+              '<strong>' + ids[k] + '</strong>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+
+      container.appendChild(bloco);
+    });
+  }
+  // ››› FIM: anexarCrossReferencesCADD() — adiciona IDs cruzados ao dossiê.
+  
+  // ═══════════════════════════════════════════════════════════════════════════
   // ▓▓▓ L2.8 — SELEÇÃO E TRANSFERÊNCIA ▓▓▓
   // ═══════════════════════════════════════════════════════════════════════════
   window.selecionarCompostoStudio = function (comp, el, addToHist) {
@@ -3149,8 +3372,7 @@ console.log(
   async function inicializarStudio() {
     console.log('[Studio] 🚀 Iniciando v' + STUDIO_VERSION);
 
-    carregarOCL();
-
+  
     let tent = 0;
     while (tent < 10) {
       const fontes = obterFontesDeDados();
