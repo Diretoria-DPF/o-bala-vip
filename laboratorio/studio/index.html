@@ -85,10 +85,10 @@
   <script>
     window.__rdkitReady = (function () {
       var sources = [
-        { url: 'vendor/rdkit/RDKit_minimal.js',                                label: 'local' },
-        { url: 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js',         label: 'unpkg' },
-        { url: 'https://cdn.jsdelivr.net/npm/@rdkit/rdkit/dist/RDKit_minimal.js', label: 'jsDelivr' }
-      ];
+        var sources = [
+  { url: 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js',         label: 'unpkg' },
+  { url: 'https://cdn.jsdelivr.net/npm/@rdkit/rdkit/dist/RDKit_minimal.js', label: 'jsDelivr' }
+];
       var idx = 0;
 
       return new Promise(function (resolve) {
