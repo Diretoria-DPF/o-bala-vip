@@ -1,159 +1,330 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+  <!-- ==========================================================================
+       1. METADADOS & VIEWPORT (FULLSCREEN COCKPIT)
+       ========================================================================== -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>LAIFT — Estúdio Molecular 3D v3.3</title>
+  <meta name="description" content="LAIFT — Estúdio de Projeção e Modelagem Molecular 3D: quimioinformática, CADD, bioisosterismo e tabela periódica interativa.">
+  <meta name="author" content="LAIFT">
+  <title>LAIFT — Estúdio Molecular 3D v4.0</title>
 
+  <!-- ==========================================================================
+       2. FONTES
+       ========================================================================== -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&family=Urbanist:wght@400;600;700;800&display=swap" rel="stylesheet">
 
-  <!-- Bibliotecas de renderização -->
+  <!-- ==========================================================================
+       3. MOTORES DE RENDERIZAÇÃO & QUIMIOINFORMÁTICA
+       ========================================================================== -->
+
+  <!-- SmilesDrawer — renderização 2D vetorial (canvas) -->
   <script src="https://unpkg.com/smiles-drawer@2.3.0/dist/smiles-drawer.min.js"></script>
+
+  <!-- 3Dmol.js — renderização 3D WebGL -->
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+
+  <!-- OpenChemLib — geração local de coordenadas 3D (JS puro, engine primária) -->
   <script src="https://unpkg.com/openchemlib@8.19.0/dist/openchemlib.js"></script>
 
-  <!-- RDKit local (WASM não permite CDN confiável) -->
+  <!-- RDKit WASM — engine secundária (descritores, SMARTS, fingerprints, scaffold)
+       ⚠️ Carregado LOCALMENTE para evitar falhas de CORS/WASM.
+       Baixe os arquivos com:
+         mkdir -p studio/vendor/rdkit
+         curl -L "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js" -o studio/vendor/rdkit/RDKit_minimal.js
+         curl -L "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.wasm" -o studio/vendor/rdkit/RDKit_minimal.wasm
+  -->
   <script src="vendor/rdkit/RDKit_minimal.js"></script>
 
+  <!-- Folha de estilos do Estúdio -->
   <link rel="stylesheet" href="studio.css">
 </head>
+
 <body class="studio-cockpit-locked">
 
+  <!-- ==========================================================================
+       4. CABEÇALHO DO ESTÚDIO
+       Branding, contador de espécies, histórico (◀ ▶), undo/redo, favoritos,
+       apresentação, fullscreen, transferência para bancada e retorno.
+       ========================================================================== -->
   <header class="studio-main-header">
     <div class="header-branding">
-      <div class="studio-logo-icon">🧬</div>
+      <div class="studio-logo-icon" aria-hidden="true">🧬</div>
       <div class="studio-titles">
         <h1>LAIFT • ESTÚDIO MOLECULAR</h1>
-        <span class="studio-sub-badge">CADD · Bioisosterismo · Tabela Periódica v3.3</span>
+        <span class="studio-sub-badge">CADD · Bioisosterismo · Tabela Periódica v4.0</span>
       </div>
-      <span class="badge badge-counter" id="studioTotalBadge">Indexando...</span>
+      <span class="badge badge-counter" id="studioTotalBadge" aria-live="polite">Indexando...</span>
     </div>
 
     <div class="header-control-actions">
-      <button class="studio-btn btn-icon-only" onclick="window.irParaAnterior()" title="Anterior (Alt+←)">◀</button>
-      <button class="studio-btn btn-icon-only" onclick="window.irParaProximo()" title="Próximo (Alt+→)">▶</button>
-      <button class="studio-btn btn-icon-only" onclick="window.desfazerEdicao()" id="btnUndo" title="Desfazer (Ctrl+Z)" disabled>↶</button>
-      <button class="studio-btn btn-icon-only" onclick="window.refazerEdicao()" id="btnRedo" title="Refazer (Ctrl+Y)" disabled>↷</button>
-      <button class="studio-btn btn-icon-only btn-favorite" onclick="window.alternarFavoritoAtual()" id="btnFavoriteCurrent" title="Favoritar" style="display:none;">☆</button>
-      <button class="studio-btn btn-icon-only" onclick="window.alternarModoApresentacao()" title="Apresentação (P)">🎬</button>
-      <button class="studio-btn btn-icon-only" onclick="toggleNativeFullscreen()" title="Tela Cheia">⛶</button>
-      <button class="studio-btn btn-action-transfer" id="btnCarregarNaBancada" onclick="carregarCompostoDoStudioNaBancada()" style="display:none;" title="Transferir para bancada">🧪 <span class="btn-text">Bancada</span></button>
-      <button class="studio-btn btn-action-back" onclick="retornarAoLaboratorio()" title="Voltar">✕</button>
+      <!-- Histórico de navegação -->
+      <button class="studio-btn btn-icon-only" onclick="window.irParaAnterior()" id="btnNavBack"
+              title="Composto anterior (Alt+←)" aria-label="Anterior">◀</button>
+      <button class="studio-btn btn-icon-only" onclick="window.irParaProximo()" id="btnNavForward"
+              title="Próximo composto (Alt+→)" aria-label="Próximo">▶</button>
+
+      <!-- Undo / Redo de edições -->
+      <button class="studio-btn btn-icon-only" onclick="window.desfazerEdicao()" id="btnUndo"
+              title="Desfazer (Ctrl+Z)" aria-label="Desfazer" disabled>↶</button>
+      <button class="studio-btn btn-icon-only" onclick="window.refazerEdicao()" id="btnRedo"
+              title="Refazer (Ctrl+Y)" aria-label="Refazer" disabled>↷</button>
+
+      <!-- Favoritar composto ativo (oculto até haver seleção) -->
+      <button class="studio-btn btn-icon-only btn-favorite" onclick="window.alternarFavoritoAtual()"
+              id="btnFavoriteCurrent" title="Favoritar composto ativo"
+              aria-label="Favoritar" style="display:none;">☆</button>
+
+      <!-- Modo Apresentação (oculta UI e vai para fullscreen) -->
+      <button class="studio-btn btn-icon-only" onclick="window.alternarModoApresentacao()"
+              title="Modo Apresentação (P)" aria-label="Modo Apresentação">🎬</button>
+
+      <!-- Fullscreen nativo do navegador -->
+      <button class="studio-btn btn-icon-only" onclick="toggleNativeFullscreen()"
+              id="btnToggleNativeFullscreen" title="Tela Cheia"
+              aria-label="Tela Cheia">⛶</button>
+
+      <!-- Transferir composto ativo para a bancada -->
+      <button class="studio-btn btn-action-transfer" onclick="carregarCompostoDoStudioNaBancada()"
+              id="btnCarregarNaBancada" title="Transferir para bancada"
+              aria-label="Transferir para bancada" style="display:none;">
+        🧪 <span class="btn-text">Bancada</span>
+      </button>
+
+      <!-- Retornar ao laboratório -->
+      <button class="studio-btn btn-action-back" onclick="retornarAoLaboratorio()"
+              title="Retornar à Bancada" aria-label="Voltar">✕</button>
     </div>
   </header>
 
+  <!-- ==========================================================================
+       5. WORKSPACE EM GRADE (SIDEBAR + VIEWPORT)
+       ========================================================================== -->
   <main class="studio-workspace-grid">
 
-    <aside class="studio-sidebar-panel">
+    <!-- ======================================================================
+         5.1. SIDEBAR DE COMPOSTOS
+         Busca, filtros por categoria, lista virtualizada e contador.
+         ====================================================================== -->
+    <aside class="studio-sidebar-panel" aria-label="Catálogo de compostos">
+
       <div class="sidebar-search-container">
+        <!-- Campo de busca com debounce (handled em studio.js) -->
         <div class="search-input-wrapper">
-          <span class="search-icon">🔍</span>
-          <input type="text" id="studioSearchInput" placeholder="Buscar nome, fórmula, SMILES..." oninput="filtrarCompostosStudio(this.value)" autocomplete="off" spellcheck="false">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input type="text"
+                 id="studioSearchInput"
+                 placeholder="Buscar nome, fórmula, SMILES..."
+                 oninput="filtrarCompostosStudio(this.value)"
+                 autocomplete="off"
+                 spellcheck="false"
+                 aria-label="Buscar compostos">
         </div>
-        <div class="category-filters-scroll">
-          <button class="category-pill active" data-cat="todas" onclick="filtrarCategoriaStudio('todas')">Todas</button>
-          <button class="category-pill" data-cat="favoritos" onclick="filtrarCategoriaStudio('favoritos')">⭐ Fav</button>
-          <button class="category-pill" data-cat="farmacos" onclick="filtrarCategoriaStudio('farmacos')">Fármacos</button>
-          <button class="category-pill" data-cat="custom" onclick="filtrarCategoriaStudio('custom')">Projetadas</button>
-          <button class="category-pill" data-cat="reagentes" onclick="filtrarCategoriaStudio('reagentes')">Reagentes</button>
-          <button class="category-pill" data-cat="solventes" onclick="filtrarCategoriaStudio('solventes')">Solventes</button>
-          <button class="category-pill" data-cat="toxicos" onclick="filtrarCategoriaStudio('toxicos')">Toxinas</button>
+
+        <!-- Filtros por categoria (pills) -->
+        <div class="category-filters-scroll" role="tablist" aria-label="Filtros de categoria">
+          <button class="category-pill active" data-cat="todas"
+                  onclick="filtrarCategoriaStudio('todas')" role="tab">Todas</button>
+          <button class="category-pill" data-cat="favoritos"
+                  onclick="filtrarCategoriaStudio('favoritos')" role="tab">⭐ Fav</button>
+          <button class="category-pill" data-cat="farmacos"
+                  onclick="filtrarCategoriaStudio('farmacos')" role="tab">Fármacos</button>
+          <button class="category-pill" data-cat="custom"
+                  onclick="filtrarCategoriaStudio('custom')" role="tab">Projetadas</button>
+          <button class="category-pill" data-cat="reagentes"
+                  onclick="filtrarCategoriaStudio('reagentes')" role="tab">Reagentes</button>
+          <button class="category-pill" data-cat="solventes"
+                  onclick="filtrarCategoriaStudio('solventes')" role="tab">Solventes</button>
+          <button class="category-pill" data-cat="toxicos"
+                  onclick="filtrarCategoriaStudio('toxicos')" role="tab">Toxinas</button>
         </div>
       </div>
-      <div class="compound-virtual-list" id="studioCompoundList" onscroll="handleStudioScroll()"></div>
-      <div class="sidebar-footer-counter"><span id="studioFilteredCount">0 visíveis</span></div>
+
+      <!-- Lista virtualizada (render em chunks de 40 itens) -->
+      <div class="compound-virtual-list"
+           id="studioCompoundList"
+           onscroll="handleStudioScroll()"
+           role="listbox"
+           aria-label="Lista de compostos"></div>
+
+      <!-- Contador de compostos visíveis -->
+      <div class="sidebar-footer-counter">
+        <span id="studioFilteredCount" aria-live="polite">0 compostos visíveis</span>
+      </div>
     </aside>
 
+    <!-- ======================================================================
+         5.2. VIEWPORT CIENTÍFICO
+         Toolbar, canvas 3D/2D, HUDs flutuantes e telemetria inferior.
+         ====================================================================== -->
     <section class="studio-viewport-panel">
 
-      <nav class="studio-toolbar-ribbon">
+      <!-- ------------------------------------------------------------------
+           TOOLBAR RIBBON
+           Modo 2D/3D · Estilos 3D · Ferramentas de análise · Geometria ·
+           Ações (rotação, reset, exportação)
+           ------------------------------------------------------------------ -->
+      <nav class="studio-toolbar-ribbon" aria-label="Ferramentas do estúdio">
+
+        <!-- Modo de visualização -->
         <div class="toolbar-cluster">
-          <button class="tool-btn" id="btnStudioView2D" onclick="setStudioModoVisual('2D')" title="2D">2D</button>
-          <button class="tool-btn active" id="btnStudioView3D" onclick="setStudioModoVisual('3D')" title="3D">3D</button>
+          <button class="tool-btn" id="btnStudioView2D"
+                  onclick="setStudioModoVisual('2D')"
+                  title="Visualização 2D vetorial">2D</button>
+          <button class="tool-btn active" id="btnStudioView3D"
+                  onclick="setStudioModoVisual('3D')"
+                  title="Visualização 3D WebGL">3D</button>
         </div>
 
+        <!-- Estilos de representação 3D -->
         <div class="toolbar-cluster" id="group3DStyles">
-          <button class="tool-btn active" id="btnModoBallStick" onclick="setModelo3D('ballstick')" title="Ball & Stick">⚪</button>
-          <button class="tool-btn" id="btnModoCPK" onclick="setModelo3D('cpk')" title="CPK (VDW)">●</button>
-          <button class="tool-btn" id="btnModoWire" onclick="setModelo3D('wireframe')" title="Wireframe">▬</button>
-          <button class="tool-btn" id="btnModoSurface" onclick="setModelo3D('surface')" title="Superfície">◯</button>
+          <button class="tool-btn active" id="btnModoBallStick"
+                  onclick="setModelo3D('ballstick')"
+                  title="Ball & Stick">⚪</button>
+          <button class="tool-btn" id="btnModoCPK"
+                  onclick="setModelo3D('cpk')"
+                  title="CPK (esferas de Van der Waals)">●</button>
+          <button class="tool-btn" id="btnModoWire"
+                  onclick="setModelo3D('wireframe')"
+                  title="Wireframe">▬</button>
+          <button class="tool-btn" id="btnModoSurface"
+                  onclick="setModelo3D('surface')"
+                  title="Superfície VDW">◯</button>
         </div>
 
+        <!-- Ferramentas químicas -->
         <div class="toolbar-cluster">
-          <button class="tool-btn btn-ptable-trigger" onclick="window.abrirTabelaPeriodica(null)" title="Tabela Periódica">⚛️</button>
-          <button class="tool-btn btn-bioisostere-trigger" onclick="window.abrirPainelBioisosterismo()" title="Bioisosterismo">🧬</button>
-          <button class="tool-btn btn-similarity-trigger" onclick="window.abrirSimilaridade()" title="Similaridade Tanimoto">🔎</button>
-          <button class="tool-btn btn-scaffold-trigger" onclick="window.extrairScaffoldAtual()" title="Scaffold Murcko">🏗️</button>
-          <button class="tool-btn btn-compare-trigger" onclick="window.abrirComparacao()" title="Comparação">⚖️</button>
+          <button class="tool-btn btn-ptable-trigger"
+                  onclick="window.abrirTabelaPeriodica(null)"
+                  title="Tabela Periódica (118 elementos)">⚛️</button>
+          <button class="tool-btn btn-bioisostere-trigger"
+                  onclick="window.abrirPainelBioisosterismo()"
+                  title="Bioisosterismo de grupos funcionais">🧬</button>
+          <button class="tool-btn btn-similarity-trigger"
+                  onclick="window.abrirSimilaridade()"
+                  title="Similaridade Tanimoto (Morgan FP)">🔎</button>
+          <button class="tool-btn btn-scaffold-trigger"
+                  onclick="window.extrairScaffoldAtual()"
+                  title="Extrair Scaffold de Murcko">🏗️</button>
+          <button class="tool-btn btn-compare-trigger"
+                  onclick="window.abrirComparacao()"
+                  title="Comparação lado a lado">⚖️</button>
         </div>
 
+        <!-- Geometria molecular -->
         <div class="toolbar-cluster">
-          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure" onclick="toggleModoMedicao()" title="Medir">📏</button>
-          <button class="tool-btn" onclick="limparMedicoes3D()" title="Limpar medições">🧹</button>
+          <button class="tool-btn btn-measure-toggle" id="btnToolMeasure"
+                  onclick="toggleModoMedicao()"
+                  title="Medir distâncias (Å) e ângulos (°)">📏</button>
+          <button class="tool-btn" onclick="limparMedicoes3D()"
+                  title="Limpar medições">🧹</button>
         </div>
 
+        <!-- Ações do viewport (rotação, reset, exportação) -->
         <div class="toolbar-cluster right-aligned-cluster">
-          <button class="tool-btn" id="btnAutoRotate" onclick="toggleAutoRotacao3D()" title="Rotação automática">🔄</button>
-          <button class="tool-btn" onclick="resetarCamera3D()" title="Centralizar">🎯</button>
-          <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()" title="PNG">📷</button>
-          <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()" title="SDF">💾</button>
-          <button class="tool-btn btn-export-highlight" onclick="window.exportarCSVFiltrados()" title="CSV">📊</button>
+          <button class="tool-btn" id="btnAutoRotate"
+                  onclick="toggleAutoRotacao3D()"
+                  title="Rotação automática">🔄</button>
+          <button class="tool-btn" onclick="resetarCamera3D()"
+                  title="Centralizar câmera">🎯</button>
+          <button class="tool-btn btn-export-highlight" onclick="exportarImagemPNG()"
+                  title="Exportar imagem PNG">📷</button>
+          <button class="tool-btn btn-export-highlight" onclick="exportarArquivoSDF()"
+                  title="Exportar arquivo SDF 3D">💾</button>
+          <button class="tool-btn btn-export-highlight" onclick="window.exportarCSVFiltrados()"
+                  title="Exportar catálogo filtrado como CSV">📊</button>
         </div>
       </nav>
 
+      <!-- ------------------------------------------------------------------
+           CANVAS STAGE
+           Viewport 3D, viewport 2D, HUDs flutuantes, indicadores, watermark
+           ------------------------------------------------------------------ -->
       <div class="studio-canvas-stage" id="studioCanvasWrapper">
-        <div id="studioViewer3D" class="viewer-surface-3d"></div>
-        <div id="studioViewer2D" class="viewer-surface-2d" style="display:none;">
+
+        <!-- Viewport 3D principal (3Dmol.js) -->
+        <div id="studioViewer3D" class="viewer-surface-3d" aria-label="Visualização 3D"></div>
+
+        <!-- Viewport 2D (SmilesDrawer em canvas) -->
+        <div id="studioViewer2D" class="viewer-surface-2d" style="display:none;"
+             aria-label="Visualização 2D">
           <canvas id="studioCanvas2D" width="1000" height="700"></canvas>
         </div>
 
-        <div class="measure-indicator-pill" id="measureHud" style="display:none;">
-          <div class="indicator-dot-pulse"></div>
+        <!-- HUD: Modo Medição Ativo -->
+        <div class="measure-indicator-pill" id="measureHud" style="display:none;"
+             role="status" aria-live="polite">
+          <div class="indicator-dot-pulse" aria-hidden="true"></div>
           <div class="indicator-texts">
             <strong>MEDIÇÃO ATIVA</strong>
             <small>2 átomos = distância · 3 = ângulo</small>
           </div>
         </div>
 
-        <div class="atom-inspector-hud" id="atomInspectorHud" style="display:none;">
+        <!-- HUD: Inspeção Atômica (ao clicar em átomo no 3D) -->
+        <div class="atom-inspector-hud" id="atomInspectorHud" style="display:none;"
+             role="dialog" aria-label="Inspetor atômico">
           <div class="atom-inspector-header">
-            <div class="atom-elem-badge" id="hudAtomBadge">C</div>
+            <div class="atom-elem-badge" id="hudAtomBadge" aria-hidden="true">C</div>
             <div class="atom-inspector-meta">
               <strong id="hudAtomTitle">Carbono</strong>
               <small id="hudAtomSub">--</small>
             </div>
-            <button class="atom-inspector-close" onclick="window.fecharInspectorAtomo()">&times;</button>
+            <button class="atom-inspector-close"
+                    onclick="window.fecharInspectorAtomo()"
+                    aria-label="Fechar inspetor">&times;</button>
           </div>
           <div class="atom-inspector-body">
-            <div class="atom-inspector-row"><span>Eletroneg.:</span><strong id="hudAtomEletron">--</strong></div>
-            <div class="atom-inspector-row"><span>Raio:</span><strong id="hudAtomRaio">--</strong></div>
-            <div class="atom-inspector-row"><span>Vizinhos:</span><strong id="hudAtomNeighbors">--</strong></div>
+            <div class="atom-inspector-row">
+              <span>Eletroneg.:</span><strong id="hudAtomEletron">--</strong>
+            </div>
+            <div class="atom-inspector-row">
+              <span>Raio:</span><strong id="hudAtomRaio">--</strong>
+            </div>
+            <div class="atom-inspector-row">
+              <span>Vizinhos:</span><strong id="hudAtomNeighbors">--</strong>
+            </div>
           </div>
           <div class="atom-inspector-actions">
-            <button class="btn-hud-replace" onclick="window.substituirAtomoClicadoViaTabela()">⚛️ Tabela Periódica</button>
+            <button class="btn-hud-replace"
+                    onclick="window.substituirAtomoClicadoViaTabela()">
+              ⚛️ Abrir Tabela Periódica
+            </button>
           </div>
         </div>
 
-        <div class="rdkit-engine-status" id="rdkitIndicator" style="display:none;">
-          <span class="spinner-inline"></span>
+        <!-- Indicador de processamento RDKit/Worker -->
+        <div class="rdkit-engine-status" id="rdkitIndicator" style="display:none;"
+             role="status" aria-live="polite">
+          <span class="spinner-inline" aria-hidden="true"></span>
           <span id="rdkitIndicatorText">Processando...</span>
         </div>
 
+        <!-- Watermark central (some após primeira seleção) -->
         <div class="studio-watermark-overlay" id="studioWatermark">
           Selecione uma molécula no painel lateral
         </div>
+
+        <!-- Hint de saída do Modo Apresentação -->
         <div class="presentation-exit-hint" id="presentationExitHint" style="display:none;">
-          <kbd>ESC</kbd> ou <kbd>P</kbd> para sair
+          Pressione <kbd>ESC</kbd> ou <kbd>P</kbd> para sair
         </div>
       </div>
 
-      <footer class="studio-telemetry-hud">
+      <!-- ------------------------------------------------------------------
+           TELEMETRIA INFERIOR (HUD)
+           Espécie · Fórmula/Massa · Badges CADD · Inspeção
+           ------------------------------------------------------------------ -->
+      <footer class="studio-telemetry-hud" aria-label="Telemetria molecular">
+
         <div class="hud-item-block hud-name">
           <span class="hud-title">Espécie</span>
           <strong class="hud-value name-highlight" id="studioMolNome">--</strong>
         </div>
+
         <div class="hud-item-block">
           <span class="hud-title">Fórmula / Massa</span>
           <span class="hud-value">
@@ -161,160 +332,349 @@
             <strong id="studioMolMassa" style="color:var(--neon-emerald); margin-left:6px;">--</strong>
           </span>
         </div>
+
         <div class="hud-item-block cadd-hud-block">
           <div class="cadd-hud-header">
-            <span class="hud-title">CADD</span>
-            <button class="btn-open-cadd-modal" onclick="window.abrirModalCADD()">📊</button>
+            <span class="hud-title">Drogabilidade (CADD)</span>
+            <button class="btn-open-cadd-modal"
+                    onclick="window.abrirModalCADD()"
+                    title="Abrir dossiê CADD completo"
+                    aria-label="Abrir dossiê CADD">📊</button>
           </div>
           <div class="lipinski-metrics-row">
-            <span class="cadd-badge badge-pending" id="badgeLipinski">L: --</span>
-            <span class="cadd-badge badge-pending" id="badgeVeber">V: --</span>
-            <span class="cadd-badge badge-pending" id="badgeGhose">G: --</span>
-            <span class="cadd-badge badge-pending" id="badgePAINS">P: --</span>
+            <span class="cadd-badge badge-pending" id="badgeLipinski"
+                  title="Regra de Lipinski (Ro5)">L: --</span>
+            <span class="cadd-badge badge-pending" id="badgeVeber"
+                  title="Regra de Veber (biodisponibilidade oral)">V: --</span>
+            <span class="cadd-badge badge-pending" id="badgeGhose"
+                  title="Filtro de Ghose (drug-likeness)">G: --</span>
+            <span class="cadd-badge badge-pending" id="badgePAINS"
+                  title="Filtro PAINS (interferência em HTS)">P: --</span>
           </div>
         </div>
+
         <div class="hud-item-block measurement-readout-block">
           <span class="hud-title">Inspeção</span>
-          <strong class="hud-value measure-value" id="studioLastMeasurement">Clique em um átomo</strong>
+          <strong class="hud-value measure-value" id="studioLastMeasurement">
+            Clique em um átomo no 3D
+          </strong>
         </div>
       </footer>
     </section>
   </main>
 
-  <!-- TABELA PERIÓDICA -->
-  <div class="cadd-modal" id="periodicTableModal" style="display:none;">
+  <!-- ==========================================================================
+       6. MODAIS
+       ========================================================================== -->
+
+  <!-- ========================================================================
+       MODAL 1 — TABELA PERIÓDICA (118 elementos)
+       Grade 18×9 com filtros, sidebar detalhada e ações de substituição/adição
+       ======================================================================== -->
+  <div class="cadd-modal" id="periodicTableModal" style="display:none;"
+       role="dialog" aria-modal="true" aria-label="Tabela Periódica">
     <div class="cadd-modal-content ptable-modal-content">
+
       <div class="cadd-modal-header ptable-header">
         <div>
           <h3>⚛️ Tabela Periódica — 118 Elementos</h3>
-          <span class="cadd-subtitle" id="ptableSubHeader">Substituição e adição com validação</span>
+          <span class="cadd-subtitle" id="ptableSubHeader">
+            Substituição e adição de átomos com validação de valência
+          </span>
         </div>
-        <button class="btn-close-modal" onclick="window.fecharTabelaPeriodica()">&times;</button>
+        <button class="btn-close-modal"
+                onclick="window.fecharTabelaPeriodica()"
+                aria-label="Fechar">&times;</button>
       </div>
+
       <div class="ptable-modal-layout">
+
+        <!-- Coluna esquerda: filtros + matriz -->
         <div class="ptable-grid-column">
-          <div class="ptable-filters-bar">
-            <button class="ptable-pill active" data-cat="todas" onclick="filtrarElementosPTable('todas')">Todos</button>
-            <button class="ptable-pill" data-cat="nao-metal" onclick="filtrarElementosPTable('nao-metal')">Não-Metais</button>
-            <button class="ptable-pill" data-cat="halogenio" onclick="filtrarElementosPTable('halogenio')">Halogênios</button>
-            <button class="ptable-pill" data-cat="metaloide" onclick="filtrarElementosPTable('metaloide')">Metaloides</button>
-            <button class="ptable-pill" data-cat="alcalino" onclick="filtrarElementosPTable('alcalino')">Alcalinos</button>
-            <button class="ptable-pill" data-cat="alcalino-terroso" onclick="filtrarElementosPTable('alcalino-terroso')">Alc.-Terrosos</button>
-            <button class="ptable-pill" data-cat="metal-transicao" onclick="filtrarElementosPTable('metal-transicao')">Transição</button>
-            <button class="ptable-pill" data-cat="metal-pos-transicao" onclick="filtrarElementosPTable('metal-pos-transicao')">Pós-Trans.</button>
-            <button class="ptable-pill" data-cat="lantanideo" onclick="filtrarElementosPTable('lantanideo')">Lantanídeos</button>
-            <button class="ptable-pill" data-cat="actinideo" onclick="filtrarElementosPTable('actinideo')">Actinídeos</button>
-            <button class="ptable-pill" data-cat="gas-nobre" onclick="filtrarElementosPTable('gas-nobre')">Gases Nobres</button>
+          <div class="ptable-filters-bar" role="tablist" aria-label="Filtros de família">
+            <button class="ptable-pill active" data-cat="todas"
+                    onclick="filtrarElementosPTable('todas')">Todos</button>
+            <button class="ptable-pill" data-cat="nao-metal"
+                    onclick="filtrarElementosPTable('nao-metal')">Não-Metais</button>
+            <button class="ptable-pill" data-cat="halogenio"
+                    onclick="filtrarElementosPTable('halogenio')">Halogênios</button>
+            <button class="ptable-pill" data-cat="metaloide"
+                    onclick="filtrarElementosPTable('metaloide')">Metaloides</button>
+            <button class="ptable-pill" data-cat="alcalino"
+                    onclick="filtrarElementosPTable('alcalino')">Alcalinos</button>
+            <button class="ptable-pill" data-cat="alcalino-terroso"
+                    onclick="filtrarElementosPTable('alcalino-terroso')">Alc.-Terrosos</button>
+            <button class="ptable-pill" data-cat="metal-transicao"
+                    onclick="filtrarElementosPTable('metal-transicao')">Transição</button>
+            <button class="ptable-pill" data-cat="metal-pos-transicao"
+                    onclick="filtrarElementosPTable('metal-pos-transicao')">Pós-Trans.</button>
+            <button class="ptable-pill" data-cat="lantanideo"
+                    onclick="filtrarElementosPTable('lantanideo')">Lantanídeos</button>
+            <button class="ptable-pill" data-cat="actinideo"
+                    onclick="filtrarElementosPTable('actinideo')">Actinídeos</button>
+            <button class="ptable-pill" data-cat="gas-nobre"
+                    onclick="filtrarElementosPTable('gas-nobre')">Gases Nobres</button>
           </div>
+
+          <!-- Grade da tabela (grid 18 colunas × 9 linhas) -->
           <div class="ptable-matrix-scroll">
             <div class="ptable-matrix" id="ptableMatrix"></div>
           </div>
         </div>
-        <aside class="ptable-inspector-sidebar">
+
+        <!-- Coluna direita: dossiê do elemento selecionado -->
+        <aside class="ptable-inspector-sidebar" aria-label="Detalhes do elemento">
           <div class="ptable-detail-card" id="ptableDetailContent">
-            <div style="text-align:center; color:#64748b; padding:40px 10px;">Clique em um elemento.</div>
+            <div style="text-align:center; color:#64748b; padding:40px 10px;">
+              Clique em um elemento para análise.
+            </div>
           </div>
         </aside>
       </div>
     </div>
   </div>
 
-  <!-- CADD -->
-  <div class="cadd-modal" id="caddModal" style="display:none;">
+  <!-- ========================================================================
+       MODAL 2 — DOSSIÊ CADD
+       Lipinski · Veber · Ghose · PAINS
+       ======================================================================== -->
+  <div class="cadd-modal" id="caddModal" style="display:none;"
+       role="dialog" aria-modal="true" aria-label="Dossiê CADD">
     <div class="cadd-modal-content">
       <div class="cadd-modal-header">
-        <div><h3 id="caddModalTitle">📊 Dossiê CADD</h3><span class="cadd-subtitle" id="caddModalSubtitle">--</span></div>
-        <button class="btn-close-modal" onclick="window.fecharModalCADD()">&times;</button>
+        <div>
+          <h3 id="caddModalTitle">📊 Dossiê CADD</h3>
+          <span class="cadd-subtitle" id="caddModalSubtitle">--</span>
+        </div>
+        <button class="btn-close-modal"
+                onclick="window.fecharModalCADD()"
+                aria-label="Fechar">&times;</button>
       </div>
       <div class="cadd-modal-body" id="caddModalBody"></div>
     </div>
   </div>
 
-  <!-- BIOISOSTERISMO -->
-  <div class="cadd-modal" id="bioisostereModal" style="display:none;">
+  <!-- ========================================================================
+       MODAL 3 — BIOISOSTERISMO
+       ======================================================================== -->
+  <div class="cadd-modal" id="bioisostereModal" style="display:none;"
+       role="dialog" aria-modal="true" aria-label="Bioisosterismo">
     <div class="cadd-modal-content bioisostere-modal-content">
       <div class="cadd-modal-header bioisostere-header">
-        <div><h3>🧬 Bioisosterismo</h3><span class="cadd-subtitle">Modificação orientada por estrutura</span></div>
-        <button class="btn-close-modal" onclick="window.fecharPainelBioisosterismo()">&times;</button>
+        <div>
+          <h3>🧬 Bioisosterismo</h3>
+          <span class="cadd-subtitle">Modificação orientada por estrutura</span>
+        </div>
+        <button class="btn-close-modal"
+                onclick="window.fecharPainelBioisosterismo()"
+                aria-label="Fechar">&times;</button>
       </div>
       <div class="cadd-modal-body bioisostere-body" id="bioisostereModalBody"></div>
     </div>
   </div>
 
-  <!-- SIMILARIDADE -->
-  <div class="cadd-modal" id="similarityModal" style="display:none;">
+  <!-- ========================================================================
+       MODAL 4 — SIMILARIDADE TANIMOTO
+       ======================================================================== -->
+  <div class="cadd-modal" id="similarityModal" style="display:none;"
+       role="dialog" aria-modal="true" aria-label="Similaridade estrutural">
     <div class="cadd-modal-content similarity-modal-content">
       <div class="cadd-modal-header similarity-header">
-        <div><h3>🔎 Similaridade Estrutural</h3><span class="cadd-subtitle" id="similaritySubHeader">--</span></div>
-        <button class="btn-close-modal" onclick="window.fecharSimilaridade()">&times;</button>
+        <div>
+          <h3>🔎 Similaridade Estrutural</h3>
+          <span class="cadd-subtitle" id="similaritySubHeader">--</span>
+        </div>
+        <button class="btn-close-modal"
+                onclick="window.fecharSimilaridade()"
+                aria-label="Fechar">&times;</button>
       </div>
       <div class="cadd-modal-body similarity-body" id="similarityModalBody"></div>
     </div>
   </div>
 
-  <!-- COMPARAÇÃO -->
-  <div class="cadd-modal" id="comparisonModal" style="display:none;">
+  <!-- ========================================================================
+       MODAL 5 — COMPARAÇÃO LADO A LADO
+       ======================================================================== -->
+  <div class="cadd-modal" id="comparisonModal" style="display:none;"
+       role="dialog" aria-modal="true" aria-label="Comparação molecular">
     <div class="cadd-modal-content comparison-modal-content">
+
       <div class="cadd-modal-header comparison-header">
-        <div><h3>⚖️ Comparação Molecular</h3><span class="cadd-subtitle">Selecione dois compostos</span></div>
-        <button class="btn-close-modal" onclick="window.fecharComparacao()">&times;</button>
+        <div>
+          <h3>⚖️ Comparação Molecular</h3>
+          <span class="cadd-subtitle">Selecione dois compostos para comparar propriedades</span>
+        </div>
+        <button class="btn-close-modal"
+                onclick="window.fecharComparacao()"
+                aria-label="Fechar">&times;</button>
       </div>
+
+      <!-- Controles: selects A e B + botão comparar -->
       <div class="comparison-controls">
-        <select id="cmpSelectA" class="cmp-select"></select>
-        <span class="cmp-vs">VS</span>
-        <select id="cmpSelectB" class="cmp-select"></select>
-        <button class="studio-btn btn-action-transfer" onclick="window.executarComparacao()">⚖️ Comparar</button>
+        <select id="cmpSelectA" class="cmp-select" aria-label="Composto A"></select>
+        <span class="cmp-vs" aria-hidden="true">VS</span>
+        <select id="cmpSelectB" class="cmp-select" aria-label="Composto B"></select>
+        <button class="studio-btn btn-action-transfer"
+                onclick="window.executarComparacao()"
+                title="Comparar compostos">⚖️ Comparar</button>
       </div>
+
+      <!-- Viewports pareados -->
       <div class="comparison-viewports">
         <div class="comparison-pane">
-          <div class="comparison-pane-label" id="cmpLabelA">A</div>
+          <div class="comparison-pane-label" id="cmpLabelA">Composto A</div>
           <div class="comparison-viewer" id="cmpViewerA"></div>
         </div>
         <div class="comparison-pane">
-          <div class="comparison-pane-label" id="cmpLabelB">B</div>
+          <div class="comparison-pane-label" id="cmpLabelB">Composto B</div>
           <div class="comparison-viewer" id="cmpViewerB"></div>
         </div>
       </div>
+
+      <!-- Tabela de métricas comparativas -->
       <div class="comparison-metrics" id="comparisonMetrics">
-        <div style="text-align:center; padding:20px; color:#64748b;">Clique em ⚖️ para comparar.</div>
+        <div style="text-align:center; padding:20px; color:#64748b; font-size:0.78rem;">
+          Selecione dois compostos e clique em Comparar.
+        </div>
       </div>
     </div>
   </div>
 
+  <!-- ==========================================================================
+       7. BANCOS DE DADOS COMPARTILHADOS & UTILITÁRIOS
+       Carregados antes do studio.js para que estejam disponíveis globalmente.
+       ========================================================================== -->
   <script src="../data/lab-database.js"></script>
   <script src="../data/sinteses-database.js"></script>
   <script src="../js/lab-apis.js"></script>
   <script src="../js/lab-storage.js"></script>
+
+  <!-- ==========================================================================
+       8. MOTOR PRINCIPAL DO ESTÚDIO
+       ========================================================================== -->
   <script src="studio.js"></script>
 
+  <!-- ==========================================================================
+       9. CONTROLADORES GLOBAIS DA JANELA
+       Fullscreen, retorno ao laboratório e atalhos de teclado.
+       Estes handlers ficam no HTML porque são específicos da camada de janela
+       (window/document), não do domínio molecular.
+       ========================================================================== -->
   <script>
+    // ------------------------------------------------------------------------
+    // Alterna fullscreen nativo do navegador
+    // ------------------------------------------------------------------------
     function toggleNativeFullscreen() {
-      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-      else if (document.exitFullscreen) document.exitFullscreen();
-    }
-    function retornarAoLaboratorio() {
-      if (window.opener) window.close();
-      else if (window.parent && window.parent !== window) window.parent.postMessage({ acao: 'fecharModalStudio' }, '*');
-      else window.location.href = '../index.html';
-    }
-    document.addEventListener('fullscreenchange', () => {
-      if (typeof resetarCamera3D === 'function') setTimeout(resetarCamera3D, 150);
-    });
-    document.addEventListener('keydown', (e) => {
-      const t = (e.target.tagName || '').toLowerCase();
-      if (t === 'input' || t === 'textarea' || t === 'select') return;
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); window.desfazerEdicao?.(); }
-      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); window.refazerEdicao?.(); }
-      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); window.irParaAnterior?.(); }
-      if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); window.irParaProximo?.(); }
-      if (e.key === 'Escape') {
-        ['periodicTableModal','caddModal','bioisostereModal','similarityModal','comparisonModal'].forEach(id => {
-          const m = document.getElementById(id); if (m && m.style.display !== 'none') m.style.display = 'none';
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(function (err) {
+          console.warn('[Studio Fullscreen] Erro: ' + err.message);
         });
-        if (document.body.classList.contains('presentation-mode')) window.alternarModoApresentacao?.();
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen();
       }
-      if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey) window.alternarModoApresentacao?.();
+    }
+
+    // ------------------------------------------------------------------------
+    // Retorna ao laboratório — suporta três modos:
+    //   1. window.opener   → fechar aba aberta por window.open()
+    //   2. iframe/parent   → postMessage para fechar modal
+    //   3. direto          → redireciona para ../index.html
+    // ------------------------------------------------------------------------
+    function retornarAoLaboratorio() {
+      if (window.opener) {
+        window.close();
+      } else if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ acao: 'fecharModalStudio' }, '*');
+      } else {
+        window.location.href = '../index.html';
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // Sincroniza UI ao entrar/sair do fullscreen
+    // ------------------------------------------------------------------------
+    document.addEventListener('fullscreenchange', function () {
+      const btn = document.getElementById('btnToggleNativeFullscreen');
+      if (btn) {
+        btn.textContent = document.fullscreenElement ? '⛶' : '⛶';
+        btn.title = document.fullscreenElement ? 'Restaurar' : 'Tela Cheia';
+      }
+      if (typeof window.resetarCamera3D === 'function') {
+        setTimeout(window.resetarCamera3D, 150);
+      }
+    });
+
+    // ------------------------------------------------------------------------
+    // ATALHOS DE TECLADO GLOBAIS
+    // Ctrl+Z         → desfazer
+    // Ctrl+Y / Ctrl+Shift+Z → refazer
+    // Alt+←          → composto anterior
+    // Alt+→          → próximo composto
+    // ESC            → fecha modais / sai do Modo Apresentação
+    // P              → alterna Modo Apresentação
+    // ------------------------------------------------------------------------
+    document.addEventListener('keydown', function (e) {
+      const tag = (e.target.tagName || '').toLowerCase();
+      // Ignora quando o foco está em campos de entrada
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+      // Ctrl+Z → Desfazer
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (typeof window.desfazerEdicao === 'function') window.desfazerEdicao();
+      }
+
+      // Ctrl+Y ou Ctrl+Shift+Z → Refazer
+      if ((e.ctrlKey || e.metaKey) && (
+            e.key.toLowerCase() === 'y' ||
+            (e.shiftKey && e.key.toLowerCase() === 'z')
+          )) {
+        e.preventDefault();
+        if (typeof window.refazerEdicao === 'function') window.refazerEdicao();
+      }
+
+      // Alt+← → Composto anterior
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (typeof window.irParaAnterior === 'function') window.irParaAnterior();
+      }
+
+      // Alt+→ → Próximo composto
+      if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (typeof window.irParaProximo === 'function') window.irParaProximo();
+      }
+
+      // ESC → fecha todos os modais + sai do Modo Apresentação
+      if (e.key === 'Escape') {
+        ['periodicTableModal', 'caddModal', 'bioisostereModal',
+         'similarityModal', 'comparisonModal'].forEach(function (id) {
+          const m = document.getElementById(id);
+          if (m && m.style.display !== 'none') m.style.display = 'none';
+        });
+        if (document.body.classList.contains('presentation-mode')) {
+          if (typeof window.alternarModoApresentacao === 'function') {
+            window.alternarModoApresentacao();
+          }
+        }
+      }
+
+      // P → alterna Modo Apresentação
+      if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (typeof window.alternarModoApresentacao === 'function') {
+          window.alternarModoApresentacao();
+        }
+      }
+    });
+
+    // ------------------------------------------------------------------------
+    // Auto-foco na busca quando a janela abre
+    // ------------------------------------------------------------------------
+    window.addEventListener('load', function () {
+      const input = document.getElementById('studioSearchInput');
+      if (input) input.focus();
     });
   </script>
+
 </body>
 </html>
