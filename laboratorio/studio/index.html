@@ -28,12 +28,19 @@
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
 
   <!-- OpenChemLib — geração local de coordenadas 3D (JS puro, engine primária) -->
-  <script src="https://unpkg.com/openchemlib@9.25.0/dist/openchemlib-full.js"></script>
-
-  <!-- RDKit WASM — engine secundária (descritores, SMARTS, fingerprints, scaffold)
-       Estratégia: tenta local primeiro; se falhar, carrega do CDN automaticamente.
-       Para usar local, coloque RDKit_minimal.js e RDKit_minimal.wasm em studio/vendor/rdkit/ -->
-  <script>
+  <!-- OpenChemLib — geração local de 3D (JS puro) -->
+<script src="https://unpkg.com/openchemlib@8.6.0/dist/openchemlib-full.js"></script>
+<script>
+  // Fallback: se unpkg falhar, tenta jsdelivr
+  window.addEventListener('DOMContentLoaded', function () {
+    if (typeof window.OCL === 'undefined') {
+      console.warn('[OCL Loader] unpkg falhou, tentando jsdelivr...');
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/openchemlib@8.6.0/dist/openchemlib-full.js';
+      document.head.appendChild(s);
+    }
+  });
+</script>
     (function () {
       var RDKIT_LOCAL = 'vendor/rdkit/RDKit_minimal.js';
       var RDKIT_CDN = 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js';
