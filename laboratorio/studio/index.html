@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="LAIFT — Estúdio de Projeção e Modelagem Molecular 3D: quimioinformática, CADD, bioisosterismo e tabela periódica interativa.">
   <meta name="author" content="LAIFT">
-  <title>LAIFT — Estúdio Molecular 3D v4.3</title>
+  <title>LAIFT — Estúdio Molecular 3D v4.5</title>
 
   <!-- ==========================================================================
        2. FONTES
@@ -77,18 +77,16 @@
 
   <!-- ─── RDKit WASM — engine secundária (descritores, SMARTS, FP) ────────
        Loader robusto:
-         1. Verifica existência do arquivo local via HEAD (evita carregar HTML 404)
+         1. Cascata: unpkg → jsDelivr
          2. Aguarda até 2s após onload para initRDKitModule aparecer
-         3. Cascata: local → unpkg → jsDelivr
-         4. Expõe window.__rdkitReady (Promise) para o studio.js aguardar
+         3. Expõe window.__rdkitReady (Promise) para o studio.js aguardar
   -->
   <script>
     window.__rdkitReady = (function () {
       var sources = [
-        var sources = [
-  { url: 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js',         label: 'unpkg' },
-  { url: 'https://cdn.jsdelivr.net/npm/@rdkit/rdkit/dist/RDKit_minimal.js', label: 'jsDelivr' }
-];
+        { url: 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js', label: 'unpkg' },
+        { url: 'https://cdn.jsdelivr.net/npm/@rdkit/rdkit/dist/RDKit_minimal.js', label: 'jsDelivr' }
+      ];
       var idx = 0;
 
       return new Promise(function (resolve) {
@@ -99,25 +97,7 @@
             return;
           }
           var entry = sources[idx++];
-
-          if (entry.label === 'local') {
-            // Verifica ANTES de injetar — evita HTML 404 como JS
-            fetch(entry.url, { method: 'HEAD' })
-              .then(function (res) {
-                if (res.ok) {
-                  injetarScript(entry);
-                } else {
-                  console.log('[RDKit Loader] Local ausente (status ' + res.status + '), pulando...');
-                  tentarProximo();
-                }
-              })
-              .catch(function () {
-                console.log('[RDKit Loader] Local inacessível, pulando...');
-                tentarProximo();
-              });
-          } else {
-            injetarScript(entry);
-          }
+          injetarScript(entry);
         }
 
         function injetarScript(entry) {
@@ -168,7 +148,7 @@
       <div class="studio-logo-icon" aria-hidden="true">🧬</div>
       <div class="studio-titles">
         <h1>LAIFT • ESTÚDIO MOLECULAR</h1>
-        <span class="studio-sub-badge">CADD · Bioisosterismo · Tabela Periódica v4.3</span>
+        <span class="studio-sub-badge">CADD · Bioisosterismo · Tabela Periódica v4.5</span>
       </div>
       <span class="badge badge-counter" id="studioTotalBadge" aria-live="polite">Indexando...</span>
     </div>
