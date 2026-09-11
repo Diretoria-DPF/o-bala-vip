@@ -2295,6 +2295,112 @@ body.presentation-mode .studio-watermark-overlay {
     font-size: 0.54rem;
     padding: 2px 5px;
   }
+/* =========================================================================
+   v4.6 — DOSSIÊ CHEMBL (NOVO)
+   ========================================================================= */
+.chembl-modal-content {
+  max-width: 920px;
+  max-height: 88dvh;
+}
+
+.chembl-header {
+  border-bottom-color: rgba(168, 85, 247, 0.35);
+}
+
+.chembl-body {
+  gap: 12px;
+}
+
+.chembl-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.chembl-stat {
+  background: rgba(2, 6, 23, 0.75);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chembl-stat span {
+  font-size: 0.6rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chembl-stat strong {
+  font-size: 0.82rem;
+  color: #f8fafc;
+  font-family: var(--font-mono);
+}
+
+.chembl-activity-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.chembl-activity-table th,
+.chembl-activity-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chembl-activity-table th {
+  color: #94a3b8;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  background: rgba(2, 6, 23, 0.6);
+  position: sticky;
+  top: 0;
+}
+
+.chembl-activity-table tr:hover {
+  background: rgba(168, 85, 247, 0.05);
+}
+
+.btn-chembl-trigger {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(236, 72, 153, 0.2)) !important;
+  border-color: #a855f7 !important;
+  color: #e9d5ff !important;
+  font-weight: 700 !important;
+}
+
+.btn-chembl-trigger:hover {
+  background: #a855f7 !important;
+  color: #fff !important;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6) !important;
+}
+
+/* Cross-references (UniChem) no dossiê CADD */
+.crossref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.crossref-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+}
+
+.crossref-item strong {
+  color: var(--neon-cyan);
+}
 }
 
 /* ============================================================================
