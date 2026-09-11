@@ -8,7 +8,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="LAIFT — Estúdio de Projeção e Modelagem Molecular 3D: quimioinformática, CADD, bioisosterismo e tabela periódica interativa.">
   <meta name="author" content="LAIFT">
-  <title>LAIFT — Estúdio Molecular 3D v4.0</title>
+  <title>LAIFT — Estúdio Molecular 3D v4.2</title>
 
   <!-- ==========================================================================
        2. FONTES
@@ -21,56 +21,75 @@
        3. MOTORES DE RENDERIZAÇÃO & QUIMIOINFORMÁTICA
        ========================================================================== -->
 
-  <!-- SmilesDrawer — renderização 2D vetorial (canvas) -->
+  <!-- ─── SmilesDrawer — renderização 2D vetorial (canvas) ──────────────── -->
   <script src="https://unpkg.com/smiles-drawer@2.3.0/dist/smiles-drawer.min.js"></script>
 
-  <!-- 3Dmol.js — renderização 3D WebGL -->
+  <!-- ─── 3Dmol.js — renderização 3D WebGL ──────────────────────────────── -->
   <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
 
-  <!-- OpenChemLib — geração local de coordenadas 3D (JS puro, engine primária) -->
-  <!-- OpenChemLib — geração local de 3D (JS puro) -->
-<script src="https://unpkg.com/openchemlib@8.6.0/dist/openchemlib-full.js"></script>
-<script>
-  // Fallback: se unpkg falhar, tenta jsdelivr
-  window.addEventListener('DOMContentLoaded', function () {
-    if (typeof window.OCL === 'undefined') {
-      console.warn('[OCL Loader] unpkg falhou, tentando jsdelivr...');
-      var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/openchemlib@8.6.0/dist/openchemlib-full.js';
-      document.head.appendChild(s);
-    }
-  });
-</script>
+  <!-- ─── OpenChemLib — geração local de 3D (JS puro) ─────────────────────
+       Versão 8.6.0 é a última estável com 'dist/openchemlib-full.js'.
+       Fallback automático para jsDelivr caso unpkg esteja bloqueado. -->
+  <script src="https://unpkg.com/openchemlib@8.6.0/dist/openchemlib-full.js"></script>
+  <script>
     (function () {
-      var RDKIT_LOCAL = 'vendor/rdkit/RDKit_minimal.js';
-      var RDKIT_CDN = 'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js';
-
-      // Testa se o arquivo local existe via fetch HEAD (evita 404 como script)
-      fetch(RDKIT_LOCAL, { method: 'HEAD' })
-        .then(function (res) {
-          var url = res.ok ? RDKIT_LOCAL : RDKIT_CDN;
-          console.log('[RDKit Loader] Usando: ' + (res.ok ? 'LOCAL' : 'CDN'));
+      window.addEventListener('DOMContentLoaded', function () {
+        if (typeof window.OCL === 'undefined') {
+          console.warn('[OCL Loader] unpkg falhou, tentando jsDelivr...');
           var s = document.createElement('script');
-          s.src = url;
+          s.src = 'https://cdn.jsdelivr.net/npm/openchemlib@8.6.0/dist/openchemlib-full.js';
+          s.onload = function () {
+            console.log('[OCL Loader] ✅ Carregado via jsDelivr');
+          };
           s.onerror = function () {
-            console.warn('[RDKit Loader] Falhou, tentando CDN...');
-            var s2 = document.createElement('script');
-            s2.src = RDKIT_CDN;
-            document.head.appendChild(s2);
+            console.error('[OCL Loader] ❌ Ambos os CDNs falharam');
           };
           document.head.appendChild(s);
-        })
-        .catch(function () {
-          // Se HEAD falhar (CORS ou arquivo ausente), usa CDN
-          console.log('[RDKit Loader] HEAD falhou, usando CDN');
-          var s = document.createElement('script');
-          s.src = RDKIT_CDN;
-          document.head.appendChild(s);
-        });
+        } else {
+          console.log('[OCL Loader] ✅ Carregado via unpkg');
+        }
+      });
     })();
   </script>
-  -->
-  <script src="vendor/rdkit/RDKit_minimal.js"></script>
+
+  <!-- ─── RDKit WASM — engine secundária (descritores, SMARTS, FP) ────────
+       Cascata: local (vendor/rdkit/) → unpkg → jsDelivr.
+       Valida initRDKitModule após o load (o script pode carregar mas o WASM
+       interno ainda falhar em redes lentas). -->
+  <script>
+    (function () {
+      var sources = [
+        'vendor/rdkit/RDKit_minimal.js',
+        'https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js',
+        'https://cdn.jsdelivr.net/npm/@rdkit/rdkit/dist/RDKit_minimal.js'
+      ];
+
+      var idx = 0;
+      function tentarProximo() {
+        if (idx >= sources.length) {
+          console.error('[RDKit Loader] ❌ Todos os CDNs falharam');
+          return;
+        }
+        var url = sources[idx++];
+        var s = document.createElement('script');
+        s.src = url;
+        s.onload = function () {
+          if (typeof window.initRDKitModule === 'function') {
+            console.log('[RDKit Loader] ✅ Carregado de: ' + url);
+          } else {
+            console.warn('[RDKit Loader] initRDKitModule ausente após load, tentando próximo...');
+            tentarProximo();
+          }
+        };
+        s.onerror = function () {
+          console.warn('[RDKit Loader] Falhou: ' + url);
+          tentarProximo();
+        };
+        document.head.appendChild(s);
+      }
+      tentarProximo();
+    })();
+  </script>
 
   <!-- Folha de estilos do Estúdio -->
   <link rel="stylesheet" href="studio.css">
@@ -80,15 +99,13 @@
 
   <!-- ==========================================================================
        4. CABEÇALHO DO ESTÚDIO
-       Branding, contador de espécies, histórico (◀ ▶), undo/redo, favoritos,
-       apresentação, fullscreen, transferência para bancada e retorno.
        ========================================================================== -->
   <header class="studio-main-header">
     <div class="header-branding">
       <div class="studio-logo-icon" aria-hidden="true">🧬</div>
       <div class="studio-titles">
         <h1>LAIFT • ESTÚDIO MOLECULAR</h1>
-        <span class="studio-sub-badge">CADD · Bioisosterismo · Tabela Periódica v4.0</span>
+        <span class="studio-sub-badge">CADD · Bioisosterismo · Tabela Periódica v4.2</span>
       </div>
       <span class="badge badge-counter" id="studioTotalBadge" aria-live="polite">Indexando...</span>
     </div>
@@ -100,52 +117,50 @@
       <button class="studio-btn btn-icon-only" onclick="window.irParaProximo()" id="btnNavForward"
               title="Próximo composto (Alt+→)" aria-label="Próximo">▶</button>
 
-      <!-- Undo / Redo de edições -->
+      <!-- Undo / Redo -->
       <button class="studio-btn btn-icon-only" onclick="window.desfazerEdicao()" id="btnUndo"
               title="Desfazer (Ctrl+Z)" aria-label="Desfazer" disabled>↶</button>
       <button class="studio-btn btn-icon-only" onclick="window.refazerEdicao()" id="btnRedo"
               title="Refazer (Ctrl+Y)" aria-label="Refazer" disabled>↷</button>
 
-      <!-- Favoritar composto ativo (oculto até haver seleção) -->
+      <!-- Favoritar -->
       <button class="studio-btn btn-icon-only btn-favorite" onclick="window.alternarFavoritoAtual()"
               id="btnFavoriteCurrent" title="Favoritar composto ativo"
               aria-label="Favoritar" style="display:none;">☆</button>
 
-      <!-- Modo Apresentação (oculta UI e vai para fullscreen) -->
+      <!-- Modo Apresentação -->
       <button class="studio-btn btn-icon-only" onclick="window.alternarModoApresentacao()"
               title="Modo Apresentação (P)" aria-label="Modo Apresentação">🎬</button>
 
-      <!-- Fullscreen nativo do navegador -->
+      <!-- Fullscreen nativo -->
       <button class="studio-btn btn-icon-only" onclick="toggleNativeFullscreen()"
               id="btnToggleNativeFullscreen" title="Tela Cheia"
               aria-label="Tela Cheia">⛶</button>
 
-      <!-- Transferir composto ativo para a bancada -->
+      <!-- Transferir para bancada -->
       <button class="studio-btn btn-action-transfer" onclick="carregarCompostoDoStudioNaBancada()"
               id="btnCarregarNaBancada" title="Transferir para bancada"
               aria-label="Transferir para bancada" style="display:none;">
         🧪 <span class="btn-text">Bancada</span>
       </button>
 
-      <!-- Retornar ao laboratório -->
+      <!-- Voltar -->
       <button class="studio-btn btn-action-back" onclick="retornarAoLaboratorio()"
               title="Retornar à Bancada" aria-label="Voltar">✕</button>
     </div>
   </header>
 
   <!-- ==========================================================================
-       5. WORKSPACE EM GRADE (SIDEBAR + VIEWPORT)
+       5. WORKSPACE
        ========================================================================== -->
   <main class="studio-workspace-grid">
 
     <!-- ======================================================================
          5.1. SIDEBAR DE COMPOSTOS
-         Busca, filtros por categoria, lista virtualizada e contador.
          ====================================================================== -->
     <aside class="studio-sidebar-panel" aria-label="Catálogo de compostos">
 
       <div class="sidebar-search-container">
-        <!-- Campo de busca com debounce (handled em studio.js) -->
         <div class="search-input-wrapper">
           <span class="search-icon" aria-hidden="true">🔍</span>
           <input type="text"
@@ -157,7 +172,6 @@
                  aria-label="Buscar compostos">
         </div>
 
-        <!-- Filtros por categoria (pills) -->
         <div class="category-filters-scroll" role="tablist" aria-label="Filtros de categoria">
           <button class="category-pill active" data-cat="todas"
                   onclick="filtrarCategoriaStudio('todas')" role="tab">Todas</button>
@@ -176,14 +190,12 @@
         </div>
       </div>
 
-      <!-- Lista virtualizada (render em chunks de 40 itens) -->
       <div class="compound-virtual-list"
            id="studioCompoundList"
            onscroll="handleStudioScroll()"
            role="listbox"
            aria-label="Lista de compostos"></div>
 
-      <!-- Contador de compostos visíveis -->
       <div class="sidebar-footer-counter">
         <span id="studioFilteredCount" aria-live="polite">0 compostos visíveis</span>
       </div>
@@ -191,14 +203,11 @@
 
     <!-- ======================================================================
          5.2. VIEWPORT CIENTÍFICO
-         Toolbar, canvas 3D/2D, HUDs flutuantes e telemetria inferior.
          ====================================================================== -->
     <section class="studio-viewport-panel">
 
       <!-- ------------------------------------------------------------------
            TOOLBAR RIBBON
-           Modo 2D/3D · Estilos 3D · Ferramentas de análise · Geometria ·
-           Ações (rotação, reset, exportação)
            ------------------------------------------------------------------ -->
       <nav class="studio-toolbar-ribbon" aria-label="Ferramentas do estúdio">
 
@@ -256,7 +265,7 @@
                   title="Limpar medições">🧹</button>
         </div>
 
-        <!-- Ações do viewport (rotação, reset, exportação) -->
+        <!-- Ações do viewport -->
         <div class="toolbar-cluster right-aligned-cluster">
           <button class="tool-btn" id="btnAutoRotate"
                   onclick="toggleAutoRotacao3D()"
@@ -274,7 +283,6 @@
 
       <!-- ------------------------------------------------------------------
            CANVAS STAGE
-           Viewport 3D, viewport 2D, HUDs flutuantes, indicadores, watermark
            ------------------------------------------------------------------ -->
       <div class="studio-canvas-stage" id="studioCanvasWrapper">
 
@@ -297,7 +305,7 @@
           </div>
         </div>
 
-        <!-- HUD: Inspeção Atômica (ao clicar em átomo no 3D) -->
+        <!-- HUD: Inspeção Atômica -->
         <div class="atom-inspector-hud" id="atomInspectorHud" style="display:none;"
              role="dialog" aria-label="Inspetor atômico">
           <div class="atom-inspector-header">
@@ -336,7 +344,7 @@
           <span id="rdkitIndicatorText">Processando...</span>
         </div>
 
-        <!-- Watermark central (some após primeira seleção) -->
+        <!-- Watermark central -->
         <div class="studio-watermark-overlay" id="studioWatermark">
           Selecione uma molécula no painel lateral
         </div>
@@ -349,7 +357,6 @@
 
       <!-- ------------------------------------------------------------------
            TELEMETRIA INFERIOR (HUD)
-           Espécie · Fórmula/Massa · Badges CADD · Inspeção
            ------------------------------------------------------------------ -->
       <footer class="studio-telemetry-hud" aria-label="Telemetria molecular">
 
@@ -400,10 +407,7 @@
        6. MODAIS
        ========================================================================== -->
 
-  <!-- ========================================================================
-       MODAL 1 — TABELA PERIÓDICA (118 elementos)
-       Grade 18×9 com filtros, sidebar detalhada e ações de substituição/adição
-       ======================================================================== -->
+  <!-- MODAL: TABELA PERIÓDICA -->
   <div class="cadd-modal" id="periodicTableModal" style="display:none;"
        role="dialog" aria-modal="true" aria-label="Tabela Periódica">
     <div class="cadd-modal-content ptable-modal-content">
@@ -422,7 +426,6 @@
 
       <div class="ptable-modal-layout">
 
-        <!-- Coluna esquerda: filtros + matriz -->
         <div class="ptable-grid-column">
           <div class="ptable-filters-bar" role="tablist" aria-label="Filtros de família">
             <button class="ptable-pill active" data-cat="todas"
@@ -449,13 +452,11 @@
                     onclick="filtrarElementosPTable('gas-nobre')">Gases Nobres</button>
           </div>
 
-          <!-- Grade da tabela (grid 18 colunas × 9 linhas) -->
           <div class="ptable-matrix-scroll">
             <div class="ptable-matrix" id="ptableMatrix"></div>
           </div>
         </div>
 
-        <!-- Coluna direita: dossiê do elemento selecionado -->
         <aside class="ptable-inspector-sidebar" aria-label="Detalhes do elemento">
           <div class="ptable-detail-card" id="ptableDetailContent">
             <div style="text-align:center; color:#64748b; padding:40px 10px;">
@@ -467,10 +468,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       MODAL 2 — DOSSIÊ CADD
-       Lipinski · Veber · Ghose · PAINS
-       ======================================================================== -->
+  <!-- MODAL: DOSSIÊ CADD -->
   <div class="cadd-modal" id="caddModal" style="display:none;"
        role="dialog" aria-modal="true" aria-label="Dossiê CADD">
     <div class="cadd-modal-content">
@@ -487,9 +485,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       MODAL 3 — BIOISOSTERISMO
-       ======================================================================== -->
+  <!-- MODAL: BIOISOSTERISMO -->
   <div class="cadd-modal" id="bioisostereModal" style="display:none;"
        role="dialog" aria-modal="true" aria-label="Bioisosterismo">
     <div class="cadd-modal-content bioisostere-modal-content">
@@ -506,9 +502,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       MODAL 4 — SIMILARIDADE TANIMOTO
-       ======================================================================== -->
+  <!-- MODAL: SIMILARIDADE TANIMOTO -->
   <div class="cadd-modal" id="similarityModal" style="display:none;"
        role="dialog" aria-modal="true" aria-label="Similaridade estrutural">
     <div class="cadd-modal-content similarity-modal-content">
@@ -525,9 +519,7 @@
     </div>
   </div>
 
-  <!-- ========================================================================
-       MODAL 5 — COMPARAÇÃO LADO A LADO
-       ======================================================================== -->
+  <!-- MODAL: COMPARAÇÃO LADO A LADO -->
   <div class="cadd-modal" id="comparisonModal" style="display:none;"
        role="dialog" aria-modal="true" aria-label="Comparação molecular">
     <div class="cadd-modal-content comparison-modal-content">
@@ -542,7 +534,6 @@
                 aria-label="Fechar">&times;</button>
       </div>
 
-      <!-- Controles: selects A e B + botão comparar -->
       <div class="comparison-controls">
         <select id="cmpSelectA" class="cmp-select" aria-label="Composto A"></select>
         <span class="cmp-vs" aria-hidden="true">VS</span>
@@ -552,7 +543,6 @@
                 title="Comparar compostos">⚖️ Comparar</button>
       </div>
 
-      <!-- Viewports pareados -->
       <div class="comparison-viewports">
         <div class="comparison-pane">
           <div class="comparison-pane-label" id="cmpLabelA">Composto A</div>
@@ -564,7 +554,6 @@
         </div>
       </div>
 
-      <!-- Tabela de métricas comparativas -->
       <div class="comparison-metrics" id="comparisonMetrics">
         <div style="text-align:center; padding:20px; color:#64748b; font-size:0.78rem;">
           Selecione dois compostos e clique em Comparar.
@@ -575,7 +564,6 @@
 
   <!-- ==========================================================================
        7. BANCOS DE DADOS COMPARTILHADOS & UTILITÁRIOS
-       Carregados antes do studio.js para que estejam disponíveis globalmente.
        ========================================================================== -->
   <script src="../data/lab-database.js"></script>
   <script src="../data/sinteses-database.js"></script>
@@ -589,9 +577,6 @@
 
   <!-- ==========================================================================
        9. CONTROLADORES GLOBAIS DA JANELA
-       Fullscreen, retorno ao laboratório e atalhos de teclado.
-       Estes handlers ficam no HTML porque são específicos da camada de janela
-       (window/document), não do domínio molecular.
        ========================================================================== -->
   <script>
     // ------------------------------------------------------------------------
@@ -639,25 +624,22 @@
 
     // ------------------------------------------------------------------------
     // ATALHOS DE TECLADO GLOBAIS
-    // Ctrl+Z         → desfazer
+    // Ctrl+Z               → desfazer
     // Ctrl+Y / Ctrl+Shift+Z → refazer
-    // Alt+←          → composto anterior
-    // Alt+→          → próximo composto
-    // ESC            → fecha modais / sai do Modo Apresentação
-    // P              → alterna Modo Apresentação
+    // Alt+←                → composto anterior
+    // Alt+→                → próximo composto
+    // ESC                  → fecha modais / sai do Modo Apresentação
+    // P                    → alterna Modo Apresentação
     // ------------------------------------------------------------------------
     document.addEventListener('keydown', function (e) {
       const tag = (e.target.tagName || '').toLowerCase();
-      // Ignora quando o foco está em campos de entrada
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-      // Ctrl+Z → Desfazer
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (typeof window.desfazerEdicao === 'function') window.desfazerEdicao();
       }
 
-      // Ctrl+Y ou Ctrl+Shift+Z → Refazer
       if ((e.ctrlKey || e.metaKey) && (
             e.key.toLowerCase() === 'y' ||
             (e.shiftKey && e.key.toLowerCase() === 'z')
@@ -666,19 +648,16 @@
         if (typeof window.refazerEdicao === 'function') window.refazerEdicao();
       }
 
-      // Alt+← → Composto anterior
       if (e.altKey && e.key === 'ArrowLeft') {
         e.preventDefault();
         if (typeof window.irParaAnterior === 'function') window.irParaAnterior();
       }
 
-      // Alt+→ → Próximo composto
       if (e.altKey && e.key === 'ArrowRight') {
         e.preventDefault();
         if (typeof window.irParaProximo === 'function') window.irParaProximo();
       }
 
-      // ESC → fecha todos os modais + sai do Modo Apresentação
       if (e.key === 'Escape') {
         ['periodicTableModal', 'caddModal', 'bioisostereModal',
          'similarityModal', 'comparisonModal'].forEach(function (id) {
@@ -692,7 +671,6 @@
         }
       }
 
-      // P → alterna Modo Apresentação
       if (e.key.toLowerCase() === 'p' && !e.ctrlKey && !e.metaKey && !e.altKey) {
         if (typeof window.alternarModoApresentacao === 'function') {
           window.alternarModoApresentacao();
