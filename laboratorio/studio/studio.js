@@ -1078,78 +1078,120 @@ console.log(
    * Carrega RDKit WASM sob demanda. Estratégia híbrida: tenta local (vendor/rdkit/)
    * e cai automaticamente para CDN unpkg se o local falhar.
    */
-  function carregarRDKitSobDemanda() {
-    if (STATE.RDKitModuleInstance) return Promise.resolve(STATE.RDKitModuleInstance);
-    if (STATE.rdkitFalhou) return Promise.resolve(null);
-    if (STATE.rdkitPromise) return STATE.rdkitPromise;
+ function carregarRDKitSobDemanda() {
+  if (STATE.RDKitModuleInstance) return Promise.resolve(STATE.RDKitModuleInstance);
+  if (STATE.rdkitFalhou) return Promise.resolve(null);
+  if (STATE.rdkitPromise) return STATE.rdkitPromise;
 
-    STATE.rdkitPromise = new Promise(function (resolve) {
-      exibirStatusRDKit(true, 'Carregando RDKit WASM...');
-      console.log('[RDKit] Iniciando carregamento...');
+  STATE.rdkitPromise = new Promise(function (resolve) {
+    exibirStatusRDKit(true, 'Carregando RDKit WASM...');
+    console.log('[RDKit] Iniciando carregamento...');
 
-      const timeout = function (ms) {
-        return new Promise(function (_, rej) {
-          setTimeout(function () { rej(new Error('Timeout ' + ms + 'ms')); }, ms);
-        });
-      };
+    var resolvido = false;
+    function terminar(valor) {
+      if (resolvido) return;
+      resolvido = true;
+      exibirStatusRDKit(false);
+      resolve(valor);
+    }
 
-      async function tentarInit() {
-        if (typeof window.initRDKitModule !== 'function') {
-          throw new Error('initRDKitModule ausente');
-        }
-        const config = {
-          locateFile: function (file) {
-            return 'vendor/rdkit/' + file;
-          }
-        };
-        const mod = await Promise.race([
-          window.initRDKitModule(config),
-          timeout(25000)
-        ]);
-        if (!mod || typeof mod.get_mol !== 'function') {
-          throw new Error('Módulo RDKit inválido');
-        }
-        return mod;
+    // Timeout global de segurança — NUNCA deixa a promise pendurada
+    var timeoutGlobal = setTimeout(function () {
+      console.warn('[RDKit] ⏱️ Timeout global 30s — prosseguindo sem RDKit');
+      STATE.rdkitFalhou = true;
+      mostrarNotificacao('⚠️ RDKit demorou demais — funcionalidades limitadas', 'warning', 4000);
+      terminar(null);
+    }, 30000);
+
+    // Aguarda até 3 segundos que initRDKitModule apareça (script em paralelo)
+    function aguardarInitRDKit(tentativasRestantes, callback) {
+      if (typeof window.initRDKitModule === 'function') {
+        return callback(true);
+      }
+      if (tentativasRestantes <= 0) {
+        return callback(false);
+      }
+      setTimeout(function () {
+        aguardarInitRDKit(tentativasRestantes - 1, callback);
+      }, 300);
+    }
+
+    // Timeout curto por tentativa (não global)
+    function timeoutCurto(ms) {
+      return new Promise(function (_, rej) {
+        setTimeout(function () { rej(new Error('Timeout ' + ms + 'ms')); }, ms);
+      });
+    }
+
+    aguardarInitRDKit(10, function (initDisponivel) {
+      if (!initDisponivel) {
+        console.warn('[RDKit] ❌ initRDKitModule nunca apareceu após 3s');
+        STATE.rdkitFalhou = true;
+        clearTimeout(timeoutGlobal);
+        mostrarNotificacao('⚠️ RDKit offline — usando heurísticas', 'warning', 4000);
+        terminar(null);
+        return;
       }
 
-      tentarInit()
+      // ─── Tentativa 1: LOCAL ─────────────────────────────────────────
+      Promise.race([
+        window.initRDKitModule({ locateFile: function (f) { return 'vendor/rdkit/' + f; } }),
+        timeoutCurto(15000)
+      ])
         .then(function (mod) {
-          STATE.RDKitModuleInstance = mod;
-          console.log('[RDKit] ✅ Carregado localmente');
-          exibirStatusRDKit(false);
-          mostrarNotificacao('✅ RDKit ativo', 'success', 2000);
-          resolve(mod);
+          if (mod && typeof mod.get_mol === 'function') {
+            STATE.RDKitModuleInstance = mod;
+            console.log('[RDKit] ✅ Carregado localmente');
+            mostrarNotificacao('✅ RDKit ativo', 'success', 2000);
+            clearTimeout(timeoutGlobal);
+            terminar(mod);
+          } else {
+            throw new Error('Módulo local inválido');
+          }
         })
-        .catch(function (err) {
-          console.warn('[RDKit] ❌ Local falhou:', err.message);
-          window.initRDKitModule({
-            locateFile: function (file) {
-              console.log('[RDKit] CDN fallback:', file);
-              return 'https://unpkg.com/@rdkit/rdkit/dist/' + file;
-            }
-          })
+        .catch(function (errLocal) {
+          console.warn('[RDKit] Local falhou:', errLocal.message);
+
+          // ─── Tentativa 2: CDN ───────────────────────────────────────
+          if (typeof window.initRDKitModule !== 'function') {
+            // Re-checa (pode ter sido redefinido pelo script do <head>)
+            console.warn('[RDKit] ❌ initRDKitModule desapareceu antes do CDN');
+            STATE.rdkitFalhou = true;
+            clearTimeout(timeoutGlobal);
+            terminar(null);
+            return;
+          }
+
+          Promise.race([
+            window.initRDKitModule({ locateFile: function (f) { return 'https://unpkg.com/@rdkit/rdkit/dist/' + f; } }),
+            timeoutCurto(15000)
+          ])
             .then(function (mod) {
-              STATE.RDKitModuleInstance = mod;
-              console.log('[RDKit] ✅ Carregado via CDN');
-              exibirStatusRDKit(false);
-              resolve(mod);
+              if (mod && typeof mod.get_mol === 'function') {
+                STATE.RDKitModuleInstance = mod;
+                console.log('[RDKit] ✅ Carregado via CDN');
+                clearTimeout(timeoutGlobal);
+                terminar(mod);
+              } else {
+                throw new Error('Módulo CDN inválido');
+              }
             })
-            .catch(function (err2) {
-              console.warn('[RDKit] ❌ CDN falhou:', err2.message);
+            .catch(function (errCdn) {
+              console.warn('[RDKit] ❌ CDN falhou:', errCdn.message);
               STATE.rdkitFalhou = true;
-              exibirStatusRDKit(false);
-              mostrarNotificacao('⚠️ RDKit offline — funcionalidades limitadas', 'warning', 5000);
-              resolve(null);
+              clearTimeout(timeoutGlobal);
+              mostrarNotificacao('⚠️ RDKit offline — funcionalidades limitadas', 'warning', 4000);
+              terminar(null);
             });
         });
     });
+  });
 
-    return STATE.rdkitPromise;
-  }
-  // ››› FIM: carregarRDKitSobDemanda() — loader RDKit com fallback local→CDN.
-  // ››› FEEDBACK: guarda promessa para evitar cargas concorrentes.
-  // ═══════════════════════════════════════════════════════════════════════════
-
+  return STATE.rdkitPromise;
+}
+// ››› FIM: carregarRDKitSobDemanda() — v4.3 SEMPRE resolve a promise.
+// ››› FEEDBACK: adiciona waitForInitRDKit (aguarda script em paralelo),
+//     timeout global (nunca deixa pendurado), e verificação typeof antes de chamar.
   /**
    * Detecta disponibilidade do OpenChemLib (carregado via <script>).
    */
@@ -2796,14 +2838,23 @@ console.log(
    * Valida se uma string contém SDF real (não página HTML de erro).
    */
   function validarConteudoSDF(sdf) {
-    if (!sdf || typeof sdf !== 'string') return false;
-    if (sdf.indexOf('<!DOCTYPE') >= 0 || sdf.indexOf('<html') >= 0) return false;
-    if (sdf.length < 30) return false;
-    return sdf.indexOf('$$$$') >= 0 || sdf.indexOf('M  END') >= 0;
-  }
-  // ››› FIM: validarConteudoSDF() — guarda contra HTML de 404 interpretado como SDF.
-  // ═══════════════════════════════════════════════════════════════════════════
+  if (!sdf || typeof sdf !== 'string') return false;
+  if (sdf.indexOf('<!DOCTYPE') >= 0 || sdf.indexOf('<html') >= 0) return false;
+  if (sdf.indexOf('<') === 0) return false;            // ← novo: HTML puro
+  if (sdf.length < 50) return false;
+  if (sdf.indexOf('$$$$') < 0 && sdf.indexOf('M  END') < 0) return false;
 
+  // Verifica se a linha de contagem (linha 4, índice 3) tem átomos > 0
+  var linhas = sdf.split('\n');
+  if (linhas.length < 4) return false;
+  var countsLine = linhas[3] || '';
+  var numAtoms = parseInt(countsLine.substring(0, 3).trim(), 10);
+  if (isNaN(numAtoms) || numAtoms <= 0) return false;
+
+  return true;
+}
+// ››› FIM: validarConteudoSDF() — v4.3 exige numAtoms > 0.
+// ››› FEEDBACK: evita que o 3Dmol receba SDF com 0 átomos (causa do TypeError).
   /**
    * Gera SDF mínimo para átomo monoatômico (ex.: [Na], [K]).
    */
@@ -3053,7 +3104,14 @@ console.log(
    */
   function construirCena3D(sdfText) {
   const container = document.getElementById('studioViewer3D');
-  if (!container || !window.$3Dmol || !validarConteudoSDF(sdfText)) return;
+  if (!container || !window.$3Dmol) return;
+
+  // Validação reforçada — aborta ANTES de tocar no 3Dmol
+  if (!validarConteudoSDF(sdfText)) {
+    console.warn('[3D] SDF inválido rejeitado por validarConteudoSDF');
+    STATE.modeloCarregadoAtivo = false;
+    return;
+  }
 
   const rect = container.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) {
@@ -3061,7 +3119,7 @@ console.log(
     return;
   }
 
-  // ─── Caminho 1: reutilizar viewer existente (evita leak WebGL) ──────
+  // ─── Caminho 1: reutilizar viewer existente ─────────────────────────
   if (STATE.studioViewer && container.querySelector('canvas')) {
     try {
       STATE.studioViewer.removeAllModels();
@@ -3085,13 +3143,11 @@ console.log(
       return;
     } catch (reuseErr) {
       console.warn('[3D] Reuso falhou, recriando:', reuseErr.message);
-      // Cai no caminho 2
     }
   }
 
-  // ─── Caminho 2: criar viewer novo (só na primeira vez ou se reuso falhou) ────
+  // ─── Caminho 2: criar viewer novo ───────────────────────────────────
   try {
-    // Destrói viewer antigo ANTES de criar novo
     if (STATE.studioViewer) {
       try { STATE.studioViewer.stopAnimate(); } catch (e) {}
       try { STATE.studioViewer.clear(); } catch (e) {}
@@ -3105,13 +3161,13 @@ console.log(
       antialias: true
     });
 
-    const model = STATE.studioViewer.addModel(sdfText, 'sdf');
+    var model = STATE.studioViewer.addModel(sdfText, 'sdf');
     if (!model || typeof model.selectedAtoms !== 'function') {
       STATE.modeloCarregadoAtivo = false;
       return;
     }
 
-    const ats = model.selectedAtoms({}) || [];
+    var ats = model.selectedAtoms({}) || [];
     if (ats.length === 0) {
       STATE.modeloCarregadoAtivo = false;
       return;
@@ -3131,7 +3187,7 @@ console.log(
     setTimeout(function () {
       if (STATE.studioViewer && STATE.modeloCarregadoAtivo) {
         try {
-          const r2 = container.getBoundingClientRect();
+          var r2 = container.getBoundingClientRect();
           if (r2.width > 0 && r2.height > 0) {
             STATE.studioViewer.resize();
             STATE.studioViewer.render();
@@ -3148,9 +3204,7 @@ console.log(
     console.warn('[3D] Erro:', errCena);
   }
 }
-  // ››› FIM: construirCena3D() — recria viewer WebGL com SDF.
-  // ››› FEEDBACK: retry a 250ms se container tem 0×0 (troca de aba, resize).
-  // ═══════════════════════════════════════════════════════════════════════════
+// ››› FIM: construirCena3D() — v4.3 valida SDF antes de tocar no 3Dmol.
 
   /**
    * Aplica estilo visual 3D (ballstick, cpk, wireframe, surface).
