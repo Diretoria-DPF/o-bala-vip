@@ -6,24 +6,23 @@
   <title>LAIFT — Anatomia 3D & Biohacking</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 
-  <!-- Bibliotecas Core (CDNs) -->
+  <!-- Bibliotecas Core (CDNs Estáveis via unpkg/cdnjs) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Fallbacks de estilo -->
+  <!-- Folha de estilo única -->
   <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="style.css">
 
   <style>
-    /* Estilos Críticos Embutidos (Blindagem contra 404) */
+    /* Estilos Críticos Garantidos */
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     html, body {
       width: 100%; height: 100%; min-height: 100vh;
       background: #0f172a !important; color: #f8fafc;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
       overflow: hidden; display: flex; flex-direction: column;
     }
     .module-header {
@@ -52,25 +51,6 @@
       width: 100%; height: 180px; background: #1e293b; border-radius: 10px;
       padding: 10px; border: 1px solid #334155; position: relative;
     }
-    .search-container { display: flex; gap: 8px; margin-bottom: 12px; }
-    #bio-search-input {
-      flex: 1; background: #020617; border: 1px solid #334155; color: #fff;
-      padding: 10px 12px; border-radius: 6px; outline: none; font-size: 16px;
-    }
-    #btn-bio-search {
-      background: #1e293b; border: 1px solid #334155; color: #fff;
-      padding: 0 16px; border-radius: 6px; cursor: pointer;
-    }
-    .bio-protocol-card {
-      background: #1e293b; border-left: 4px solid #34d399; border-radius: 8px;
-      padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-    }
-    .tag-bio {
-      background: rgba(52, 211, 153, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);
-      font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-right: 4px;
-    }
-    .btn-primary { background: #0284c7; color: #fff; border: none; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer; }
-    .btn-secondary { background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer; }
     .bottom-nav {
       height: 62px; background: #020617; border-top: 1px solid #334155;
       display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; z-index: 10;
@@ -116,9 +96,9 @@
         <p style="font-size: 0.8rem; color: #94a3b8;">Vias energéticas, ATP e biodisponibilidade de minerais.</p>
       </div>
 
-      <div class="search-container">
-        <input type="text" id="bio-search-input" placeholder="Buscar mineral ou via (ex: Treonato, ATP, CoQ10)...">
-        <button id="btn-bio-search">🔍</button>
+      <div class="search-container" style="display: flex; gap: 8px; margin-bottom: 12px;">
+        <input type="text" id="bio-search-input" placeholder="Buscar mineral ou via (ex: Treonato, ATP, CoQ10)..." style="flex: 1; background: #020617; border: 1px solid #334155; color: #fff; padding: 10px 12px; border-radius: 6px; outline: none; font-size: 16px;">
+        <button id="btn-bio-search" style="background: #1e293b; border: 1px solid #334155; color: #fff; padding: 0 16px; border-radius: 6px; cursor: pointer;">🔍</button>
       </div>
 
       <div id="biohacking-results-grid"></div>
@@ -132,8 +112,8 @@
       </div>
       
       <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-        <button id="btn-export-csv" class="btn-primary" style="flex: 1;">📥 Exportar CSV</button>
-        <button id="btn-sync-cloud" class="btn-secondary" style="flex: 1;">🔄 Salvar Nuvem</button>
+        <button id="btn-export-csv" class="btn-primary" style="flex: 1; background: #0284c7; color: #fff; border: none; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer;">📥 Exportar CSV</button>
+        <button id="btn-sync-cloud" class="btn-secondary" style="flex: 1; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer;">🔄 Salvar Nuvem</button>
       </div>
 
       <div id="history-list-container"></div>
@@ -156,18 +136,12 @@
     </button>
   </nav>
 
-  <!-- Carregamento Seguro dos Scripts -->
+  <!-- Scripts Organizados sem duplicações -->
   <script src="data/bio-database.js"></script>
-  <script src="bio-database.js"></script>
   <script src="js/api-cache.js"></script>
-  <script src="api-cache.js"></script>
   <script src="js/three-engine.js"></script>
-  <script src="three-engine.js"></script>
   <script src="js/pk-engine.js"></script>
-  <script src="pk-engine.js"></script>
   <script src="js/biohacking.js"></script>
-  <script src="biohacking.js"></script>
   <script src="js/app.js"></script>
-  <script src="app.js"></script>
 </body>
 </html>
