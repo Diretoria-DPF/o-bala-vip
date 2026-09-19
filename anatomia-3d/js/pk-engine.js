@@ -93,6 +93,11 @@ const PKEngine = (() => {
     }
 
     const ctx = document.getElementById(CANVAS_ID).getContext('2d');
+
+    // Regista a simulação no Acervo Institucional via ApiCache
+  if (typeof ApiCache !== 'undefined') {
+    ApiCache.registrarSimulacao(drugName, route);
+  }
     
     chartInstance = new Chart(ctx, {
       type: 'line',
