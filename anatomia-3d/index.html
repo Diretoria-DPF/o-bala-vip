@@ -1,0 +1,130 @@
+<!-- ========================================================================= -->
+<!-- INÍCIO DO ARQUIVO: anatomia-3d/index.html                                 -->
+<!-- ========================================================================= -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LAIFT — Anatomia 3D & Biohacking</title>
+
+  <!-- Bibliotecas Core Externas (CDNs) -->
+  <!-- INÍCIO DAS IMPORTAÇÕES DE RENDERIZAÇÃO E GRÁFICOS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FIM DAS IMPORTAÇÕES -->
+
+  <!-- Estilos do Módulo -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- INÍCIO DA HEADER MOBILE-FIRST -->
+  <header class="module-header">
+    <div class="header-brand">
+      <h1>🧬 LAIFT <span>Bio & 3D</span></h1>
+    </div>
+    <div class="header-status">
+      <span id="sync-status-badge" class="badge-offline">Modo Híbrido (Pronto)</span>
+    </div>
+  </header>
+  <!-- FIM DA HEADER MOBILE-FIRST -->
+
+  <!-- INÍCIO DA ÁREA DE VISUALIZAÇÃO PRINCIPAL -->
+  <main class="viewport" id="main-viewport">
+    
+    <!-- ABA 1: ANATOMIA E FARMACOCINÉTICA 3D -->
+    <section id="view-anatomy" class="view-panel active">
+      <div class="panel-header">
+        <h2>Simulador Anatômico & PK</h2>
+        <p>Acompanhe a distribuição de fármacos e nanocarreadores.</p>
+      </div>
+
+      <!-- Container do Three.js -->
+      <div id="canvas-3d-container">
+        <div id="loading-3d-overlay">Carregando Modelo Z-Anatomy (DRACO)...</div>
+        <div id="organ-hud" class="hidden">Estrutura: <strong id="organ-name">---</strong></div>
+        <!-- O Canvas WebGL será injetado dinamicamente via JS aqui -->
+      </div>
+
+      <!-- Container do Gráfico Farmacocinético -->
+      <div id="pk-chart-container">
+        <canvas id="pkChartCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- ABA 2: BIOHACKING E OTIMIZAÇÃO CELULAR -->
+    <section id="view-biohacking" class="view-panel hidden">
+      <div class="panel-header">
+        <h2>Protocolos Celulares</h2>
+        <p>Vias metabólicas e suplementação de precisão.</p>
+      </div>
+
+      <!-- Motor de Busca Inteligente -->
+      <div class="search-container">
+        <input type="text" id="bio-search-input" placeholder="Buscar mineral, via metabólica (ex: ATP, Zinco)...">
+        <button id="btn-bio-search">🔍</button>
+      </div>
+
+      <!-- Resultados (Preenchidos via JS) -->
+      <div id="biohacking-results-grid">
+        <div class="empty-state">Digite um composto para buscar na base local ou APIs.</div>
+      </div>
+    </section>
+
+    <!-- ABA 3: ACERVO & HISTÓRICO DE SIMULAÇÕES -->
+    <section id="view-acervo" class="view-panel hidden">
+      <div class="panel-header">
+        <h2>Acervo de Simulações</h2>
+        <p>Consultas em cache e histórico exportável para o Currículo Lattes.</p>
+      </div>
+      
+      <div class="actions-row">
+        <button id="btn-export-csv" class="btn-primary">📥 Exportar Relatório CSV</button>
+        <button id="btn-sync-cloud" class="btn-secondary">🔄 Sincronizar Nuvem</button>
+      </div>
+
+      <div id="history-list-container">
+        <!-- Lista de histórico gerada via JS -->
+      </div>
+    </section>
+
+  </main>
+  <!-- FIM DA ÁREA DE VISUALIZAÇÃO PRINCIPAL -->
+
+  <!-- INÍCIO DA NAVEGAÇÃO INFERIOR (PWA/MOBILE) -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-target="view-anatomy">
+      <span class="nav-icon">🧍</span>
+      <span class="nav-label">Anatomia</span>
+    </button>
+    <button class="nav-btn" data-target="view-biohacking">
+      <span class="nav-icon">⚡</span>
+      <span class="nav-label">Biohacking</span>
+    </button>
+    <button class="nav-btn" data-target="view-acervo">
+      <span class="nav-icon">📚</span>
+      <span class="nav-label">Acervo</span>
+    </button>
+  </nav>
+  <!-- FIM DA NAVEGAÇÃO INFERIOR -->
+
+  <!-- INÍCIO DOS SCRIPTS MODULARES DO SISTEMA -->
+  <!-- A ordem de carregamento importa: Dados -> Cache -> Motores -> App -->
+  <script src="data/bio-database.js"></script>
+  <script src="js/api-cache.js"></script>
+  <script src="js/three-engine.js"></script>
+  <script src="js/pk-engine.js"></script>
+  <script src="js/biohacking.js"></script>
+  <script src="js/app.js"></script>
+  <!-- FIM DOS SCRIPTS -->
+
+</body>
+</html>
+<!-- ========================================================================= -->
+<!-- FIM DO ARQUIVO: anatomia-3d/index.html                                    -->
+<!-- ========================================================================= -->
