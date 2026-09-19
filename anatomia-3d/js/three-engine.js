@@ -1,12 +1,6 @@
 /* ========================================================================= */
-/* INÍCIO DO ARQUIVO: anatomia-3d/js/three-engine.js                         */
+/* ARQUIVO: anatomia-3d/js/three-engine.js                                   */
 /* ========================================================================= */
-
-/**
- * MOTOR DE RENDERIZAÇÃO 3D E INTERAÇÃO ANATÓMICA
- * Utiliza Three.js com DRACOLoader para modelos otimizados (Z-Anatomy).
- * Inclui Fallback automático caso o ficheiro body.glb esteja ausente.
- */
 
 const ThreeEngine = (() => {
   let scene, camera, renderer, controls;
@@ -29,23 +23,27 @@ const ThreeEngine = (() => {
 
     scene = new THREE.Scene();
     
-    camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
-    camera.position.set(0, 1.2, 3.5);
+    // Tratamento de dimensão inicial para prevenir NaN caso inicie oculto
+    const width = container.clientWidth || 320;
+    const height = container.clientHeight || 240;
+
+    camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+    camera.position.set(0, 1.2, 3.2);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(width, height);
     renderer.outputEncoding = THREE.sRGBEncoding;
     container.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(5, 10, 7);
     scene.add(dirLight);
 
-    const backLight = new THREE.DirectionalLight(0x38bdf8, 0.3);
+    const backLight = new THREE.DirectionalLight(0x38bdf8, 0.35);
     backLight.position.set(-5, 5, -5);
     scene.add(backLight);
 
@@ -65,6 +63,12 @@ const ThreeEngine = (() => {
     container.addEventListener('click', onMouseClick);
     container.addEventListener('touchstart', onTouchStart, { passive: true });
 
+    // Observador para redimensionar quando a aba for exibida
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(() => onWindowResize());
+      resizeObserver.observe(container);
+    }
+
     animate();
   }
 
@@ -75,58 +79,50 @@ const ThreeEngine = (() => {
     const loader = new THREE.GLTFLoader();
     loader.setDRACOLoader(dracoLoader);
 
-    const modelPath = 'models/body.glb'; 
-
     loader.load(
-      modelPath,
+      'models/body.glb',
       (gltf) => {
         bodyModel = gltf.scene;
         bodyModel.position.set(0, 0, 0);
         scene.add(bodyModel);
-
         if (loadingOverlay) loadingOverlay.classList.add('hidden');
-        console.log('[LAIFT 3D] Modelo Anatómico DRACO carregado com sucesso.');
+        console.log('[LAIFT 3D] Modelo GLTF/DRACO carregado com sucesso.');
       },
-      (xhr) => {
-        if (loadingOverlay && xhr.total > 0) {
-          const percent = Math.round((xhr.loaded / xhr.total) * 100);
-          loadingOverlay.innerText = `A Descomprimir Z-Anatomy... ${percent}%`;
-        }
-      },
+      undefined,
       (error) => {
-        console.error('[LAIFT 3D] Erro ao carregar modelo 3D (Arquivo Ausente):', error);
-        
-        // GRACEFUL DEGRADATION: Oculta o overlay de loading congelado e exibe aviso
-        if (loadingOverlay) {
-          loadingOverlay.innerHTML = `
-            <div style="text-align: center; color: #f87171; padding: 12px; background: rgba(0,0,0,0.6); border-radius: 8px;">
-              <p>⚠️ <strong>Modelo 3D Ausente</strong></p>
-              <p style="font-size: 0.75rem; color: #cbd5e1; margin-top: 4px;">Faça o upload do arquivo "body.glb" na pasta models/</p>
-            </div>
-          `;
-          // Remove o overlay após 4 segundos para não bloquear a UI
-          setTimeout(() => loadingOverlay.classList.add('hidden'), 4000);
-        }
-
-        // Adiciona um manequim provisório (Cápsula) para a tela não ficar vazia
+        console.warn('[LAIFT 3D] Modelo body.glb não encontrado. Ativando Manequim Provisório.');
+        if (loadingOverlay) loadingOverlay.classList.add('hidden');
         criarManequimDeEmergencia();
       }
     );
   }
 
-  // Cria uma cápsula básica que simula o corpo humano caso o ficheiro não exista
+  // Compatível com Three.js r128 (CylinderGeometry em vez de CapsuleGeometry)
   function criarManequimDeEmergencia() {
-    const geometry = new THREE.CapsuleGeometry(0.4, 1.2, 4, 16);
-    const material = new THREE.MeshStandardMaterial({ 
-      color: 0x1e293b, 
-      wireframe: true, 
-      emissive: 0x000000 
-    });
-    bodyModel = new THREE.Mesh(geometry, material);
-    bodyModel.position.set(0, 1, 0);
-    bodyModel.name = "Manequim_Provisorio";
+    const group = new THREE.Group();
+
+    // Tronco e membros
+    const matCorpo = new THREE.MeshStandardMaterial({ color: 0x1e293b, wireframe: true });
+    const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 1.1, 16), matCorpo);
+    tronco.position.set(0, 1.05, 0);
+    tronco.name = "tronco";
+    group.add(tronco);
+
+    // Cabeça
+    const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), matCorpo);
+    cabeca.position.set(0, 1.75, 0);
+    cabeca.name = "brain_cerebro";
+    group.add(cabeca);
+
+    // Órgão representativo (Coração / Fígado)
+    const matOrgao = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0f2442 });
+    const orgao = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), matOrgao);
+    orgao.position.set(0.04, 1.2, 0.1);
+    orgao.name = "heart_coracao";
+    group.add(orgao);
+
+    bodyModel = group;
     scene.add(bodyModel);
-    console.log('[LAIFT 3D] Manequim de emergência ativado.');
   }
 
   function processInteraction(clientX, clientY) {
@@ -137,47 +133,49 @@ const ThreeEngine = (() => {
     mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
-    
-    // Se o modelo for um grupo (como o GLTF), testa os filhos. Se for o manequim, testa a própria malha.
-    const targets = bodyModel.isGroup ? bodyModel.children : [bodyModel];
-    const intersects = raycaster.intersectObjects(targets, true);
+    const intersects = raycaster.intersectObjects(bodyModel.children, true);
 
     if (intersects.length > 0) {
       const object = intersects[0].object;
 
       if (hoveredMesh && hoveredMesh !== object) {
-        if (hoveredMesh.material) hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
+        if (hoveredMesh.material && hoveredMesh.material.emissive) {
+          hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
+        }
       }
 
       hoveredMesh = object;
-      
       if (hoveredMesh.material && hoveredMesh.material.emissive) {
         hoveredMesh.material.emissive.setHex(HIGHLIGHT_COLOR);
-        hoveredMesh.material.emissiveIntensity = 0.5;
+        hoveredMesh.material.emissiveIntensity = 0.6;
       }
 
       if (organHud && organNameEl) {
         const cleanName = object.name.replace(/_/g, ' ').replace(/[0-9]/g, '').trim();
-        organNameEl.innerText = cleanName || 'Tecido Orgânico';
+        organNameEl.innerText = cleanName || 'Tecido Selecionado';
         organHud.classList.remove('hidden');
       }
     } else {
-      if (hoveredMesh) {
-        if (hoveredMesh.material) hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
+      if (hoveredMesh && hoveredMesh.material && hoveredMesh.material.emissive) {
+        hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
         hoveredMesh = null;
       }
       if (organHud) organHud.classList.add('hidden');
     }
   }
 
-  function onMouseClick(event) { processInteraction(event.clientX, event.clientY); }
-  function onTouchStart(event) { if (event.touches.length > 0) processInteraction(event.touches[0].clientX, event.touches[0].clientY); }
+  function onMouseClick(e) { processInteraction(e.clientX, e.clientY); }
+  function onTouchStart(e) { if (e.touches.length > 0) processInteraction(e.touches[0].clientX, e.touches[0].clientY); }
 
   function onWindowResize() {
-    if (!container) return;
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    if (!container || !renderer || !camera) return;
+    const width = container.clientWidth || 320;
+    const height = container.clientHeight || 240;
+    if (width > 0 && height > 0) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
   }
 
   function animate() {
@@ -188,33 +186,21 @@ const ThreeEngine = (() => {
 
   function highlightOrgan(organName) {
     if (!bodyModel) return;
-    
-    let found = false;
     bodyModel.traverse((child) => {
-      // Evita o erro se o child for um manequim sem nome ou material complexo
       if (child.isMesh && child.name && child.name.toLowerCase().includes(organName.toLowerCase())) {
-        if (hoveredMesh && hoveredMesh.material) hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
+        if (hoveredMesh && hoveredMesh.material && hoveredMesh.material.emissive) {
+          hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
+        }
         hoveredMesh = child;
-        if (hoveredMesh.material) {
+        if (hoveredMesh.material && hoveredMesh.material.emissive) {
           hoveredMesh.material.emissive.setHex(HIGHLIGHT_COLOR);
           hoveredMesh.material.emissiveIntensity = 0.8;
         }
-        found = true;
       }
     });
-    
-    // Fallback: se não achar o órgão específico e estiver a usar o manequim provisório
-    if (!found && bodyModel.name === "Manequim_Provisorio") {
-      if (hoveredMesh && hoveredMesh.material) hoveredMesh.material.emissive.setHex(DEFAULT_EMISSIVE);
-      hoveredMesh = bodyModel;
-      hoveredMesh.material.emissive.setHex(HIGHLIGHT_COLOR);
-      hoveredMesh.material.emissiveIntensity = 0.8;
-    }
-    
-    return found;
   }
 
-  return { init, highlightOrgan };
+  return { init, highlightOrgan, onWindowResize };
 })();
 
 if (document.readyState === 'loading') {
@@ -222,7 +208,3 @@ if (document.readyState === 'loading') {
 } else {
   ThreeEngine.init();
 }
-
-/* ========================================================================= */
-/* FIM DO ARQUIVO: anatomia-3d/js/three-engine.js                            */
-/* ========================================================================= */
