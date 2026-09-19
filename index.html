@@ -371,6 +371,32 @@
                 <span class="tag">Simulação</span>
               </div>
             </div>
+
+            <!-- Módulo Anatomia 3D & Biohacking -->
+            <div class="module-card card-anatomy" onclick="launchModule('anatomia')" style="border-color: #3b82f6;">
+              <div class="module-icon">🧬</div>
+              <h4 style="color: #3b82f6;">Anatomia & Biohacking 3D</h4>
+              <p>Corpo humano 3D, farmacocinética visual, otimização celular e suplementação.</p>
+              <div class="module-footer">
+                <span class="tag">Simulação PK</span>
+                <span class="tag">Vias Metabólicas</span>
+              </div>
+            </div>
+<!-- FIM DA INSERÇÃO DO CARD -->
+
+<!-- 2. JUNTO ÀS SECTIONS DE MODULOS (após a section id="labSection"), ADICIONAR: -->
+    <!-- =========================================================
+         MÓDULO: ANATOMIA 3D E BIOHACKING (IFRAME)
+    ========================================================= -->
+    <section id="anatomiaSection" class="view-panel hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="color: #3b82f6; font-size: 1.15rem;">🧬 Anatomia 3D & Farmacocinética</h3>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+      </div>
+      <!-- O iframe carrega o arquivo index.html que acabamos de criar -->
+      <iframe id="anatomiaFrame" title="Simulador Anatômico e Biohacking" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #0f172a;"></iframe>
+    </section>
+<!-- FIM DA INSERÇÃO DA SECTION -->
           </div>
         </div>
 
