@@ -16,7 +16,7 @@ const appState = {
 // =========================================================
 
 function navigateTo(viewId) {
-  const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection'];
+ const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection', 'anatomiaSection'];
   const target = document.getElementById(viewId);
 
   // Proteção contra tela em branco: se o container não existir no HTML, redireciona ao Hub
@@ -116,6 +116,25 @@ function launchModule(moduleType) {
       navigateTo('dashboardSection');
   }
 }
+
+case 'anatomia':
+      document.body.className = 'theme-default'; // Pode criar um 'theme-anatomy' no futuro
+      const anatomiaFrame = document.getElementById('anatomiaFrame');
+      if (anatomiaFrame) {
+        if (!anatomiaFrame.src || anatomiaFrame.src === 'about:blank' || anatomiaFrame.src.endsWith('/')) {
+          anatomiaFrame.src = 'anatomia-3d/index.html';
+        } else if (anatomiaFrame.contentWindow) {
+          anatomiaFrame.contentWindow.location.reload();
+        }
+      }
+      navigateTo('anatomiaSection');
+      break;
+
+    default:
+      navigateTo('dashboardSection');
+  }
+}
+// --- FIM DA MODIFICAÇÃO ---
 
 function transitionToDashboard() {
   navigateTo('dashboardSection');
