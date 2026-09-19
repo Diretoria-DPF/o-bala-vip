@@ -1,3 +1,7 @@
+/* ========================================================================= */
+/* ARQUIVO: js/app.js (Raiz do Projeto)                                      */
+/* ========================================================================= */
+
 /**
  * CONTROLADOR PRINCIPAL SPA, GESTÃO DE SESSÃO E ROTEAMENTO
  * Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia (LAIFT)
@@ -16,7 +20,7 @@ const appState = {
 // =========================================================
 
 function navigateTo(viewId) {
- const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection', 'anatomiaSection'];
+  const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection', 'anatomiaSection'];
   const target = document.getElementById(viewId);
 
   // Proteção contra tela em branco: se o container não existir no HTML, redireciona ao Hub
@@ -112,12 +116,7 @@ function launchModule(moduleType) {
       navigateTo('labSection');
       break;
 
-    default:
-      navigateTo('dashboardSection');
-  }
-}
-
-case 'anatomia':
+    case 'anatomia':
       document.body.className = 'theme-default'; // Pode criar um 'theme-anatomy' no futuro
       const anatomiaFrame = document.getElementById('anatomiaFrame');
       if (anatomiaFrame) {
@@ -134,7 +133,6 @@ case 'anatomia':
       navigateTo('dashboardSection');
   }
 }
-// --- FIM DA MODIFICAÇÃO ---
 
 function transitionToDashboard() {
   navigateTo('dashboardSection');
