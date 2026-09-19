@@ -19,11 +19,10 @@ const ThreeEngine = (() => {
     organHud = document.getElementById('organ-hud');
     organNameEl = document.getElementById('organ-name');
 
-    if (!container) return;
+    if (!container || typeof THREE === 'undefined') return;
 
     scene = new THREE.Scene();
     
-    // Tratamento de dimensão inicial para prevenir NaN caso inicie oculto
     const width = container.clientWidth || 320;
     const height = container.clientHeight || 240;
 
@@ -33,7 +32,7 @@ const ThreeEngine = (() => {
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
     container.appendChild(renderer.domElement);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -47,12 +46,15 @@ const ThreeEngine = (() => {
     backLight.position.set(-5, 5, -5);
     scene.add(backLight);
 
-    controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.minDistance = 1;
-    controls.maxDistance = 6;
-    controls.target.set(0, 1, 0);
+    // Verificação segura de OrbitControls
+    if (typeof THREE.OrbitControls === 'function') {
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 1;
+      controls.maxDistance = 6;
+      controls.target.set(0, 1, 0);
+    }
 
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
@@ -63,7 +65,6 @@ const ThreeEngine = (() => {
     container.addEventListener('click', onMouseClick);
     container.addEventListener('touchstart', onTouchStart, { passive: true });
 
-    // Observador para redimensionar quando a aba for exibida
     if (window.ResizeObserver) {
       const resizeObserver = new ResizeObserver(() => onWindowResize());
       resizeObserver.observe(container);
@@ -73,11 +74,30 @@ const ThreeEngine = (() => {
   }
 
   function loadModel() {
-    const dracoLoader = new THREE.DRACOLoader();
-    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+    // Blindagem: Se GLTFLoader não carregou do CDN, entra direto em contingência
+    if (typeof THREE.GLTFLoader !== 'function') {
+      console.warn('[LAIFT 3D] GLTFLoader indisponível. Ativando Manequim Provisório.');
+      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+      criarManequimDeEmergencia();
+      return;
+    }
 
-    const loader = new THREE.GLTFLoader();
-    loader.setDRACOLoader(dracoLoader);
+    let loader;
+    try {
+      loader = new THREE.GLTFLoader();
+
+      // Blindagem: Só instancia DRACOLoader se ele realmente existir como função
+      if (typeof THREE.DRACOLoader === 'function') {
+        const dracoLoader = new THREE.DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/');
+        loader.setDRACOLoader(dracoLoader);
+      }
+    } catch (e) {
+      console.warn('[LAIFT 3D] Falha ao configurar decodificador:', e);
+      if (loadingOverlay) loadingOverlay.classList.add('hidden');
+      criarManequimDeEmergencia();
+      return;
+    }
 
     loader.load(
       'models/body.glb',
@@ -90,31 +110,27 @@ const ThreeEngine = (() => {
       },
       undefined,
       (error) => {
-        console.warn('[LAIFT 3D] Modelo body.glb não encontrado. Ativando Manequim Provisório.');
+        console.warn('[LAIFT 3D] body.glb não encontrado. Ativando Manequim Provisório.');
         if (loadingOverlay) loadingOverlay.classList.add('hidden');
         criarManequimDeEmergencia();
       }
     );
   }
 
-  // Compatível com Three.js r128 (CylinderGeometry em vez de CapsuleGeometry)
   function criarManequimDeEmergencia() {
     const group = new THREE.Group();
 
-    // Tronco e membros
     const matCorpo = new THREE.MeshStandardMaterial({ color: 0x1e293b, wireframe: true });
     const tronco = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 1.1, 16), matCorpo);
     tronco.position.set(0, 1.05, 0);
     tronco.name = "tronco";
     group.add(tronco);
 
-    // Cabeça
     const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), matCorpo);
     cabeca.position.set(0, 1.75, 0);
     cabeca.name = "brain_cerebro";
     group.add(cabeca);
 
-    // Órgão representativo (Coração / Fígado)
     const matOrgao = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0f2442 });
     const orgao = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), matOrgao);
     orgao.position.set(0.04, 1.2, 0.1);
@@ -133,7 +149,8 @@ const ThreeEngine = (() => {
     mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(bodyModel.children, true);
+    const targets = bodyModel.isGroup ? bodyModel.children : [bodyModel];
+    const intersects = raycaster.intersectObjects(targets, true);
 
     if (intersects.length > 0) {
       const object = intersects[0].object;
@@ -180,7 +197,7 @@ const ThreeEngine = (() => {
 
   function animate() {
     requestAnimationFrame(animate);
-    if (controls) controls.update();
+    if (controls && typeof controls.update === 'function') controls.update();
     if (renderer && scene && camera) renderer.render(scene, camera);
   }
 
