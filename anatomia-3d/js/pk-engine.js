@@ -1,114 +1,72 @@
 /* ========================================================================= */
-/* ARQUIVO: anatomia-3d/js/pk-engine.js                                     */
+/* ARQUIVO: anatomia-3d/js/pk-engine.js                                      */
+/* VERSÃO:  2.0.0 — COMPLETA: PK/PD HÍBRIDO, HILL EMAX & MODO CRISE         */
 /* ========================================================================= */
 
 /**
- * MOTOR FARMACOCINÉTICO (PK) & SIMULAÇÃO PLASMÁTICA COMPARTIMENTAL
- * Ecossistema LAIFT - Módulo Master 3D
- * - Modelação biofarmacêutica: Bolus IV (ordem 0/decaimento) e Oral (Equação de Bateman)
- * - Renderização responsiva Chart.js adaptada ao Dark Mode científico
- * - Sincronização direta com malhas 3D no ThreeEngine (Highlight de tecidos-alvo)
- * - Persistência automatizada de sessões de estudo para cômputo curricular
+ * MOTOR DE MODELAGEM FARMACOCINÉTICA & FARMACODINÂMICA (PK/PD)
+ * Ecossistema LAIFT - Módulo Master 3D / Bio-Twin
+ * - Modelagem Compartimental PK:
+ *     * IV Bolus (Decaimento Monoexponencial)
+ *     * Vias Extravasculares (Equação Biexponencial de Bateman)
+ * - Modelagem Farmacodinâmica (PD):
+ *     * Curva Sigmoide de Hill (Emax, EC50 e Coeficiente de Hill gamma)
+ *     * Cálculo de Ocupação de Receptores e Efeito Clínico %
+ * - Simulador de Crises Toxicológicas LAIFT:
+ *     * Intoxicação Aguda por Organofosforados (Crise Colinérgica)
+ *     * Reversão com Antídotos em Tempo Real (Atropina + Pralidoxima / 2-PAM)
+ * - Renderização Gráfica Vetorial Responsiva via Chart.js (Eixo Duplo PK/PD)
+ * - Sincronização Bidirecional com o Motor 3D (ThreeEngine) e Registro de Horas (ApiCache)
  */
 
-const PKEngine = (() => {
+const PkEngine = (() => {
+  // -------------------------------------------------------------------------
+  // 1. ESTADO E VARIÁVEIS DE CONTROLE
+  // -------------------------------------------------------------------------
   let chartInstance = null;
-  const CANVAS_ID = "pkChartCanvas";
+  let currentProtocol = null;
+  let simulationInterval = null;
 
-  // Configurações de Paleta Científica (Dark Mode LAIFT)
-  const PALETTE = {
-    primary: "#38bdf8",          // Sky 400 (Curva Oral)
-    primaryGlow: "rgba(56, 189, 248, 0.22)",
-    accent: "#34d399",           // Emerald 400 (Curva IV)
-    accentGlow: "rgba(52, 211, 153, 0.22)",
-    grid: "#1e293b",             // Slate 800
-    textMuted: "#94a3b8",        // Slate 400
-    tooltipBg: "rgba(2, 6, 23, 0.92)",
-    borderSubtle: "#334155"
+  // Parâmetros PK Basais
+  let doseMg = 100;
+  let routeType = "ORAL";
+  let bioavailabilityF = 0.75;
+  let volumeDistribuicaoL = 40;
+  let meiaVidaHoras = 4.0;
+  let constanteAbsorcaoKa = 1.5; // h^-1
+  let targetOrganKey = "liver";
+
+  // Parâmetros PD Basais (Modelo Sigmoide de Hill)
+  let eMaxPercent = 100;
+  let ec50MgL = 1.25;
+  let hillGamma = 1.5;
+
+  // Estado do Modo Crise Toxicológica
+  let isCrisisSimulating = false;
+  let crisisElapsedMin = 0;
+  let crisisToxicityIndex = 0; // 0 a 100%
+  let antidoteDosesApplied = { atropina: 0, pralidoxima: 0 };
+
+  // Paleta Visual Científica Dark
+  const THEME = {
+    bgCanvas: "rgba(2, 6, 23, 0.95)",
+    linePk: "#38bdf8",
+    fillPk: "rgba(56, 189, 248, 0.15)",
+    linePd: "#10b981",
+    fillPd: "rgba(16, 185, 129, 0.10)",
+    lineToxic: "#ef4444",
+    grid: "rgba(51, 65, 85, 0.4)",
+    text: "#94a3b8"
   };
 
   // =========================================================================
-  // 1. INICIALIZAÇÃO DO MOTOR
+  // 2. INICIALIZAÇÃO E SETUP DO GRÁFICO (CHART.JS)
   // =========================================================================
   function init() {
-    console.log("[PKEngine] Inicializando Motor Farmacocinético Compartimental...");
-    renderEmptyStateChart();
-  }
-
-  // =========================================================================
-  // 2. MODELAÇÃO MATEMÁTICA FARMACOCINÉTICA (1 COMPARTIMENTO)
-  // =========================================================================
-  /**
-   * Modela a curva de concentração plasmática ao longo de 24 horas.
-   * @param {Object} params - dose (mg), f (biodisponibilidade 0-1), vd (L), halfLife (h), ka (h^-1)
-   * @param {String} route - 'IV' ou 'ORAL'
-   * @returns {Object} { labels: Array<String>, concentrations: Array<Number> }
-   */
-  function calculateCurve(params, route = "ORAL") {
-    const dose = Number(params.dose) || 500;
-    const f = typeof params.f !== "undefined" ? Number(params.f) : 1.0;
-    const vd = Number(params.vd) || 40;
-    const halfLife = Number(params.halfLife) || 4;
-    const ka = Number(params.ka) || 1.5;
-
-    // Constante de eliminação de primeira ordem: ke = ln(2) / t(1/2)
-    const ke = Math.LN2 / Math.max(halfLife, 0.05);
-
-    const labels = [];
-    const concentrations = [];
-
-    // Passo de cálculo de 0.5 horas num intervalo de 24 horas
-    for (let t = 0; t <= 24; t += 0.5) {
-      let conc = 0;
-
-      if (route.toUpperCase() === "IV") {
-        // Modelo Bolus Intravenoso: C(t) = (Dose / Vd) * e^(-ke * t)
-        const c0 = (dose * f) / vd;
-        conc = c0 * Math.exp(-ke * t);
-      } else {
-        // Modelo Oral de 1 Compartimento (Equação de Bateman):
-        // C(t) = [F * Dose * ka / (Vd * (ka - ke))] * [e^(-ke * t) - e^(-ka * t)]
-        if (Math.abs(ka - ke) < 0.0001) {
-          // Prevenção de divisão por zero se ka == ke
-          conc = ((f * dose * ke * t) / vd) * Math.exp(-ke * t);
-        } else {
-          const preFator = (f * dose * ka) / (vd * (ka - ke));
-          conc = preFator * (Math.exp(-ke * t) - Math.exp(-ka * t));
-        }
-      }
-
-      labels.push(t % 2 === 0 ? `${t}h` : "");
-      concentrations.push(Math.max(0, parseFloat(conc.toFixed(2))));
-    }
-
-    return { labels, concentrations };
-  }
-
-  // =========================================================================
-  // 3. EXECUÇÃO DE SIMULAÇÃO & RENDERIZAÇÃO GRÁFICA
-  // =========================================================================
-  /**
-   * Executa a simulação completa de um composto e atualiza a interface.
-   * @param {String} drugName - Nome do fármaco ou princípio ativo
-   * @param {Object} params - Parâmetros farmacocinéticos (dose, vd, halfLife, etc.)
-   * @param {String} route - Via de administração ('ORAL' ou 'IV')
-   */
-  function simulateDrug(drugName, params, route = "ORAL") {
-    const via = (route || params.route || "ORAL").toUpperCase();
-    const dataSet = calculateCurve(params, via);
-
-    const isIV = via === "IV";
-    const lineColor = isIV ? PALETTE.accent : PALETTE.primary;
-    const fillColor = isIV ? PALETTE.accentGlow : PALETTE.primaryGlow;
-
-    const canvas = document.getElementById(CANVAS_ID);
+    const canvas = document.getElementById("pkChartCanvas");
     if (!canvas || typeof Chart === "undefined") {
-      console.warn("[PKEngine] Canvas ou Chart.js indisponível para renderização.");
+      console.warn("[PkEngine] Canvas #pkChartCanvas ou biblioteca Chart.js indisponível.");
       return;
-    }
-
-    if (chartInstance) {
-      chartInstance.destroy();
     }
 
     const ctx = canvas.getContext("2d");
@@ -116,163 +74,402 @@ const PKEngine = (() => {
     chartInstance = new Chart(ctx, {
       type: "line",
       data: {
-        labels: dataSet.labels,
+        labels: [],
         datasets: [
           {
-            label: `${drugName} (${via}) - Nível Plasmático (mg/L)`,
-            data: dataSet.concentrations,
-            borderColor: lineColor,
-            backgroundColor: fillColor,
-            borderWidth: 2.2,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: lineColor,
+            label: "Concentração Plasmática (mg/L)",
+            yAxisID: "y-pk",
+            data: [],
+            borderColor: THEME.linePk,
+            backgroundColor: THEME.fillPk,
+            borderWidth: 2.5,
             fill: true,
-            tension: 0.38
+            tension: 0.35,
+            pointRadius: 0,
+            pointHitRadius: 8
+          },
+          {
+            label: "Efeito Farmacológico / Emax (%)",
+            yAxisID: "y-pd",
+            data: [],
+            borderColor: THEME.linePd,
+            backgroundColor: THEME.fillPd,
+            borderWidth: 2,
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0.35,
+            pointRadius: 0,
+            pointHitRadius: 8
           }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: {
-          duration: 650,
-          easing: "easeOutQuart"
+        interaction: {
+          mode: "index",
+          intersect: false
         },
         plugins: {
           legend: {
             display: true,
+            position: "top",
             labels: {
-              color: PALETTE.textMuted,
-              font: { size: 11, weight: "600" }
+              color: THEME.text,
+              font: { size: 10, weight: "bold" },
+              boxWidth: 12,
+              padding: 8
             }
           },
           tooltip: {
-            mode: "index",
-            intersect: false,
-            backgroundColor: PALETTE.tooltipBg,
-            titleColor: PALETTE.primary,
+            backgroundColor: "rgba(2, 6, 23, 0.95)",
+            titleColor: "#38bdf8",
             bodyColor: "#f8fafc",
-            borderColor: PALETTE.borderSubtle,
+            borderColor: "#334155",
             borderWidth: 1,
             padding: 8,
-            displayColors: false,
+            displayColors: true,
             callbacks: {
-              label: (context) => ` Concentração: ${context.parsed.y} mg/L`
+              label: (context) => {
+                const label = context.dataset.label || "";
+                const val = context.parsed.y.toFixed(2);
+                return `${label}: ${val}`;
+              }
             }
           }
         },
         scales: {
           x: {
-            grid: { color: PALETTE.grid, drawBorder: false },
-            ticks: { color: PALETTE.textMuted, font: { size: 10 } }
+            title: {
+              display: true,
+              text: "Tempo Decorrido (Horas)",
+              color: THEME.text,
+              font: { size: 10, weight: "bold" }
+            },
+            grid: { color: THEME.grid },
+            ticks: { color: THEME.text, font: { size: 9 }, maxTicksLimit: 12 }
           },
-          y: {
-            beginAtZero: true,
-            grid: { color: PALETTE.grid, drawBorder: false },
-            ticks: { color: PALETTE.textMuted, font: { size: 10 } }
+          "y-pk": {
+            type: "linear",
+            position: "left",
+            title: {
+              display: true,
+              text: "Cp (mg/L)",
+              color: THEME.linePk,
+              font: { size: 10, weight: "bold" }
+            },
+            grid: { color: THEME.grid },
+            ticks: { color: THEME.linePk, font: { size: 9 } },
+            beginAtZero: true
+          },
+          "y-pd": {
+            type: "linear",
+            position: "right",
+            min: 0,
+            max: 100,
+            title: {
+              display: true,
+              text: "Efeito (%)",
+              color: THEME.linePd,
+              font: { size: 10, weight: "bold" }
+            },
+            grid: { drawOnChartArea: false },
+            ticks: { color: THEME.linePd, font: { size: 9 } }
           }
-        },
-        interaction: {
-          mode: "nearest",
-          axis: "x",
-          intersect: false
         }
       }
     });
 
-    // INTEGRAÇÃO 3D DIRETA:
-    // Destaca o órgão-alvo na malha e aciona o fluxo hemodinâmico de partículas
-    const targetKey = params.targetOrgan || params.targetMesh;
-    if (targetKey && typeof ThreeEngine !== "undefined") {
-      console.log(`[PKEngine] Acionando resposta 3D no tecido-alvo: ${targetKey}`);
-      ThreeEngine.highlightOrgan(targetKey);
+    console.log("[PkEngine] Motor PK/PD Chart.js inicializado.");
+  }
 
-      // Se for intravenoso, dispara fluxo arterial de partículas
-      if (isIV && typeof ThreeEngine.triggerParticleFlow === "function") {
-        ThreeEngine.triggerParticleFlow("aorta_flow");
-        setTimeout(() => {
-          if (typeof ThreeEngine.stopParticles === "function") {
-            ThreeEngine.stopParticles();
-          }
-        }, 4000);
+  // =========================================================================
+  // 3. EQUAÇÕES MATEMÁTICAS FUNDAMENTAIS (BATEMAN + HILL)
+  // =========================================================================
+  /**
+   * Calcula a constante de eliminação de primeira ordem (ke)
+   * ke = ln(2) / t1/2
+   */
+  function calcularKe(meiaVida) {
+    return Math.LN2 / Math.max(0.01, meiaVida);
+  }
+
+  /**
+   * Resolve a Concentração Plasmática no tempo t: C(t)
+   * - Via Intravenosa: Modelo de decaimento monoexponencial
+   * - Vias Extravasculares: Equação biexponencial de Bateman
+   */
+  function resolverConcentracao(t, dose, f, vd, ke, ka, isIv) {
+    if (t < 0) return 0;
+
+    if (isIv) {
+      const c0 = (dose * 1.0) / vd;
+      return c0 * Math.exp(-ke * t);
+    }
+
+    // Equação de Bateman
+    if (Math.abs(ka - ke) < 0.0001) ka = ke + 0.0001; // Previne divisão por zero
+    const fator = (f * dose * ka) / (vd * (ka - ke));
+    const conc = fator * (Math.exp(-ke * t) - Math.exp(-ka * t));
+    return Math.max(0, conc);
+  }
+
+  /**
+   * Equação Sigmoide de Hill para Farmacodinâmica (Efeito Clínico %):
+   * E(C) = (Emax * C^gamma) / (EC50^gamma + C^gamma)
+   */
+  function resolverEfeitoHill(conc, eMax, ec50, gamma) {
+    if (conc <= 0) return 0;
+    const cPow = Math.pow(conc, gamma);
+    const ec50Pow = Math.pow(ec50, gamma);
+    const efeito = (eMax * cPow) / (ec50Pow + cPow);
+    return Math.min(100, Math.max(0, efeito));
+  }
+
+  // =========================================================================
+  // 4. SIMULAÇÃO DE CURVA E PROJEÇÃO DINÂMICA
+  // =========================================================================
+  /**
+   * Simula o perfil PK/PD completo a partir de um protocolo clínico ou parâmetros customizados
+   */
+  function simulateProtocol(protocolData) {
+    if (!chartInstance) init();
+    if (!chartInstance) return;
+
+    currentProtocol = protocolData;
+
+    // Extração de Parâmetros Farmacocinéticos do Protocolo
+    if (protocolData && protocolData.pkData) {
+      const pk = protocolData.pkData;
+      doseMg = pk.dose || 100;
+      routeType = (pk.route || "ORAL").toUpperCase();
+      volumeDistribuicaoL = pk.vd || 40;
+      meiaVidaHoras = pk.halfLife || 4.0;
+      constanteAbsorcaoKa = pk.ka || 1.5;
+      targetOrganKey = pk.targetOrgan || protocolData.targetMesh || "liver";
+    }
+
+    // Ajuste de Biodisponibilidade F por Via
+    const isIv = routeType === "IV" || routeType === "INTRAVENOSA";
+    if (isIv) {
+      bioavailabilityF = 1.0;
+      constanteAbsorcaoKa = 0;
+    } else if (routeType === "SUBLINGUAL") {
+      bioavailabilityF = 0.80;
+      constanteAbsorcaoKa = 4.5;
+    } else if (routeType === "NASAL") {
+      bioavailabilityF = 0.65;
+      constanteAbsorcaoKa = 3.5;
+    } else if (routeType === "INTRAMUSCULAR") {
+      bioavailabilityF = 0.90;
+      constanteAbsorcaoKa = 2.2;
+    } else {
+      bioavailabilityF = 0.70;
+    }
+
+    const ke = calcularKe(meiaVidaHoras);
+    const tempoTotalSimulacaoH = Math.max(12, Math.min(72, meiaVidaHoras * 5));
+    const passoTempoH = tempoTotalSimulacaoH / 60;
+
+    const labels = [];
+    const pkValues = [];
+    const pdValues = [];
+
+    let cMax = 0;
+    let tMax = 0;
+
+    for (let t = 0; t <= tempoTotalSimulacaoH; t += passoTempoH) {
+      const cp = resolverConcentracao(t, doseMg, bioavailabilityF, volumeDistribuicaoL, ke, constanteAbsorcaoKa, isIv);
+      const efeito = resolverEfeitoHill(cp, eMaxPercent, ec50MgL, hillGamma);
+
+      labels.push(t.toFixed(1) + "h");
+      pkValues.push(Number(cp.toFixed(3)));
+      pdValues.push(Number(efeito.toFixed(1)));
+
+      if (cp > cMax) {
+        cMax = cp;
+        tMax = t;
       }
     }
 
-    // Persiste o registo acadêmico de simulação
+    // Atualiza Gráfico
+    chartInstance.data.labels = labels;
+    chartInstance.data.datasets[0].data = pkValues;
+    chartInstance.data.datasets[1].data = pdValues;
+    chartInstance.update();
+
+    // Sincronização 3D: Destaca o órgão-alvo correspondente
+    if (typeof ThreeEngine !== "undefined") {
+      if (typeof ThreeEngine.simulateAdministrationRoute === "function") {
+        ThreeEngine.simulateAdministrationRoute(routeType);
+      }
+      if (typeof ThreeEngine.highlightOrgan === "function") {
+        ThreeEngine.highlightOrgan(targetOrganKey);
+      }
+    }
+
+    // Registro da Sessão no IndexedDB e Histórico Acadêmico
     if (typeof ApiCache !== "undefined" && typeof ApiCache.registrarSimulacao === "function") {
-      ApiCache.registrarSimulacao(drugName, via);
+      const nomeComposto = protocolData ? protocolData.nome : "Fármaco Genérico";
+      ApiCache.registrarSimulacao(nomeComposto, routeType);
     }
+
+    console.log(`[PkEngine] Simulação PK/PD Concluída. Cmax: ${cMax.toFixed(2)} mg/L em t: ${tMax.toFixed(1)} h`);
+    return { cMax, tMax, labels, pkValues, pdValues };
   }
 
-  // =========================================================
-  // 4. ESTADO DE PRONTIDÃO (EMPTY STATE)
-  // =========================================================
-  function renderEmptyStateChart() {
-    const canvas = document.getElementById(CANVAS_ID);
-    if (!canvas || typeof Chart === "undefined") return;
+  // =========================================================================
+  // 5. MODO CRISE TOXICOLÓGICA (INTOXICAÇÃO POR ORGANOFOSFORADOS & ANTÍDOTOS)
+  // =========================================================================
+  /**
+   * Dispara o cenário clínico de intoxicação aguda por inibidores da colinesterase
+   */
+  function startCrisisSimulation(crisisName = "organofosforado") {
+    if (!chartInstance) init();
+    if (!chartInstance) return;
 
-    if (chartInstance) {
-      chartInstance.destroy();
+    stopCrisisSimulation();
+    isCrisisSimulating = true;
+    crisisElapsedMin = 0;
+    crisisToxicityIndex = 20; // Início agudo
+    antidoteDosesApplied = { atropina: 0, pralidoxima: 0 };
+
+    // Ativa alarme visual no ThreeEngine
+    if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.setCrisisMode === "function") {
+      ThreeEngine.setCrisisMode(true, "colinergica");
     }
 
-    const ctx = canvas.getContext("2d");
+    // Prepara dados do gráfico para linha do tempo em minutos
+    const labels = [];
+    const cpTox = [];
+    const effectAch = [];
 
-    chartInstance = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: ["0h", "3h", "6h", "9h", "12h", "15h", "18h", "21h", "24h"],
-        datasets: [
-          {
-            label: "Aguardando Simulação Farmacocinética...",
-            data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
-            borderColor: PALETTE.grid,
-            borderWidth: 1.8,
-            borderDash: [6, 6],
-            pointRadius: 0,
-            fill: false
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            labels: { color: PALETTE.textMuted, font: { size: 10 } }
-          }
-        },
-        scales: {
-          x: {
-            grid: { color: PALETTE.grid, drawBorder: false },
-            ticks: { color: PALETTE.textMuted, font: { size: 9 } }
-          },
-          y: {
-            beginAtZero: true,
-            max: 50,
-            grid: { color: PALETTE.grid, drawBorder: false },
-            ticks: { color: PALETTE.textMuted, font: { size: 9 } }
-          }
+    chartInstance.data.labels = labels;
+    chartInstance.data.datasets[0].label = "Carga de Xenobiótico Tóxico (ppm)";
+    chartInstance.data.datasets[0].borderColor = THEME.lineToxic;
+    chartInstance.data.datasets[0].backgroundColor = "rgba(239, 68, 68, 0.2)";
+    chartInstance.data.datasets[0].data = cpTox;
+
+    chartInstance.data.datasets[1].label = "Hiperativação Colinérgica Muscarínica (%)";
+    chartInstance.data.datasets[1].borderColor = "#f59e0b";
+    chartInstance.data.datasets[1].data = effectAch;
+
+    // Loop de Telemetria de Emergência a cada 800ms (1 min simulado por tick)
+    simulationInterval = setInterval(() => {
+      crisisElapsedMin += 1;
+
+      // Dinâmica de agravamento sem intervenção
+      if (antidoteDosesApplied.atropina === 0 && antidoteDosesApplied.pralidoxima === 0) {
+        crisisToxicityIndex = Math.min(100, crisisToxicityIndex + 2.8);
+      } else {
+        // Redução proporcional às doses de antídotos
+        const fatorReversao = antidoteDosesApplied.atropina * 1.8 + antidoteDosesApplied.pralidoxima * 2.5;
+        crisisToxicityIndex = Math.max(5, crisisToxicityIndex - fatorReversao);
+      }
+
+      labels.push(crisisElapsedMin + " min");
+      cpTox.push(Number((crisisToxicityIndex * 0.85).toFixed(1)));
+      effectAch.push(Number(crisisToxicityIndex.toFixed(1)));
+
+      if (labels.length > 25) {
+        labels.shift();
+        cpTox.shift();
+        effectAch.shift();
+      }
+
+      chartInstance.update("none");
+
+      // Atualiza telemetria da crise no DOM se o HUD existir
+      updateCrisisHUD();
+
+      // Condição de parada ou estabilização
+      if (crisisToxicityIndex <= 15 && (antidoteDosesApplied.atropina > 0 || antidoteDosesApplied.pralidoxima > 0)) {
+        console.log("[PkEngine] 🛡️ Paciente estabilizado pelo protocolo de antídotos.");
+        if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.setCrisisMode === "function") {
+          ThreeEngine.setCrisisMode(false);
         }
       }
-    });
+    }, 800);
   }
 
+  /**
+   * Aplicação clínica de antídotos para reversão da crise
+   */
+  function applyAntidote(type) {
+    if (!isCrisisSimulating) return;
+
+    if (type === "atropina") {
+      antidoteDosesApplied.atropina += 1;
+      console.log(`[PkEngine] 💉 Atropina 2mg IV administrada (Total: ${antidoteDosesApplied.atropina} doses). Bloqueio competitivo M2/M3.`);
+      if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.highlightOrgan === "function") {
+        ThreeEngine.highlightOrgan("heart", 0x10b981, 1500);
+      }
+    } else if (type === "pralidoxima") {
+      antidoteDosesApplied.pralidoxima += 1;
+      console.log(`[PkEngine] 💉 Pralidoxima 1g IV administrada (Total: ${antidoteDosesApplied.pralidoxima} doses). Reativação da AChE.`);
+      if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.highlightOrgan === "function") {
+        ThreeEngine.highlightOrgan("brain", 0x38bdf8, 1500);
+      }
+    }
+
+    updateCrisisHUD();
+  }
+
+  function stopCrisisSimulation() {
+    if (simulationInterval) {
+      clearInterval(simulationInterval);
+      simulationInterval = null;
+    }
+    isCrisisSimulating = false;
+    crisisElapsedMin = 0;
+    if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.setCrisisMode === "function") {
+      ThreeEngine.setCrisisMode(false);
+    }
+  }
+
+  function updateCrisisHUD() {
+    const hud = document.getElementById("crisisTelemetryHUD");
+    if (!hud) return;
+
+    const gravidade = crisisToxicityIndex > 70 ? "CRÍTICA / PARADA IMINENTE" : crisisToxicityIndex > 40 ? "MODERADA / BRONCORREIA" : "ESTÁVEL / CONTROLADA";
+    const corGravidade = crisisToxicityIndex > 70 ? "#ef4444" : crisisToxicityIndex > 40 ? "#f59e0b" : "#10b981";
+
+    hud.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span style="font-weight:bold; color:${corGravidade}; font-size:0.75rem;">Status: ${gravidade}</span>
+        <span style="font-family:monospace; font-size:0.7rem; color:#94a3b8;">Tempo: ${crisisElapsedMin} min</span>
+      </div>
+      <div style="font-size:0.7rem; color:#cbd5e1; display:flex; gap:12px;">
+        <span>Atropina: <strong>${antidoteDosesApplied.atropina * 2} mg</strong></span>
+        <span>Pralidoxima: <strong>${antidoteDosesApplied.pralidoxima * 1} g</strong></span>
+        <span>Hiperestimulação ACh: <strong>${crisisToxicityIndex.toFixed(0)}%</strong></span>
+      </div>
+    `;
+  }
+
+  // =========================================================================
+  // API PÚBLICA DO MOTOR
+  // =========================================================================
   return {
     init,
-    calculateCurve,
-    simulateDrug,
-    renderEmptyStateChart
+    simulateProtocol,
+    startCrisisSimulation,
+    applyAntidote,
+    stopCrisisSimulation,
+    resolverConcentracao,
+    resolverEfeitoHill,
+    getChartInstance: () => chartInstance,
+    isCrisisActive: () => isCrisisSimulating
   };
 })();
 
-// Inicialização segura
+// Inicialização segura com o DOM
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", PKEngine.init);
+  document.addEventListener("DOMContentLoaded", PkEngine.init);
 } else {
-  PKEngine.init();
+  PkEngine.init();
 }
 
 /* ========================================================================= */
-/* FIM DO ARQUIVO: anatomia-3d/js/pk-engine.js                               */
+/* FIM DO ARQUIVO: anatomia-3d/js/pk-engine.js                              */
 /* ========================================================================= */
