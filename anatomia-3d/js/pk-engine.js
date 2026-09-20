@@ -1,190 +1,258 @@
 /* ========================================================================= */
-/* INÍCIO DO ARQUIVO: anatomia-3d/js/pk-engine.js                            */
+/* ARQUIVO: anatomia-3d/js/pk-engine.js                                     */
 /* ========================================================================= */
 
 /**
- * MOTOR FARMACOCINÉTICO (PK) E VISUALIZAÇÃO DE DADOS
- * Ecossistema LAIFT - Módulo Anatomia 3D & Biohacking
- * Modela curvas de Concentração-Tempo (Oral e IV) utilizando equações unicompartimentais.
+ * MOTOR FARMACOCINÉTICO (PK) & SIMULAÇÃO PLASMÁTICA COMPARTIMENTAL
+ * Ecossistema LAIFT - Módulo Master 3D
+ * - Modelação biofarmacêutica: Bolus IV (ordem 0/decaimento) e Oral (Equação de Bateman)
+ * - Renderização responsiva Chart.js adaptada ao Dark Mode científico
+ * - Sincronização direta com malhas 3D no ThreeEngine (Highlight de tecidos-alvo)
+ * - Persistência automatizada de sessões de estudo para cômputo curricular
  */
 
 const PKEngine = (() => {
   let chartInstance = null;
-  const CANVAS_ID = 'pkChartCanvas';
+  const CANVAS_ID = "pkChartCanvas";
 
-  // Configurações Globais de Tema (Alinhado ao CSS)
-  const THEME = {
-    primary: '#38bdf8',       // Sky 400
-    primaryGlow: 'rgba(56, 189, 248, 0.2)',
-    accent: '#34d399',        // Emerald 400
-    accentGlow: 'rgba(52, 211, 153, 0.2)',
-    gridColor: 'rgba(51, 65, 85, 0.5)', // Slate 700 c/ opacidade
-    textColor: '#94a3b8'      // Slate 400
+  // Configurações de Paleta Científica (Dark Mode LAIFT)
+  const PALETTE = {
+    primary: "#38bdf8",          // Sky 400 (Curva Oral)
+    primaryGlow: "rgba(56, 189, 248, 0.22)",
+    accent: "#34d399",           // Emerald 400 (Curva IV)
+    accentGlow: "rgba(52, 211, 153, 0.22)",
+    grid: "#1e293b",             // Slate 800
+    textMuted: "#94a3b8",        // Slate 400
+    tooltipBg: "rgba(2, 6, 23, 0.92)",
+    borderSubtle: "#334155"
   };
 
-  /**
-   * Inicializa o gráfico vazio (Estado Prontidão)
-   */
+  // =========================================================================
+  // 1. INICIALIZAÇÃO DO MOTOR
+  // =========================================================================
   function init() {
-    console.log('[LAIFT PK-Engine] Inicializando Motor Matemático...');
-    renderEmptyChart();
+    console.log("[PKEngine] Inicializando Motor Farmacocinético Compartimental...");
+    renderEmptyStateChart();
   }
 
+  // =========================================================================
+  // 2. MODELAÇÃO MATEMÁTICA FARMACOCINÉTICA (1 COMPARTIMENTO)
+  // =========================================================================
   /**
-   * Equação Unicompartimental
-   * @param {Object} params - dose (mg), f (biodisponibilidade 0-1), vd (L), halfLife (h), ka (taxa de absorção h-1)
+   * Modela a curva de concentração plasmática ao longo de 24 horas.
+   * @param {Object} params - dose (mg), f (biodisponibilidade 0-1), vd (L), halfLife (h), ka (h^-1)
    * @param {String} route - 'IV' ou 'ORAL'
-   * @returns {Object} { labels: Array<String>, data: Array<Number> }
+   * @returns {Object} { labels: Array<String>, concentrations: Array<Number> }
    */
-  function calculatePharmacokinetics(params, route = 'ORAL') {
-    // Valores padrão de segurança caso falte algum parâmetro
-    const dose = params.dose || 500;
-    const f = params.f || 1.0; 
-    const vd = params.vd || 50; 
-    const halfLife = params.halfLife || 2; 
-    const ka = params.ka || 1.5; // Constante de absorção genérica
+  function calculateCurve(params, route = "ORAL") {
+    const dose = Number(params.dose) || 500;
+    const f = typeof params.f !== "undefined" ? Number(params.f) : 1.0;
+    const vd = Number(params.vd) || 40;
+    const halfLife = Number(params.halfLife) || 4;
+    const ka = Number(params.ka) || 1.5;
 
-    const ke = Math.LN2 / halfLife; // Constante de eliminação (0.693 / t1/2)
-    
+    // Constante de eliminação de primeira ordem: ke = ln(2) / t(1/2)
+    const ke = Math.LN2 / Math.max(halfLife, 0.05);
+
     const labels = [];
-    const data = [];
+    const concentrations = [];
 
-    // Calcula a concentração ao longo de 24 horas (intervalos de 30 min)
+    // Passo de cálculo de 0.5 horas num intervalo de 24 horas
     for (let t = 0; t <= 24; t += 0.5) {
-      let concentracao = 0;
+      let conc = 0;
 
-      if (route === 'IV') {
-        // Modelo Bolus IV: C(t) = C0 * e^(-ke*t)
+      if (route.toUpperCase() === "IV") {
+        // Modelo Bolus Intravenoso: C(t) = (Dose / Vd) * e^(-ke * t)
         const c0 = (dose * f) / vd;
-        concentracao = c0 * Math.exp(-ke * t);
+        conc = c0 * Math.exp(-ke * t);
       } else {
-        // Modelo Oral (Bateman): C(t) = [F*D*ka / Vd*(ka-ke)] * [e^(-ke*t) - e^(-ka*t)]
-        if (Math.abs(ka - ke) < 0.001) {
-          // Prevenção de divisão por zero (se ka == ke)
-          concentracao = ((f * dose * ke * t) / vd) * Math.exp(-ke * t);
+        // Modelo Oral de 1 Compartimento (Equação de Bateman):
+        // C(t) = [F * Dose * ka / (Vd * (ka - ke))] * [e^(-ke * t) - e^(-ka * t)]
+        if (Math.abs(ka - ke) < 0.0001) {
+          // Prevenção de divisão por zero se ka == ke
+          conc = ((f * dose * ke * t) / vd) * Math.exp(-ke * t);
         } else {
-          const fator = (f * dose * ka) / (vd * (ka - ke));
-          concentracao = fator * (Math.exp(-ke * t) - Math.exp(-ka * t));
+          const preFator = (f * dose * ka) / (vd * (ka - ke));
+          conc = preFator * (Math.exp(-ke * t) - Math.exp(-ka * t));
         }
       }
 
-      labels.push(t === Math.floor(t) ? `${t}h` : ''); // Formata rótulos para o eixo X
-      data.push(Math.max(0, parseFloat(concentracao.toFixed(2)))); // Limpa pequenos ruídos matemáticos
+      labels.push(t % 2 === 0 ? `${t}h` : "");
+      concentrations.push(Math.max(0, parseFloat(conc.toFixed(2))));
     }
 
-    return { labels, data };
+    return { labels, concentrations };
   }
 
+  // =========================================================================
+  // 3. EXECUÇÃO DE SIMULAÇÃO & RENDERIZAÇÃO GRÁFICA
+  // =========================================================================
   /**
-   * Renderiza a simulação no Chart.js
-   * @param {String} drugName - Nome do fármaco/composto
-   * @param {Object} params - Parâmetros farmacocinéticos
-   * @param {String} route - 'IV' ou 'ORAL'
+   * Executa a simulação completa de um composto e atualiza a interface.
+   * @param {String} drugName - Nome do fármaco ou princípio ativo
+   * @param {Object} params - Parâmetros farmacocinéticos (dose, vd, halfLife, etc.)
+   * @param {String} route - Via de administração ('ORAL' ou 'IV')
    */
-  function simulateDrug(drugName, params, route) {
-    const pkData = calculatePharmacokinetics(params, route);
-    
-    // Define as cores com base na via de administração
-    const colorLine = route === 'IV' ? THEME.accent : THEME.primary;
-    const colorFill = route === 'IV' ? THEME.accentGlow : THEME.primaryGlow;
+  function simulateDrug(drugName, params, route = "ORAL") {
+    const via = (route || params.route || "ORAL").toUpperCase();
+    const dataSet = calculateCurve(params, via);
+
+    const isIV = via === "IV";
+    const lineColor = isIV ? PALETTE.accent : PALETTE.primary;
+    const fillColor = isIV ? PALETTE.accentGlow : PALETTE.primaryGlow;
+
+    const canvas = document.getElementById(CANVAS_ID);
+    if (!canvas || typeof Chart === "undefined") {
+      console.warn("[PKEngine] Canvas ou Chart.js indisponível para renderização.");
+      return;
+    }
 
     if (chartInstance) {
       chartInstance.destroy();
     }
 
-    const ctx = document.getElementById(CANVAS_ID).getContext('2d');
+    const ctx = canvas.getContext("2d");
 
-    // Regista a simulação no Acervo Institucional via ApiCache
-  if (typeof ApiCache !== 'undefined') {
-    ApiCache.registrarSimulacao(drugName, route);
-  }
-    
     chartInstance = new Chart(ctx, {
-      type: 'line',
+      type: "line",
       data: {
-        labels: pkData.labels,
-        datasets: [{
-          label: `[${drugName}] Plasmática (mg/L) - Via ${route}`,
-          data: pkData.data,
-          borderColor: colorLine,
-          backgroundColor: colorFill,
-          borderWidth: 2,
-          pointRadius: 0,       // Esconde pontos para uma curva limpa
-          pointHoverRadius: 4,
-          fill: true,
-          tension: 0.4          // Suaviza a curva (Bézier)
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false, // Fundamental para o layout Mobile-First flexível
-        plugins: {
-          legend: {
-            display: true,
-            labels: { color: THEME.textColor, font: { size: 10 } }
-          },
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            backgroundColor: 'rgba(2, 6, 23, 0.9)',
-            titleColor: THEME.primary,
-            bodyColor: '#fff',
-            borderColor: THEME.border,
-            borderWidth: 1
+        labels: dataSet.labels,
+        datasets: [
+          {
+            label: `${drugName} (${via}) - Nível Plasmático (mg/L)`,
+            data: dataSet.concentrations,
+            borderColor: lineColor,
+            backgroundColor: fillColor,
+            borderWidth: 2.2,
+            pointRadius: 0,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: lineColor,
+            fill: true,
+            tension: 0.38
           }
-        },
-        scales: {
-          x: {
-            grid: { color: THEME.gridColor, drawBorder: false },
-            ticks: { color: THEME.textColor, maxTicksLimit: 12 }
-          },
-          y: {
-            beginAtZero: true,
-            grid: { color: THEME.gridColor, drawBorder: false },
-            ticks: { color: THEME.textColor }
-          }
-        },
-        interaction: { mode: 'nearest', axis: 'x', intersect: false }
-      }
-    });
-
-    // INTEGRAÇÃO COM O MOTOR 3D:
-    // Se a simulação incluir um órgão alvo, enviamos a ordem para o ThreeEngine acender a malha 3D
-    if (params.targetOrgan && typeof ThreeEngine !== 'undefined') {
-      console.log(`[LAIFT PK-Engine] Acendendo órgão alvo no modelo 3D: ${params.targetOrgan}`);
-      ThreeEngine.highlightOrgan(params.targetOrgan);
-    }
-  }
-
-  /**
-   * Desenha o gráfico inicial vazio aguardando ação do aluno.
-   */
-  function renderEmptyChart() {
-    const ctx = document.getElementById(CANVAS_ID);
-    if(!ctx) return;
-
-    if (chartInstance) chartInstance.destroy();
-
-    chartInstance = new Chart(ctx.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: ['0h', '4h', '8h', '12h', '16h', '20h', '24h'],
-        datasets: [{
-          label: 'Aguardando Simulação Farmacocinética...',
-          data: [0, 0, 0, 0, 0, 0, 0],
-          borderColor: THEME.gridColor,
-          borderWidth: 2,
-          borderDash: [5, 5],
-          pointRadius: 0
-        }]
+        ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: THEME.textColor } } },
+        animation: {
+          duration: 650,
+          easing: "easeOutQuart"
+        },
+        plugins: {
+          legend: {
+            display: true,
+            labels: {
+              color: PALETTE.textMuted,
+              font: { size: 11, weight: "600" }
+            }
+          },
+          tooltip: {
+            mode: "index",
+            intersect: false,
+            backgroundColor: PALETTE.tooltipBg,
+            titleColor: PALETTE.primary,
+            bodyColor: "#f8fafc",
+            borderColor: PALETTE.borderSubtle,
+            borderWidth: 1,
+            padding: 8,
+            displayColors: false,
+            callbacks: {
+              label: (context) => ` Concentração: ${context.parsed.y} mg/L`
+            }
+          }
+        },
         scales: {
-          x: { grid: { color: THEME.gridColor } },
-          y: { beginAtZero: true, max: 100, grid: { color: THEME.gridColor } }
+          x: {
+            grid: { color: PALETTE.grid, drawBorder: false },
+            ticks: { color: PALETTE.textMuted, font: { size: 10 } }
+          },
+          y: {
+            beginAtZero: true,
+            grid: { color: PALETTE.grid, drawBorder: false },
+            ticks: { color: PALETTE.textMuted, font: { size: 10 } }
+          }
+        },
+        interaction: {
+          mode: "nearest",
+          axis: "x",
+          intersect: false
+        }
+      }
+    });
+
+    // INTEGRAÇÃO 3D DIRETA:
+    // Destaca o órgão-alvo na malha e aciona o fluxo hemodinâmico de partículas
+    const targetKey = params.targetOrgan || params.targetMesh;
+    if (targetKey && typeof ThreeEngine !== "undefined") {
+      console.log(`[PKEngine] Acionando resposta 3D no tecido-alvo: ${targetKey}`);
+      ThreeEngine.highlightOrgan(targetKey);
+
+      // Se for intravenoso, dispara fluxo arterial de partículas
+      if (isIV && typeof ThreeEngine.triggerParticleFlow === "function") {
+        ThreeEngine.triggerParticleFlow("aorta_flow");
+        setTimeout(() => {
+          if (typeof ThreeEngine.stopParticles === "function") {
+            ThreeEngine.stopParticles();
+          }
+        }, 4000);
+      }
+    }
+
+    // Persiste o registo acadêmico de simulação
+    if (typeof ApiCache !== "undefined" && typeof ApiCache.registrarSimulacao === "function") {
+      ApiCache.registrarSimulacao(drugName, via);
+    }
+  }
+
+  // =========================================================
+  // 4. ESTADO DE PRONTIDÃO (EMPTY STATE)
+  // =========================================================
+  function renderEmptyStateChart() {
+    const canvas = document.getElementById(CANVAS_ID);
+    if (!canvas || typeof Chart === "undefined") return;
+
+    if (chartInstance) {
+      chartInstance.destroy();
+    }
+
+    const ctx = canvas.getContext("2d");
+
+    chartInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: ["0h", "3h", "6h", "9h", "12h", "15h", "18h", "21h", "24h"],
+        datasets: [
+          {
+            label: "Aguardando Simulação Farmacocinética...",
+            data: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            borderColor: PALETTE.grid,
+            borderWidth: 1.8,
+            borderDash: [6, 6],
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            labels: { color: PALETTE.textMuted, font: { size: 10 } }
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: PALETTE.grid, drawBorder: false },
+            ticks: { color: PALETTE.textMuted, font: { size: 9 } }
+          },
+          y: {
+            beginAtZero: true,
+            max: 50,
+            grid: { color: PALETTE.grid, drawBorder: false },
+            ticks: { color: PALETTE.textMuted, font: { size: 9 } }
+          }
         }
       }
     });
@@ -192,13 +260,15 @@ const PKEngine = (() => {
 
   return {
     init,
-    simulateDrug
+    calculateCurve,
+    simulateDrug,
+    renderEmptyStateChart
   };
 })();
 
-// Inicialização
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', PKEngine.init);
+// Inicialização segura
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", PKEngine.init);
 } else {
   PKEngine.init();
 }
