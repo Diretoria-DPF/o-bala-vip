@@ -1,142 +1,191 @@
+<!-- ========================================================================= -->
+<!-- ARQUIVO: anatomia-3d/index.html                                           -->
+<!-- ========================================================================= -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>LAIFT — Anatomia 3D & Biohacking</title>
+  <title>LAIFT — Atlas Anatômico, Fisiológico & Biohacking 3D</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 
-  <!-- Bibliotecas Core (CDNs Estáveis via unpkg/cdnjs) -->
+  <!-- CDNs Estáveis (Three.js r128, 3Dmol e Chart.js) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-  <!-- Folha de estilo única -->
+  <!-- Folha de Estilos Unificada -->
   <link rel="stylesheet" href="css/style.css">
-
-  <style>
-    /* Estilos Críticos Garantidos */
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    html, body {
-      width: 100%; height: 100%; min-height: 100vh;
-      background: #0f172a !important; color: #f8fafc;
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-      overflow: hidden; display: flex; flex-direction: column;
-    }
-    .module-header {
-      height: 52px; background: #020617; border-bottom: 1px solid #334155;
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0 16px; flex-shrink: 0; z-index: 10;
-    }
-    .viewport { flex: 1; position: relative; width: 100%; height: calc(100% - 114px); overflow: hidden; background: #0f172a; }
-    .view-panel { display: none; width: 100%; height: 100%; padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    .view-panel.active { display: block; }
-    #canvas-3d-container {
-      width: 100%; height: 42vh; min-height: 240px; background: #020617;
-      border-radius: 10px; border: 1px solid #334155; position: relative;
-      overflow: hidden; margin-bottom: 12px;
-    }
-    #loading-3d-overlay {
-      position: absolute; inset: 0; display: flex; justify-content: center; align-items: center;
-      background: rgba(2, 6, 23, 0.85); color: #38bdf8; font-size: 0.85rem; font-weight: 600; z-index: 5;
-    }
-    #organ-hud {
-      position: absolute; top: 10px; left: 10px; background: rgba(15, 23, 42, 0.85);
-      border: 1px solid #334155; padding: 6px 10px; border-radius: 6px;
-      font-size: 0.75rem; color: #94a3b8; z-index: 6; pointer-events: none;
-    }
-    #pk-chart-container {
-      width: 100%; height: 180px; background: #1e293b; border-radius: 10px;
-      padding: 10px; border: 1px solid #334155; position: relative;
-    }
-    .bottom-nav {
-      height: 62px; background: #020617; border-top: 1px solid #334155;
-      display: flex; justify-content: space-around; align-items: center; flex-shrink: 0; z-index: 10;
-    }
-    .nav-btn {
-      background: transparent; border: none; color: #94a3b8; width: 100%; height: 100%;
-      display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; cursor: pointer;
-    }
-    .nav-btn.active { color: #38bdf8; font-weight: 700; }
-    .hidden { display: none !important; }
-  </style>
 </head>
 <body>
 
-  <header class="module-header">
-    <h1 style="font-size: 1.15rem; color: #38bdf8;">🧬 LAIFT <span style="color: #f8fafc; font-weight: 400;">Bio & 3D</span></h1>
-    <span style="font-size: 0.7rem; background: #1e293b; color: #94a3b8; padding: 4px 8px; border-radius: 12px; border: 1px solid #334155;">Offline-Ready</span>
+  <!-- =======================================================================
+       1. CABEÇALHO COMPACTO
+  ======================================================================= -->
+  <header class="atlas-header">
+    <div class="atlas-brand">
+      <h1>🧬 LAIFT <span>Bio-Atlas 3D</span></h1>
+    </div>
+    <div class="header-tools">
+      <button id="btnExportCsv" class="btn-pill-tool" type="button" title="Emitir Comprovante Curricular em PDF">
+        📄 Dossiê PDF
+      </button>
+      <span class="btn-pill-tool" style="cursor: default; background: rgba(56, 189, 248, 0.1); color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);">
+        ● Híbrido
+      </span>
+    </div>
   </header>
 
+  <!-- =======================================================================
+       2. BARRA DE SISTEMAS ANATÔMICOS (TOUCH / HORIZONTAL)
+  ======================================================================= -->
+  <nav class="systems-bar" id="systemsBar" aria-label="Seletor de Sistemas Anatômicos">
+    <button class="sys-chip active" type="button" data-sys="digestorio" onclick="ThreeEngine.selectSystem('digestorio')">
+      <span>🍽️</span> <span>Digestório</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="cardiovascular" onclick="ThreeEngine.selectSystem('cardiovascular')">
+      <span>❤️</span> <span>Cardiovascular</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="nervoso" onclick="ThreeEngine.selectSystem('nervoso')">
+      <span>🧠</span> <span>Nervoso</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="respiratorio" onclick="ThreeEngine.selectSystem('respiratorio')">
+      <span>🫁</span> <span>Respiratório</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="urinario" onclick="ThreeEngine.selectSystem('urinario')">
+      <span>💧</span> <span>Renal / Urinário</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="musculoesqueletico" onclick="ThreeEngine.selectSystem('musculoesqueletico')">
+      <span>🦴</span> <span>Musculoesquelético</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="imunologico" onclick="ThreeEngine.selectSystem('imunologico')">
+      <span>🛡️</span> <span>Imunológico</span>
+    </button>
+    <button class="sys-chip" type="button" data-sys="endocrino" onclick="ThreeEngine.selectSystem('endocrino')">
+      <span>🧪</span> <span>Endócrino</span>
+    </button>
+  </nav>
+
+  <!-- =======================================================================
+       3. VIEWPORT PRINCIPAL (ABAS SPA)
+  ======================================================================= -->
   <main class="viewport" id="main-viewport">
-    
-    <!-- ABA 1: ANATOMIA E FARMACOCINÉTICA 3D -->
+
+    <!-- -------------------------------------------------------------------
+         ABA 1: ANATOMIA 3D, FISIOLOGIA & FARMACOCINÉTICA
+    ------------------------------------------------------------------- -->
     <section id="view-anatomy" class="view-panel active">
-      <div style="margin-bottom: 12px;">
-        <h2 style="font-size: 1.15rem;">Simulador Anatômico & PK</h2>
-        <p style="font-size: 0.8rem; color: #94a3b8;">Acompanhe a distribuição tecidual de princípios ativos.</p>
+      <div class="panel-header">
+        <h2>Simulação Anatômica & Farmacocinética</h2>
+        <p>Explore a distribuição tridimensional de fármacos e processos fisiológicos em tempo real.</p>
       </div>
 
+      <!-- Palco Gráfico WebGL (Three.js) -->
       <div id="canvas-3d-container">
         <div id="loading-3d-overlay">Carregando Anatomia 3D...</div>
-        <div id="organ-hud" class="hidden">Estrutura: <strong id="organ-name" style="color: #38bdf8;">---</strong></div>
+        <div id="organ-hud" class="hidden">
+          Estrutura: <strong id="organ-name">---</strong>
+        </div>
       </div>
 
+      <!-- Timeline Fisiológica Dinâmica -->
+      <div class="timeline-card" style="margin-bottom: 12px;">
+        <div class="timeline-header">
+          <span class="timeline-step-badge">⚡ Processo Fisiológico: Deglutição</span>
+          <button type="button" class="btn-play-sm" onclick="ThreeEngine.triggerParticleFlow('oral_cavity')">
+            ▶ Simular Trânsito
+          </button>
+        </div>
+        <p class="timeline-desc" style="margin: 6px 0;">
+          Acompanhe o percurso do bolo alimentar: Fase Oral (Voluntária) ➔ Fase Faríngea (Reflexa) ➔ Ondas Peristálticas Esofágicas ➔ Cárdia Gástrica.
+        </p>
+        <div class="timeline-nav-row">
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('oral_cavity')">1. Oral (Ptialina)</button>
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('pharynx_transit')">2. Faríngea</button>
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('esophagus_wave')">3. Esofágica</button>
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('stomach_entry')">4. Gástrica (Pepsina)</button>
+        </div>
+      </div>
+
+      <!-- Curva Farmacocinética Compartimental (Chart.js) -->
       <div id="pk-chart-container">
         <canvas id="pkChartCanvas"></canvas>
       </div>
     </section>
 
-    <!-- ABA 2: BIOHACKING E SUPLEMENTAÇÃO -->
-    <section id="view-biohacking" class="view-panel">
-      <div style="margin-bottom: 12px;">
-        <h2 style="font-size: 1.15rem;">Protocolos Celulares</h2>
-        <p style="font-size: 0.8rem; color: #94a3b8;">Vias energéticas, ATP e biodisponibilidade de minerais.</p>
+    <!-- -------------------------------------------------------------------
+         ABA 2: BIOHACKING & OTIMIZAÇÃO CELULAR
+    ------------------------------------------------------------------- -->
+    <section id="view-biohacking" class="view-panel hidden">
+      <div class="panel-header">
+        <h2>Protocolos Celulares & Bioenergética</h2>
+        <p>Vias mitocondriais de síntese de ATP, biodisponibilidade mineral e modulação nootrópica.</p>
       </div>
 
-      <div class="search-container" style="display: flex; gap: 8px; margin-bottom: 12px;">
-        <input type="text" id="bio-search-input" placeholder="Buscar mineral ou via (ex: Treonato, ATP, CoQ10)..." style="flex: 1; background: #020617; border: 1px solid #334155; color: #fff; padding: 10px 12px; border-radius: 6px; outline: none; font-size: 16px;">
-        <button id="btn-bio-search" style="background: #1e293b; border: 1px solid #334155; color: #fff; padding: 0 16px; border-radius: 6px; cursor: pointer;">🔍</button>
+      <!-- Barra de Pesquisa de Princípios Ativos -->
+      <div class="search-container">
+        <input 
+          type="text" 
+          id="bio-search-input" 
+          placeholder="Buscar mineral ou via (ex: Treonato, ATP, CoQ10, Creatina)..."
+          autocomplete="off"
+        >
+        <button id="btn-bio-search" type="button">🔍</button>
       </div>
 
+      <!-- Grid de Cartões de Protocolo -->
       <div id="biohacking-results-grid"></div>
     </section>
 
-    <!-- ABA 3: ACERVO & HISTÓRICO -->
-    <section id="view-acervo" class="view-panel">
-      <div style="margin-bottom: 12px;">
-        <h2 style="font-size: 1.15rem;">Acervo de Simulações</h2>
-        <p style="font-size: 0.8rem; color: #94a3b8;">Histórico formatado para comprovação de horas complementares.</p>
-      </div>
-      
-      <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-        <button id="btn-export-csv" class="btn-primary" style="flex: 1; background: #0284c7; color: #fff; border: none; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer;">📥 Exportar CSV</button>
-        <button id="btn-sync-cloud" class="btn-secondary" style="flex: 1; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 6px; padding: 10px; font-weight: 600; cursor: pointer;">🔄 Salvar Nuvem</button>
+    <!-- -------------------------------------------------------------------
+         ABA 3: ACERVO INSTITUCIONAL & DOSSIÊ CURRICULAR
+    ------------------------------------------------------------------- -->
+    <section id="view-acervo" class="view-panel hidden">
+      <div class="panel-header">
+        <h2>Acervo de Simulações & Horas Curriculares</h2>
+        <p>Registro formal de horas práticas computadas para validação acadêmica na UNINASSAU e Currículo Lattes.</p>
       </div>
 
+      <!-- Ações de Exportação e Sincronização -->
+      <div class="actions-row">
+        <button id="btn-export-csv" class="btn-primary" type="button">
+          📄 Emitir Dossiê PDF
+        </button>
+        <button id="btn-sync-cloud" class="btn-secondary" type="button">
+          🔄 Salvar na Nuvem
+        </button>
+      </div>
+
+      <!-- Lista Histórica de Simulações -->
       <div id="history-list-container"></div>
     </section>
 
   </main>
 
+  <!-- =======================================================================
+       4. BARRA DE NAVEGAÇÃO INFERIOR MOBILE-FIRST (PWA)
+  ======================================================================= -->
   <nav class="bottom-nav">
-    <button class="nav-btn active" data-target="view-anatomy">
-      <span style="font-size: 1.3rem;">🧍</span>
-      <span style="font-size: 0.65rem;">Anatomia</span>
+    <button class="nav-btn active" type="button" data-target="view-anatomy">
+      <span class="nav-icon">🧍</span>
+      <span class="nav-label">Anatomia 3D</span>
     </button>
-    <button class="nav-btn" data-target="view-biohacking">
-      <span style="font-size: 1.3rem;">⚡</span>
-      <span style="font-size: 0.65rem;">Biohacking</span>
+    <button class="nav-btn" type="button" data-target="view-biohacking">
+      <span class="nav-icon">⚡</span>
+      <span class="nav-label">Biohacking</span>
     </button>
-    <button class="nav-btn" data-target="view-acervo">
-      <span style="font-size: 1.3rem;">📚</span>
-      <span style="font-size: 0.65rem;">Acervo</span>
+    <button class="nav-btn" type="button" data-target="view-acervo">
+      <span class="nav-icon">📚</span>
+      <span class="nav-label">Dossiê / Acervo</span>
     </button>
   </nav>
 
-  <!-- Scripts Organizados sem duplicações -->
+  <!-- =======================================================================
+       5. INJEÇÃO DOS SCRIPTS MODULARES (ORDEM RIGOROSA DE DEPENDÊNCIA)
+  ======================================================================= -->
   <script src="data/bio-database.js"></script>
   <script src="js/api-cache.js"></script>
   <script src="js/three-engine.js"></script>
@@ -145,3 +194,6 @@
   <script src="js/app.js"></script>
 </body>
 </html>
+<!-- ========================================================================= -->
+<!-- FIM DO ARQUIVO: anatomia-3d/index.html                                    -->
+<!-- ========================================================================= -->
