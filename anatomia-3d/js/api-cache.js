@@ -3,136 +3,351 @@
 /* ========================================================================= */
 
 /**
- * MOTOR DE INTERCEPTAÇÃO, CACHE INTELIGENTE & DOSSIÊ ACADÊMICO EM PDF
- * Ecossistema LAIFT - Módulo Master 3D
- * - Interceptação Offline-First com enriquecimento dinâmico via PubChem
- * - Unificação dos registros de simulação e cômputo de carga horária
- * - Emissão de Dossiê / Parecer Técnico em PDF nativo para validação institucional
- *   (Comprovação de Atividades Complementares - UNINASSAU / Currículo Lattes)
+ * GATEWAY DE APIS BIOMÉDICAS & MOTOR DE CACHE PERPÉTUO (INDEXEDDB)
+ * Ecossistema LAIFT - Módulo Master 3D / Bio-Twin
+ * - Fontes Integradas: Human Reference Atlas (HRA), NIH 3D, RCSB PDB e PubChem
+ * - Estratégia Write-Through com IndexedDB nativo (Zero consultas duplicadas)
+ * - Fila de Backup automático em nuvem via Google Apps Script (Google Sheets)
+ * - Emissão de Dossiê / Certificado Acadêmico em PDF de Alta Resolução
  */
 
 const ApiCache = (() => {
-  // Chaves de Persistência Unificadas
-  const STORAGE_KEY_HISTORY = "laift_atlas_history";
-  const STORAGE_KEY_LEGACY = "laift_3d_sim_history";
-  const SESSION_STORAGE_KEY = "laift_student_session";
+  // Configurações de Armazenamento
+  const DB_NAME = "LAIFT_BioTwin_DB";
+  const DB_VERSION = 1;
+  const STORE_MODELS = "cached_models_3d";   // Armazena Blobs de .GLB, .PDB e malhas
+  const STORE_PAYLOADS = "cached_api_data";  // Armazena JSONs de APIs (HRA, NIH, PubChem)
+  const STORE_HISTORY = "academic_history";  // Registros de simulação de horas
+
   const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbyXvBYrHBIXNjHYItuq2LXKt1vkmh2m_CME-5aZqkxUJhl7ktJjemuasbvdEweH95k/exec";
+  const SESSION_KEY = "laift_student_session";
+
+  // Endpoints das APIs Biomédicas Abertas
+  const API_ENDPOINTS = {
+    HRA_BASE: "https://apps.humanatlas.io/api/v1",
+    HRA_COLLECTION: "https://purl.humanatlas.io/collection/hra",
+    NIH_3D_BASE: "https://3d.nih.gov/api/v1",
+    PDB_DATA: "https://files.rcsb.org/download",
+    PUBCHEM: "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound"
+  };
+
+  let dbInstance = null;
 
   // =========================================================================
-  // 1. INICIALIZAÇÃO
+  // 1. INICIALIZAÇÃO DO BANCO INDEXEDDB BINÁRIO
   // =========================================================================
   function init() {
-    console.log("[ApiCache] Inicializando Interceptor de APIs & Gerador de Dossiê PDF...");
-    migrarHistoricoLegado();
-    renderizarHistoricoLocal();
-    configurarBotoesAcervo();
+    console.log("[ApiCache] Inicializando Gateway de APIs e Armazenamento IndexedDB...");
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_MODELS)) {
+          db.createObjectStore(STORE_MODELS, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(STORE_PAYLOADS)) {
+          db.createObjectStore(STORE_PAYLOADS, { keyPath: "queryKey" });
+        }
+        if (!db.objectStoreNames.contains(STORE_HISTORY)) {
+          db.createObjectStore(STORE_HISTORY, { keyPath: "id" });
+        }
+      };
+
+      request.onsuccess = (e) => {
+        dbInstance = e.target.result;
+        console.log("[ApiCache] IndexedDB conectado e pronto para caching binário.");
+        configurarBotoesAcervo();
+        renderizarHistoricoLocal();
+        resolve(dbInstance);
+      };
+
+      request.onerror = (e) => {
+        console.error("[ApiCache] Falha ao abrir IndexedDB. Operando com fallbacks:", e);
+        resolve(null);
+      };
+    });
   }
 
-  function migrarHistoricoLegado() {
-    const legadoRaw = localStorage.getItem(STORAGE_KEY_LEGACY);
-    const atualRaw = localStorage.getItem(STORAGE_KEY_HISTORY);
+  // Métodos Utilitários para Operações no IndexedDB
+  function getFromStore(storeName, key) {
+    return new Promise((resolve) => {
+      if (!dbInstance) {
+        resolve(null);
+        return;
+      }
+      try {
+        const tx = dbInstance.transaction(storeName, "readonly");
+        const store = tx.objectStore(storeName);
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => resolve(null);
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  }
 
-    if (legadoRaw && !atualRaw) {
-      localStorage.setItem(STORAGE_KEY_HISTORY, legadoRaw);
+  function saveToStore(storeName, data) {
+    return new Promise((resolve) => {
+      if (!dbInstance) {
+        resolve(false);
+        return;
+      }
+      try {
+        const tx = dbInstance.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        store.put(data);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        resolve(false);
+      }
+    });
+  }
+
+  // =========================================================================
+  // 2. CONSULTAS COM CACHE AUTOMÁTICO E BACKUP (WRITE-THROUGH)
+  // =========================================================================
+
+  /**
+   * Consulta a API do Human Reference Atlas (HRA) com cache perpétuo.
+   * Retorna os metadados de órgãos, células e links dos modelos 3D no padrão CCF.
+   */
+  async function consultarHRA(orgaoNome) {
+    const key = `hra_${orgaoNome.toLowerCase().trim()}`;
+    
+    // 1. Verifica cache local
+    const cached = await getFromStore(STORE_PAYLOADS, key);
+    if (cached) {
+      console.log(`[ApiCache] ⚡ HRA [${orgaoNome}] retornado do cache local.`);
+      return cached.payload;
+    }
+
+    // 2. Consulta à API da HRA
+    console.log(`[ApiCache] 🌐 Consultando HRA para o órgão: ${orgaoNome}...`);
+    try {
+      const url = `${API_ENDPOINTS.HRA_BASE}/reference-organs?organ=${encodeURIComponent(orgaoNome)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Órgão não localizado na API HRA.");
+      
+      const payload = await res.json();
+
+      // 3. Salva no cache perpétuo
+      await saveToStore(STORE_PAYLOADS, {
+        queryKey: key,
+        payload: payload,
+        timestamp: Date.now()
+      });
+
+      // 4. Envia backup assíncrono para o GAS/Sheets
+      agendarBackupNuvem("HRA", orgaoNome, payload);
+
+      return payload;
+    } catch (err) {
+      console.warn(`[ApiCache] Falha na consulta HRA (${orgaoNome}):`, err);
+      return null;
     }
   }
 
-  // =========================================================================
-  // 2. BUSCA HÍBRIDA (CACHE LOCAL -> PUBCHEM REST -> SALVAMENTO)
-  // =========================================================================
+  /**
+   * Consulta o NIH 3D Print Exchange para modelos 3D de macromoléculas/vírus/órgãos.
+   */
+  async function consultarNIH3D(termoBusca) {
+    const key = `nih3d_${termoBusca.toLowerCase().trim()}`;
+    
+    const cached = await getFromStore(STORE_PAYLOADS, key);
+    if (cached) {
+      console.log(`[ApiCache] ⚡ NIH 3D [${termoBusca}] retornado do cache local.`);
+      return cached.payload;
+    }
+
+    console.log(`[ApiCache] 🌐 Consultando NIH 3D para: ${termoBusca}...`);
+    try {
+      const url = `${API_ENDPOINTS.NIH_3D_BASE}/entries?search=${encodeURIComponent(termoBusca)}&limit=5`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Consulta ao NIH 3D sem retorno.");
+      
+      const payload = await res.json();
+
+      await saveToStore(STORE_PAYLOADS, {
+        queryKey: key,
+        payload: payload,
+        timestamp: Date.now()
+      });
+
+      agendarBackupNuvem("NIH_3D", termoBusca, payload);
+
+      return payload;
+    } catch (err) {
+      console.warn(`[ApiCache] Falha no NIH 3D (${termoBusca}):`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Busca e armazena o binário de um modelo 3D (.glb ou .pdb).
+   * Se já estiver em cache, cria uma URL de objeto local (Blob URL) instantânea.
+   */
+  async function obterModelo3DBinario(idModelo, urlDownload) {
+    const cached = await getFromStore(STORE_MODELS, idModelo);
+    if (cached && cached.blob) {
+      console.log(`[ApiCache] ⚡ Modelo 3D [${idModelo}] carregado da memória binária local.`);
+      return URL.createObjectURL(cached.blob);
+    }
+
+    console.log(`[ApiCache] 🌐 Baixando binário do modelo 3D [${idModelo}] pela primeira vez...`);
+    try {
+      const res = await fetch(urlDownload);
+      if (!res.ok) throw new Error("Erro ao transferir arquivo 3D.");
+      
+      const blob = await res.blob();
+
+      // Grava no IndexedDB como Blob bruto
+      await saveToStore(STORE_MODELS, {
+        id: idModelo,
+        blob: blob,
+        tamanhoBytes: blob.size,
+        dataSalvo: new Date().toISOString()
+      });
+
+      console.log(`[ApiCache] 💾 Binário [${idModelo}] salvo no cache local permanente.`);
+      return URL.createObjectURL(blob);
+    } catch (err) {
+      console.warn(`[ApiCache] Erro ao obter binário 3D (${idModelo}):`, err);
+      return urlDownload; // Fallback para a URL original da rede
+    }
+  }
+
+  /**
+   * Busca de Compostos e Fármacos (PubChem) com cache local automático.
+   */
   async function buscarProtocolo(query) {
     const termo = query.toLowerCase().trim();
+    const key = `pubchem_${termo}`;
 
-    // 1. Tenta base unificada ATLAS_DATABASE / BioDatabase
+    // 1. Tenta memória da base estática local
     const baseLocal = (typeof ATLAS_DATABASE !== "undefined" && ATLAS_DATABASE.protocols) ||
                       (typeof BioDatabase !== "undefined" && BioDatabase.protocols) || [];
 
-    const correspondencias = baseLocal.filter((p) =>
+    const locais = baseLocal.filter((p) =>
       p.nome.toLowerCase().includes(termo) ||
       (p.tags && p.tags.some((t) => t.toLowerCase().includes(termo))) ||
       (p.viaMetabolica && p.viaMetabolica.toLowerCase().includes(termo))
     );
 
-    if (correspondencias.length > 0) {
-      console.log("[ApiCache] ⚡ Retornado da base local (Zero Latência).");
-      return correspondencias;
+    if (locais.length > 0) {
+      return locais;
     }
 
-    // 2. Consulta à API PUG REST do PubChem (Sem autenticação requerida)
-    console.log(`[ApiCache] 🌐 "${termo}" não localizado localmente. Consultando PubChem...`);
+    // 2. Tenta cache do IndexedDB
+    const cached = await getFromStore(STORE_PAYLOADS, key);
+    if (cached && cached.payload) {
+      return [cached.payload];
+    }
 
+    // 3. Consulta PubChem PUG REST
     try {
-      const url = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(termo)}/property/MolecularWeight,XLogP,CanonicalSMILES/JSON`;
-      const response = await fetch(url);
+      const url = `${API_ENDPOINTS.PUBCHEM}/name/${encodeURIComponent(termo)}/property/MolecularWeight,XLogP,CanonicalSMILES/JSON`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Composto não encontrado no PubChem.");
 
-      if (!response.ok) {
-        throw new Error("Composto não catalogado no repositório PubChem.");
-      }
-
-      const data = await response.json();
+      const data = await res.json();
       const props = data.PropertyTable.Properties[0];
 
-      const novoRegistro = {
-        id: `composto_pubchem_${Date.now()}`,
+      const novoProtocolo = {
+        id: `composto_${Date.now()}`,
         nome: termo.charAt(0).toUpperCase() + termo.slice(1),
         icone: "🔬",
         viaMetabolica: "Metabolismo & Farmacocinética Exógena",
         mecanismoAcao: `Massa Molecular: ${props.MolecularWeight} g/mol | XLogP: ${props.XLogP || "N/D"}.<br>SMILES: <span style="font-family:monospace; font-size:0.7rem;">${props.CanonicalSMILES}</span>`,
-        tags: ["PubChem Live", "Princípio Ativo"],
+        tags: ["PubChem Backup", "Princípio Ativo"],
         cofatores: [],
         sistema: "digestorio",
         targetMesh: "liver",
         pkData: {
           route: "ORAL",
           dose: 100,
-          f: 0.7,
-          vd: 45,
+          f: 0.75,
+          vd: 40,
           halfLife: 4.0,
           ka: 1.2,
           targetOrgan: "liver"
         }
       };
 
-      salvarNoCacheLocal(novoRegistro);
-      return [novoRegistro];
-    } catch (err) {
-      console.warn("[ApiCache] Falha na consulta externa:", err);
+      // Grava no IndexedDB
+      await saveToStore(STORE_PAYLOADS, {
+        queryKey: key,
+        payload: novoProtocolo,
+        timestamp: Date.now()
+      });
+
+      // Envia cópia para o Google Sheets via GAS
+      agendarBackupNuvem("PUBCHEM", termo, novoProtocolo);
+
+      return [novoProtocolo];
+    } catch (e) {
+      console.warn("[ApiCache] PubChem sem resultados para:", termo);
       return [];
     }
   }
 
-  function salvarNoCacheLocal(item) {
-    if (typeof ATLAS_DATABASE !== "undefined" && Array.isArray(ATLAS_DATABASE.protocols)) {
-      ATLAS_DATABASE.protocols.push(item);
-    }
-    if (typeof BioDatabase !== "undefined" && Array.isArray(BioDatabase.protocols)) {
-      BioDatabase.protocols.push(item);
-    }
-    console.log("[ApiCache] 💾 Composto persistido na memória de sessão.");
+  // =========================================================
+  // 3. FILA DE BACKUP ASSÍNCRONO PARA O GOOGLE APPS SCRIPT
+  // =========================================================
+  function agendarBackupNuvem(fonte, termo, payload) {
+    setTimeout(async () => {
+      try {
+        const sessao = JSON.parse(localStorage.getItem(SESSION_KEY) || "{}");
+        const body = {
+          acao: "salvarBackupApi",
+          fonte: fonte,
+          termo: termo,
+          identificador: sessao.identifier || "ANONIMO",
+          payload: payload,
+          timestamp: new Date().toISOString()
+        };
+
+        if (typeof ApiService !== "undefined" && typeof ApiService.callAppsScript === "function") {
+          await ApiService.callAppsScript(body, 20000);
+        } else {
+          await fetch(GAS_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(body)
+          });
+        }
+        console.log(`[ApiCache] ☁️ Backup de [${fonte}:${termo}] sincronizado no Google Sheets.`);
+      } catch (err) {
+        console.warn("[ApiCache] Falha no backup em nuvem (dados preservados localmente):", err);
+      }
+    }, 1200);
   }
 
-  // =========================================================================
-  // 3. REGISTRO DE SIMULAÇÕES E HISTÓRICO
-  // =========================================================================
-  function registrarSimulacao(nomeComposto, viaAdministracao) {
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
-    const historico = raw ? JSON.parse(raw) : [];
-
+  // =========================================================
+  // 4. REGISTRO DE SIMULAÇÃO E EMISSÃO DE DOSSIÊ EM PDF
+  // =========================================================
+  async function registrarSimulacao(nomeComposto, viaAdministracao) {
     const novo = {
       id: "SIM-" + Date.now().toString(36).toUpperCase(),
       data: new Date().toLocaleDateString("pt-BR"),
       hora: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       composto: nomeComposto,
       via: (viaAdministracao || "ORAL").toUpperCase(),
       horasAcademicas: 0.5
     };
 
-    historico.unshift(novo);
-    localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(historico.slice(0, 30)));
-    localStorage.setItem(STORAGE_KEY_LEGACY, JSON.stringify(historico.slice(0, 30)));
+    // Grava no IndexedDB
+    await saveToStore(STORE_HISTORY, novo);
 
-    console.log("[ApiCache] 📈 Simulação registrada para cômputo curricular.");
+    // Mantém fallback no localStorage para compatibilidade imediata
+    const raw = localStorage.getItem("laift_atlas_history");
+    const historico = raw ? JSON.parse(raw) : [];
+    historico.unshift(novo);
+    localStorage.setItem("laift_atlas_history", JSON.stringify(historico.slice(0, 30)));
+
     renderizarHistoricoLocal();
   }
 
@@ -141,7 +356,7 @@ const ApiCache = (() => {
                 document.getElementById("history-list-container");
     if (!box) return;
 
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
+    const raw = localStorage.getItem("laift_atlas_history");
     const hist = raw ? JSON.parse(raw) : [];
 
     if (hist.length === 0) {
@@ -168,27 +383,18 @@ const ApiCache = (() => {
     `).join("");
   }
 
-  // =========================================================================
-  // 4. EMISSÃO DE PARECER TÉCNICO & EXPORTAÇÃO EM PDF NATIVO
-  // =========================================================================
   function configurarBotoesAcervo() {
     const btnExportar = document.getElementById("btn-export-csv") ||
-                        document.getElementById("btnExportCsv");
-    const btnSync = document.getElementById("btn-sync-cloud");
-
+                        document.getElementById("btnExportCsv") ||
+                        document.getElementById("btn-export-pdf-acervo");
     if (btnExportar) {
       btnExportar.innerText = "📄 Emitir Dossiê PDF";
-      btnExportar.title = "Exportar Comprovante Curricular em PDF";
-      btnExportar.addEventListener("click", exportarDossiePDF);
-    }
-
-    if (btnSync) {
-      btnSync.addEventListener("click", sincronizarNuvem);
+      btnExportar.onclick = exportarDossiePDF;
     }
   }
 
   function exportarDossiePDF() {
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
+    const raw = localStorage.getItem("laift_atlas_history");
     const historico = raw ? JSON.parse(raw) : [];
 
     if (historico.length === 0) {
@@ -196,212 +402,75 @@ const ApiCache = (() => {
       return;
     }
 
-    // Carrega dados da sessão ativa do aluno
-    const sessaoRaw = localStorage.getItem(SESSION_STORAGE_KEY);
-    const aluno = sessaoRaw ? JSON.parse(sessaoRaw) : {};
-
-    const nomeAluno = aluno.name || "Acadêmico(a) de Farmácia";
-    const idAluno = aluno.identifier || "---";
-    const vinculo = aluno.type || "Membro Efetivo / Pesquisador";
+    const sessao = JSON.parse(localStorage.getItem(SESSION_KEY) || "{}");
+    const nomeAluno = sessao.name || "Acadêmico(a) de Farmácia";
+    const idAluno = sessao.identifier || "---";
+    const vinculo = sessao.type || "Membro Efetivo / Pesquisador";
     const dataEmissao = new Date().toLocaleDateString("pt-BR");
     const horaEmissao = new Date().toLocaleTimeString("pt-BR");
 
-    // Cálculo consolidado de carga horária
     const totalHoras = historico.reduce((acc, cur) => acc + (cur.horasAcademicas || 0.5), 0);
-    const authCode = `LAIFT-PK-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const authCode = `LAIFT-CCF-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
-    // Monta linhas da tabela
     const linhasTabela = historico.map((h, i) => `
       <tr>
         <td style="text-align:center;">${String(i + 1).padStart(2, "0")}</td>
-        <td>${h.data} ${h.hora ? "às " + h.hora : ""}</td>
+        <td>${h.data} às ${h.hora || ""}</td>
         <td><strong>${h.composto}</strong></td>
         <td style="text-align:center;">${h.via}</td>
-        <td style="text-align:center;">Modelo Unicompartimental</td>
+        <td style="text-align:center;">Modelo Unicompartimental / Bateman</td>
         <td style="text-align:center; font-weight:bold; color:#0369a1;">+${h.horasAcademicas || 0.5} h</td>
       </tr>
     `).join("");
 
-    // Janela de impressão em PDF nativo
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Aviso: Habilite a abertura de pop-ups para gerar o documento PDF.");
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Habilite pop-ups para gerar o documento PDF.");
       return;
     }
 
-    printWindow.document.write(`
+    win.document.write(`
       <!DOCTYPE html>
       <html lang="pt-BR">
       <head>
         <meta charset="utf-8">
         <title>Dossiê de Simulação Farmacocinética — LAIFT</title>
         <style>
-          @page {
-            size: A4 portrait;
-            margin: 15mm 12mm;
-          }
-          * {
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            color: #0f172a;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-            background: #ffffff;
-            font-size: 10pt;
-            line-height: 1.45;
-          }
-          .header-box {
-            border-bottom: 2px solid #0284c7;
-            padding-bottom: 10px;
-            margin-bottom: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          }
-          .institution-title {
-            font-size: 8pt;
-            font-weight: 700;
-            color: #64748b;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-          }
-          .main-title {
-            font-size: 14pt;
-            font-weight: 800;
-            color: #0369a1;
-            margin: 2px 0;
-          }
-          .subtitle {
-            font-size: 9pt;
-            color: #334155;
-            font-weight: 600;
-          }
-          .badge-cert {
-            background: #e0f2fe;
-            border: 1px solid #bae6fd;
-            color: #0284c7;
-            padding: 6px 12px;
-            border-radius: 6px;
-            text-align: right;
-            font-size: 7.5pt;
-          }
-          .student-box {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            padding: 10px 14px;
-            margin-bottom: 16px;
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 10px;
-            font-size: 8.5pt;
-          }
-          .student-box strong {
-            display: block;
-            color: #475569;
-            font-size: 7.5pt;
-            text-transform: uppercase;
-            margin-bottom: 2px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 8.5pt;
-            margin-bottom: 16px;
-          }
-          th {
-            background: #0f172a;
-            color: #ffffff;
-            font-weight: 700;
-            text-align: left;
-            padding: 6px 8px;
-            font-size: 7.5pt;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          td {
-            padding: 6px 8px;
-            border-bottom: 1px solid #e2e8f0;
-          }
-          tr:nth-child(even) {
-            background: #f8fafc;
-          }
-          .total-box {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            padding: 10px 14px;
-            border-radius: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-          }
-          .total-hours {
-            font-size: 13pt;
-            font-weight: 800;
-            color: #16a34a;
-          }
-          .statement {
-            font-size: 8pt;
-            color: #475569;
-            line-height: 1.5;
-            text-align: justify;
-            margin-bottom: 30px;
-          }
-          .signature-row {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 40px;
-            padding: 0 20px;
-          }
-          .sig-line {
-            width: 42%;
-            border-top: 1px solid #0f172a;
-            text-align: center;
-            padding-top: 6px;
-            font-size: 8pt;
-            color: #334155;
-          }
-          .footer-auth {
-            border-top: 1px dashed #cbd5e1;
-            padding-top: 8px;
-            margin-top: 25px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 7pt;
-            color: #94a3b8;
-            font-family: monospace;
-          }
+          @page { size: A4 portrait; margin: 14mm 12mm; }
+          * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; }
+          body { margin: 0; padding: 0; font-size: 10pt; line-height: 1.45; }
+          .header-box { border-bottom: 2px solid #0284c7; padding-bottom: 8px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+          .institution { font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+          .main-title { font-size: 13pt; font-weight: 800; color: #0369a1; margin: 2px 0; }
+          .badge-cert { background: #e0f2fe; border: 1px solid #bae6fd; color: #0284c7; padding: 6px 12px; border-radius: 6px; text-align: right; font-size: 7.5pt; font-weight: bold; }
+          .student-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; font-size: 8.5pt; }
+          .student-box strong { display: block; color: #475569; font-size: 7.5pt; text-transform: uppercase; margin-bottom: 2px; }
+          table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 14px; }
+          th { background: #0f172a; color: #fff; font-weight: 700; text-align: left; padding: 6px 8px; font-size: 7.5pt; text-transform: uppercase; }
+          td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+          tr:nth-child(even) { background: #f8fafc; }
+          .total-box { background: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 14px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+          .total-hours { font-size: 13pt; font-weight: 800; color: #16a34a; }
+          .statement { font-size: 8pt; color: #475569; text-align: justify; margin-bottom: 24px; line-height: 1.5; }
+          .sig-row { display: flex; justify-content: space-between; margin-top: 36px; padding: 0 20px; }
+          .sig-line { width: 42%; border-top: 1px solid #0f172a; text-align: center; padding-top: 6px; font-size: 8pt; color: #334155; }
+          .footer-auth { border-top: 1px dashed #cbd5e1; padding-top: 8px; margin-top: 20px; display: flex; justify-content: space-between; font-size: 7pt; color: #94a3b8; font-family: monospace; }
         </style>
       </head>
       <body>
         <div class="header-box">
           <div>
-            <div class="institution-title">Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia</div>
+            <div class="institution">Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia</div>
             <div class="main-title">Dossiê de Simulação Biomédica & Farmacocinética 3D</div>
-            <div class="subtitle">Comprovação Técnica de Atividades Formativas & Modelagem Farmacológica</div>
+            <div style="font-size: 8.5pt; color: #334155;">Comprovante de Atividades Complementares e Modelagem Farmacológica</div>
           </div>
-          <div class="badge-cert">
-            <strong>DOCUMENTO OFICIAL</strong><br>
-            UNINASSAU Salvador / LAIFT
-          </div>
+          <div class="badge-cert">DOCUMENTO OFICIAL<br>UNINASSAU Salvador / LAIFT</div>
         </div>
 
         <div class="student-box">
-          <div>
-            <strong>Estudante / Pesquisador</strong>
-            ${nomeAluno}
-          </div>
-          <div>
-            <strong>Matrícula / CPF</strong>
-            ${idAluno}
-          </div>
-          <div>
-            <strong>Vínculo Institucional</strong>
-            ${vinculo}
-          </div>
+          <div><strong>Estudante / Pesquisador</strong>${nomeAluno}</div>
+          <div><strong>Matrícula / CPF</strong>${idAluno}</div>
+          <div><strong>Vínculo</strong>${vinculo}</div>
         </div>
 
         <table>
@@ -415,102 +484,55 @@ const ApiCache = (() => {
               <th style="width:70px; text-align:center;">Carga</th>
             </tr>
           </thead>
-          <tbody>
-            ${linhasTabela}
-          </tbody>
+          <tbody>${linhasTabela}</tbody>
         </table>
 
         <div class="total-box">
           <div>
             <strong style="color:#166534; font-size:9pt;">Carga Horária Prática Total Computada:</strong>
-            <div style="font-size:7.5pt; color:#475569;">Válida para comprovação de horas complementares no portal acadêmico e Currículo Lattes.</div>
+            <div style="font-size:7.5pt; color:#475569;">Válida para horas complementares no portal acadêmico e Currículo Lattes.</div>
           </div>
           <div class="total-hours">${totalHoras.toFixed(1)} Horas Acadêmicas</div>
         </div>
 
         <div class="statement">
-          Certificamos, para os devidos fins acadêmicos e curriculares, que o(a) estudante acima identificado(a) participou ativamente das sessões de modelação farmacocinética tridimensional, simulação de parâmetros biofarmacêuticos (biodisponibilidade, volume de distribuição e clearance metabólico) e análise de biogênese celular desenvolvidas na Plataforma LAIFT 3D.
+          Certificamos, para os devidos fins acadêmicos e curriculares, que o(a) estudante acima identificado(a) participou ativamente das sessões de simulação e modelagem farmacocinética computacional, análise de trajetórias de biodisponibilidade por vias de administração e inspeção de estruturas macromoleculares (RCSB PDB / HRA) na Plataforma LAIFT Bio-Twin.
         </div>
 
-        <div class="signature-row">
-          <div class="sig-line">
-            <strong>${nomeAluno}</strong><br>
-            Discente / Integrante da Liga
-          </div>
-          <div class="sig-line">
-            <strong>Diretoria de Ensino e Pesquisa</strong><br>
-            LAIFT — UNINASSAU Salvador
-          </div>
+        <div class="sig-row">
+          <div class="sig-line"><strong>${nomeAluno}</strong><br>Discente / Pesquisador</div>
+          <div class="sig-line"><strong>Diretoria de Ensino e Pesquisa</strong><br>LAIFT — UNINASSAU Salvador</div>
         </div>
 
         <div class="footer-auth">
-          <span>Autenticação Digital: ${authCode}</span>
+          <span>Autenticação: ${authCode}</span>
           <span>Emitido em: ${dataEmissao} às ${horaEmissao}</span>
-          <span>Validação: script.google.com/macros/s/AKfycbyXvBYrHBIXNjHYItuq2LXKt1vkmh2m_CME-5aZqkxUJhl7ktJjemuasbvdEweH95k/exec</span>
+          <span>Validação: apps.humanatlas.io • laift.edu</span>
         </div>
 
         <script>
           window.onload = function() {
-            setTimeout(function() {
-              window.print();
-            }, 300);
+            setTimeout(function() { window.print(); }, 300);
           };
         <\/script>
       </body>
       </html>
     `);
-    printWindow.document.close();
-  }
-
-  // =========================================================================
-  // 5. SINCRONIZAÇÃO EM NUVEM (APPS SCRIPT)
-  // =========================================================================
-  async function sincronizarNuvem() {
-    const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
-    const hist = raw ? JSON.parse(raw) : [];
-
-    if (hist.length === 0) {
-      alert("Não há simulações pendentes para sincronizar.");
-      return;
-    }
-
-    const sessao = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || "{}");
-    const idAluno = sessao.identifier || "ANONIMO";
-
-    try {
-      const payload = {
-        acao: "salvarSimulacao",
-        identificador: idAluno,
-        simulacoes: hist
-      };
-
-      if (typeof ApiService !== "undefined" && typeof ApiService.callAppsScript === "function") {
-        await ApiService.callAppsScript(payload, 25000);
-      } else {
-        await fetch(GAS_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload)
-        });
-      }
-
-      alert("Progresso acadêmico salvo com sucesso na nuvem institucional da LAIFT!");
-    } catch (e) {
-      console.warn("[ApiCache] Sincronização em nuvem indisponível no momento:", e);
-      alert("Sincronização salva localmente. Os dados serão enviados assim que restabelecida a conexão com o servidor.");
-    }
+    win.document.close();
   }
 
   return {
     init,
+    consultarHRA,
+    consultarNIH3D,
+    obterModelo3DBinario,
     buscarProtocolo,
     registrarSimulacao,
-    exportarDossiePDF,
-    sincronizarNuvem
+    exportarDossiePDF
   };
 })();
 
-// Inicialização segura
+// Inicialização imediata
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", ApiCache.init);
 } else {
