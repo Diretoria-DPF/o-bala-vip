@@ -1,165 +1,229 @@
 /* ========================================================================= */
-/* INÍCIO DO ARQUIVO: anatomia-3d/css/style.css                              */
+/* ARQUIVO: anatomia-3d/css/style.css                                        */
 /* ========================================================================= */
 
 /* -------------------------------------------------------------------------
-   1. VARIÁVEIS GLOBAIS E TEMA (LAIFT DARK MODE)
+   1. VARIÁVEIS GLOBAIS & PALETA DARK SCIENTIFIC (LAIFT)
    ------------------------------------------------------------------------- */
 :root {
-  /* Paleta de Cores LAIFT */
-  --bg-main: #0f172a;       /* Slate 900 - Fundo Principal */
-  --bg-surface: #1e293b;    /* Slate 800 - Cartões e Paineis */
-  --bg-darker: #020617;     /* Slate 950 - Header e Nav */
+  --bg-main: #0f172a;       /* Slate 900 - Fundo Geral */
+  --bg-surface: #1e293b;    /* Slate 800 - Superfície dos Cards e Drawers */
+  --bg-darker: #020617;     /* Slate 950 - Viewports e Cabeçalho */
   
-  --primary: #38bdf8;       /* Sky 400 - Destaques e Ativos */
-  --primary-glow: rgba(56, 189, 248, 0.4);
-  --secondary: #3b82f6;     /* Blue 500 - Botões Primários */
-  --accent: #34d399;        /* Emerald 400 - Biohacking/Sucesso */
-  --accent-glow: rgba(52, 211, 153, 0.2);
+  --primary: #38bdf8;       /* Sky 400 - Destaques Primários */
+  --primary-glow: rgba(56, 189, 248, 0.25);
+  --secondary: #0284c7;     /* Sky 600 - Ações Primárias */
+  --accent: #34d399;        /* Emerald 400 - Biohacking & Fisiologia */
+  --accent-glow: rgba(52, 211, 153, 0.25);
+  --warning: #f97316;       /* Orange 500 - Digestório e Timelines */
+  --danger: #ef4444;        /* Red 500 - Cardiovascular e Alertas */
   
-  --text-main: #f8fafc;     /* Slate 50 - Texto Principal */
-  --text-muted: #94a3b8;    /* Slate 400 - Texto Secundário */
-  --border-color: #334155;  /* Slate 700 - Divisórias */
+  --text-main: #f8fafc;     /* Slate 50 - Leitura de Alto Contraste */
+  --text-muted: #94a3b8;    /* Slate 400 - Metadados e Legendas */
+  --border: #334155;        /* Slate 700 - Linhas Estruturais */
   
-  /* Dimensões PWA */
-  --header-height: 56px;
-  --nav-height: calc(65px + env(safe-area-inset-bottom)); /* Suporte a entalhes iOS/Android */
-  
-  --transition-fast: 0.2s ease;
-  --radius-md: 12px;
-  --radius-sm: 8px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* -------------------------------------------------------------------------
-   2. RESET E TRAVA MOBILE (PREVENÇÃO DE OVER-SCROLL)
+   2. RESET E TRAVA DE COCKPIT (ZERO SCROLL INDESEJADO)
    ------------------------------------------------------------------------- */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  -webkit-tap-highlight-color: transparent; /* Remove brilho azul ao tocar no mobile */
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
   width: 100%;
-  height: 100dvh; /* dvh resolve o problema da barra de endereços dinâmica no mobile */
+  height: 100dvh;
+  min-height: 100vh;
   background-color: var(--bg-main);
   color: var(--text-main);
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-  overflow: hidden; /* Trava o scroll global. Apenas os painéis farão scroll */
-  overscroll-behavior-y: none; /* Previne o "pull-to-refresh" nativo indesejado */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  overscroll-behavior: none;
   display: flex;
   flex-direction: column;
 }
 
-/* Previne zoom automático indesejado em inputs no iOS */
 input, select, textarea, button {
   font-family: inherit;
-  font-size: 16px !important; 
+  font-size: 16px !important; /* Previne auto-zoom no iOS/Android */
 }
 
 /* -------------------------------------------------------------------------
-   3. HEADER INSTITUCIONAL
+   3. CABEÇALHO COMPACTO DO ATLAS
    ------------------------------------------------------------------------- */
-.module-header {
-  height: var(--header-height);
+.atlas-header {
+  height: 50px;
   background-color: var(--bg-darker);
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0 16px;
   flex-shrink: 0;
-  z-index: 100;
+  z-index: 50;
 }
 
-.header-brand h1 {
-  font-size: 1.25rem;
+.atlas-brand h1 {
+  font-size: 1.15rem;
   font-weight: 800;
   color: var(--primary);
   letter-spacing: -0.02em;
 }
 
-.header-brand span {
+.atlas-brand span {
   color: var(--text-main);
   font-weight: 400;
 }
 
-.badge-offline {
-  font-size: 0.7rem;
-  font-weight: 600;
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-pill-tool {
   background: var(--bg-surface);
+  border: 1px solid var(--border);
   color: var(--text-muted);
-  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 10px;
   border-radius: 20px;
-  border: 1px solid var(--border-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+}
+
+.btn-pill-tool:hover {
+  background: var(--border);
+  color: #fff;
 }
 
 /* -------------------------------------------------------------------------
-   4. ÁREA DE TELAS (VIEWPORT & PANELS)
+   4. BARRA DE SISTEMAS DESLIZÁVEL (HORIZONTAL / TOUCH)
    ------------------------------------------------------------------------- */
-.viewport {
-  flex: 1;
-  position: relative;
-  width: 100%;
-  overflow: hidden;
-  background: var(--bg-main);
+.systems-bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: #0b1120;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
-.view-panel {
-  display: none; /* Oculto por padrão */
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  padding: 16px;
-  padding-bottom: 24px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch; /* Scroll suave no iOS */
+.systems-bar::-webkit-scrollbar {
+  height: 4px;
+}
+.systems-bar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
 }
 
-/* Painel Ativo com Animação de Entrada */
-.view-panel.active {
-  display: block;
-  animation: slideUpFade 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes slideUpFade {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.panel-header {
-  margin-bottom: 16px;
-}
-
-.panel-header h2 {
-  font-size: 1.3rem;
-  color: var(--text-main);
-  margin-bottom: 4px;
-}
-
-.panel-header p {
-  font-size: 0.85rem;
+.sys-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   color: var(--text-muted);
-  line-height: 1.4;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+
+.sys-chip:hover {
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.sys-chip.active {
+  background: var(--secondary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 0 12px var(--primary-glow);
 }
 
 /* -------------------------------------------------------------------------
-   5. COMPONENTES: SIMULADOR 3D E GRÁFICOS
+   5. CONTROLE DE NÍVEIS DE ZOOM (MACRO AO NANO)
    ------------------------------------------------------------------------- */
+.zoom-controls {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  background-color: var(--bg-main);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.zoom-pill {
+  flex: 1;
+  text-align: center;
+  background: var(--bg-darker);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.zoom-pill.active {
+  background: #0f766e;
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* -------------------------------------------------------------------------
+   6. GRID PRINCIPAL (PALCO VISUAL & DRAWER DE ANÁLISE)
+   ------------------------------------------------------------------------- */
+.atlas-viewport-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  height: calc(100% - 142px);
+  overflow: hidden;
+}
+
+/* Painel Esquerdo: Viewports Gráficas */
+.viewport-stage {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 #canvas-3d-container {
   width: 100%;
-  height: 45vh; /* Ocupa quase metade da tela no mobile */
-  min-height: 300px;
-  background: var(--bg-darker);
+  height: 52vh;
+  min-height: 280px;
+  background-color: var(--bg-darker);
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   position: relative;
   overflow: hidden;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-  margin-bottom: 16px;
+  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.6);
 }
 
 #loading-3d-overlay {
@@ -168,11 +232,11 @@ input, select, textarea, button {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: rgba(2, 6, 23, 0.85);
+  background: rgba(2, 6, 23, 0.88);
   color: var(--primary);
   font-size: 0.85rem;
   font-weight: 600;
-  z-index: 10;
+  z-index: 20;
   backdrop-filter: blur(4px);
 }
 
@@ -180,226 +244,244 @@ input, select, textarea, button {
   position: absolute;
   top: 12px;
   left: 12px;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid var(--border-color);
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid var(--border);
   padding: 6px 12px;
   border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   color: var(--text-muted);
-  backdrop-filter: blur(4px);
-  z-index: 20;
-  pointer-events: none; /* Não bloqueia toques no modelo 3D */
+  backdrop-filter: blur(6px);
+  z-index: 25;
+  pointer-events: none;
 }
 
 #organ-hud strong {
   color: var(--primary);
-  font-size: 0.85rem;
   display: block;
+  font-size: 0.88rem;
   margin-top: 2px;
 }
 
+/* Container Molecular 3Dmol.js (Nível Nano) */
+#mol-viewport-container {
+  width: 100%;
+  height: 52vh;
+  min-height: 280px;
+  background-color: var(--bg-darker);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+#mol-viewport {
+  width: 100%;
+  height: 100%;
+}
+
+/* Gráfico Farmacocinético (Chart.js) */
 #pk-chart-container {
   width: 100%;
-  background: var(--bg-surface);
+  height: 180px;
+  background-color: var(--bg-surface);
   border-radius: var(--radius-md);
-  padding: 12px;
-  border: 1px solid var(--border-color);
+  padding: 10px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 /* -------------------------------------------------------------------------
-   6. COMPONENTES: BIOHACKING (BUSCA E CARDS)
+   7. PAINEL DIREITO: DRAWER DE CONTEÚDO MULTIESCALA
    ------------------------------------------------------------------------- */
-.search-container {
+.atlas-drawer {
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background-color: var(--bg-main);
+  -webkit-overflow-scrolling: touch;
+}
+
+.atlas-drawer::-webkit-scrollbar {
+  width: 5px;
+}
+.atlas-drawer::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+/* Ficha do Sistema e Órgãos */
+.tag-organ {
+  display: inline-block;
+  background: var(--bg-darker);
+  border: 1px solid var(--border);
+  color: #cbd5e1;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-action-sm {
+  width: 100%;
+  background: var(--secondary);
+  color: #fff;
+  border: none;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+}
+
+.btn-action-sm:hover {
+  background: #0284c7;
+  transform: translateY(-1px);
+}
+
+/* -------------------------------------------------------------------------
+   8. COMPONENTE TIMELINE FISIOLÓGICA (DEGLUTIÇÃO / CICLOS)
+   ------------------------------------------------------------------------- */
+.timeline-card {
+  background-color: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-play-sm {
+  background: var(--accent);
+  color: var(--bg-darker);
+  border: none;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-play-sm:hover {
+  filter: brightness(1.1);
+}
+
+.timeline-step-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.timeline-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.timeline-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-family: monospace;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px dashed var(--border);
+}
+
+.timeline-nav-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-top: 4px;
 }
 
-#bio-search-input {
+.btn-step {
   flex: 1;
-  background: var(--bg-darker);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  outline: none;
-  transition: var(--transition-fast);
-}
-
-#bio-search-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--primary-glow);
-}
-
-#btn-bio-search {
   background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  color: var(--text-main);
-  width: 48px;
+  color: #fff;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
+  font-size: 0.74rem;
+  font-weight: 600;
   cursor: pointer;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition: var(--transition-fast);
+  transition: var(--transition);
 }
 
-#btn-bio-search:hover, #btn-bio-search:active {
-  background: var(--border-color);
+.btn-step:hover {
+  background: var(--border);
 }
 
-.empty-state {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  padding: 32px 16px;
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px dashed var(--border-color);
-  border-radius: var(--radius-md);
-}
-
-/* Cartões Iterativos de Protocolo (Estilo Flashcard) */
+/* -------------------------------------------------------------------------
+   9. CARDS DE ALVOS MOLECULARES E BIOHACKING
+   ------------------------------------------------------------------------- */
 .bio-protocol-card {
   background: var(--bg-surface);
   border-left: 4px solid var(--accent);
   border-radius: var(--radius-sm);
-  padding: 16px;
-  margin-bottom: 12px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-  transition: transform 0.2s;
-}
-
-.bio-protocol-card:active {
-  transform: scale(0.98);
-}
-
-.bio-protocol-card h3 {
-  color: var(--text-main);
-  font-size: 1.1rem;
-  margin-bottom: 8px;
-}
-
-.tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.tag-bio {
-  background: rgba(52, 211, 153, 0.15);
-  color: var(--accent);
-  border: 1px solid var(--accent-glow);
-  font-size: 0.68rem;
-  font-weight: 700;
-  padding: 4px 8px;
-  border-radius: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.bio-protocol-card p {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-/* -------------------------------------------------------------------------
-   7. COMPONENTES: ACERVO & BOTÕES
-   ------------------------------------------------------------------------- */
-.actions-row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.actions-row button {
-  flex: 1;
   padding: 12px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 0.85rem;
-  cursor: pointer;
-  border: none;
-  transition: var(--transition-fast);
+  margin-bottom: 8px;
+  transition: transform var(--transition);
 }
 
-.btn-primary {
-  background: var(--secondary);
-  color: #fff;
+.bio-protocol-card:hover {
+  transform: translateY(-2px);
 }
 
-.btn-primary:active {
-  background: #2563eb;
-  transform: translateY(1px);
+.card-nano {
+  border-left-color: var(--primary);
 }
 
-.btn-secondary {
-  background: var(--bg-surface);
-  color: var(--text-main);
-  border: 1px solid var(--border-color);
-}
-
-.btn-secondary:active {
-  background: var(--border-color);
+.tag-pdb {
+  font-size: 0.68rem;
+  font-family: monospace;
+  font-weight: 700;
+  background: var(--bg-darker);
+  color: #facc15;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(250, 204, 21, 0.3);
 }
 
 /* -------------------------------------------------------------------------
-   8. NAVEGAÇÃO INFERIOR PWA (BOTTOM TAB BAR)
-   ------------------------------------------------------------------------- */
-.bottom-nav {
-  height: var(--nav-height);
-  background-color: var(--bg-darker);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  padding-bottom: env(safe-area-inset-bottom);
-  flex-shrink: 0;
-  z-index: 100;
-}
-
-.nav-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: color var(--transition-fast);
-}
-
-.nav-icon {
-  font-size: 1.4rem;
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.nav-label {
-  font-size: 0.65rem;
-  font-weight: 600;
-}
-
-/* Estado Ativo da Navegação */
-.nav-btn.active {
-  color: var(--primary);
-}
-
-.nav-btn.active .nav-icon {
-  transform: translateY(-2px) scale(1.15);
-}
-
-/* -------------------------------------------------------------------------
-   9. CLASSES UTILITÁRIAS
+   10. ADAPTAÇÃO NATIVA RESPONSIVA (< 960px)
    ------------------------------------------------------------------------- */
 .hidden {
   display: none !important;
 }
 
+@media (max-width: 960px) {
+  .atlas-viewport-grid {
+    grid-template-columns: 1fr;
+    height: calc(100% - 142px);
+    overflow-y: auto;
+  }
+
+  .viewport-stage {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 8px;
+  }
+
+  #canvas-3d-container,
+  #mol-viewport-container {
+    height: 40vh;
+    min-height: 240px;
+  }
+
+  .atlas-drawer {
+    padding: 10px;
+  }
+}
 /* ========================================================================= */
 /* FIM DO ARQUIVO: anatomia-3d/css/style.css                                 */
 /* ========================================================================= */
