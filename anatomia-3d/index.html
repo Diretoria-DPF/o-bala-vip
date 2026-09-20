@@ -1,5 +1,6 @@
 <!-- ========================================================================= -->
 <!-- ARQUIVO: anatomia-3d/index.html                                           -->
+<!-- VERSÃO:  2.4.0 — INTEGRAL: 14 SISTEMAS, 18 VIAS, 24 PDBs & 15 PROCESSOS   -->
 <!-- ========================================================================= -->
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -9,7 +10,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#020617">
-  <title>LAIFT — Atlas Anatômico, Fisiológico & Biohacking 3D</title>
+  <title>LAIFT — Atlas Anatômico, Farmacocinético & Bio-Twin 3D</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 
   <!-- Bibliotecas Gráficas e Matemáticas Core (CDNs Estáveis) -->
@@ -23,7 +24,7 @@
   <!-- Folha de Estilos Unificada -->
   <link rel="stylesheet" href="css/style.css">
 
-  <!-- Script Inline de Funções de Sistema (Tela Cheia e Zoom Multiescala) -->
+  <!-- Funções de Sistema (Tela Cheia, Zoom Multiescala e Timelines Fisiológicas) -->
   <script>
     window.toggleAtlasFullscreen = function() {
       const doc = document;
@@ -67,7 +68,7 @@
           molBox.classList.remove('hidden');
           if (typeof MolEngine !== 'undefined') {
             if (!MolEngine.currentPdbId) {
-              MolEngine.loadPdb('1SMD', 'Amilase Salivar (Ptialina)');
+              MolEngine.loadPdb('4EY7', 'Acetilcolinesterase (AChE)');
             }
             setTimeout(() => MolEngine.render(), 120);
           }
@@ -82,6 +83,27 @@
         }
       }
     };
+
+    window.selecionarProcessoFisiologico = function(processoId) {
+      if (typeof ATLAS_DATABASE === 'undefined' || !ATLAS_DATABASE.processos) return;
+      const proc = ATLAS_DATABASE.processos[processoId];
+      if (!proc) return;
+
+      const titleEl = document.getElementById('timelineProcessTitle');
+      const descEl = document.getElementById('timelineProcessDesc');
+      const stepsContainer = document.getElementById('timelineStepsRow');
+
+      if (titleEl) titleEl.textContent = `⚡ Processo: ${proc.titulo}`;
+      if (descEl) descEl.textContent = proc.descricao;
+
+      if (stepsContainer && Array.isArray(proc.etapas)) {
+        stepsContainer.innerHTML = proc.etapas.map(etapa => `
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('${etapa.acaoParticulas || 'oral_cavity'}')">
+            ${etapa.ordem}. ${etapa.fase}
+          </button>
+        `).join('');
+      }
+    };
   </script>
 </head>
 <body>
@@ -91,7 +113,7 @@
   ======================================================================= -->
   <header class="atlas-header">
     <div class="atlas-brand">
-      <h1>🧬 LAIFT <span>Bio-Atlas 3D</span></h1>
+      <h1>🧬 LAIFT <span>Bio-Twin 3D</span></h1>
     </div>
     <div class="header-tools">
       <button id="btnFullscreenToggle" class="btn-pill-tool" type="button" onclick="window.toggleAtlasFullscreen()" title="Alternar Modo Imersivo em Tela Cheia">
@@ -104,44 +126,19 @@
   </header>
 
   <!-- =======================================================================
-       2. BARRA DE SISTEMAS ANATÔMICOS (TOUCH / HORIZONTAL SCROLL)
+       2. BARRA DE SISTEMAS ANATÔMICOS (TOUCH SCROLL DINÂMICO - 14 SISTEMAS)
   ======================================================================= -->
-  <nav class="systems-bar" id="systemsBar" aria-label="Seletor de Sistemas Anatômicos">
-    <button class="sys-chip active" type="button" data-sys="digestorio">
-      <span>🍽️</span> <span>Digestório</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="cardiovascular">
-      <span>❤️</span> <span>Cardiovascular</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="nervoso">
-      <span>🧠</span> <span>Nervoso</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="respiratorio">
-      <span>🫁</span> <span>Respiratório</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="urinario">
-      <span>💧</span> <span>Renal / Urinário</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="musculoesqueletico">
-      <span>🦴</span> <span>Musculoesquelético</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="imunologico">
-      <span>🛡️</span> <span>Imunológico</span>
-    </button>
-    <button class="sys-chip" type="button" data-sys="endocrino">
-      <span>🧪</span> <span>Endócrino</span>
-    </button>
-  </nav>
+  <nav class="systems-bar" id="systemsBar" aria-label="Seletor de Sistemas Anatômicos"></nav>
 
   <!-- =======================================================================
        3. CONTROLE DE NÍVEIS DE ZOOM BIOLÓGICO (MACRO / MESO / NANO)
   ======================================================================= -->
   <div class="zoom-pill-group">
     <button class="zoom-btn active" type="button" data-level="macro" onclick="window.setBiologicalZoomLevel('macro')">
-      1. Macro (Órgãos 3D)
+      1. Macro (Órgãos & Sistemas)
     </button>
     <button class="zoom-btn" type="button" data-level="meso" onclick="window.setBiologicalZoomLevel('meso')">
-      2. Meso (Fisiologia & Fluxo)
+      2. Meso (Fisiologia & PK/PD)
     </button>
     <button class="zoom-btn" type="button" data-level="nano" onclick="window.setBiologicalZoomLevel('nano')">
       3. Nano (Enzimas & PDB)
@@ -154,12 +151,12 @@
   <main class="viewport" id="main-viewport">
 
     <!-- -------------------------------------------------------------------
-         ABA 1: ANATOMIA 3D, ÁRVORE DE ÓRGÃOS, VIAS & FARMACOCINÉTICA
+         ABA 1: ANATOMIA 3D, ÁRVORE, VIAS, CRISE TOXICOLÓGICA & QUIZ
     ------------------------------------------------------------------- -->
     <section id="view-anatomy" class="view-panel active">
       <div class="panel-header">
-        <h2>Simulação Multiescala & Dissecção Virtual</h2>
-        <p>Explore camadas anatômicas, trajetórias farmacológicas e macromoléculas cristalográficas.</p>
+        <h2>Simulador Clínico & Dissecção Multiescala</h2>
+        <p>14 Sistemas Anatômicos, 18 Vias de Administração, Curvas PK/PD de Hill e Desafios Espaciais.</p>
       </div>
 
       <!-- Palco Gráfico A: WebGL Three.js (Macro / Meso) -->
@@ -178,7 +175,18 @@
       <!-- Informações da Macromolécula em Foco (Nano) -->
       <div id="molInfoDetails" style="margin-top: 4px; margin-bottom: 12px;"></div>
 
-      <!-- Painel Dinâmico: Seletor das 7 Vias de Administração Farmacológica -->
+      <!-- Painel Dinâmico: Lançador do Quiz 3D Gamificado -->
+      <div id="quizLauncherContainer"></div>
+
+      <!-- Painel Dinâmico: Modo Crise Toxicológica (Organofosforados / Antídotos) -->
+      <div id="crisisPanelContainer"></div>
+
+      <!-- Painel Dinâmico: Gráfico Farmacocinético & Farmacodinâmico (Chart.js) -->
+      <div id="pk-chart-container">
+        <canvas id="pkChartCanvas"></canvas>
+      </div>
+
+      <!-- Painel Dinâmico: Seletor das 18 Vias de Administração Farmacológica -->
       <div id="routesSelectorContainer" class="routes-selector-container"></div>
 
       <!-- Painel Dinâmico: Árvore Anatômica Granular com Sliders de Opacidade -->
@@ -189,54 +197,69 @@
         <div id="organTreeContainer"></div>
       </div>
 
-      <!-- Timeline Fisiológica Dinâmica (Meso) -->
+      <!-- Timeline Fisiológica Dinâmica (15 Processos Mapeados) -->
       <div class="timeline-card">
         <div class="timeline-header">
-          <span class="timeline-step-badge">⚡ Processo Fisiológico: Deglutição Humana</span>
-          <button type="button" class="btn-play-sm" onclick="ThreeEngine.triggerParticleFlow('oral_cavity')">
-            ▶ Simular Trânsito
-          </button>
+          <span class="timeline-step-badge" id="timelineProcessTitle">⚡ Processo: Fisiologia da Deglutição Humana</span>
+          <select id="selProcessoFisiologico" onchange="window.selecionarProcessoFisiologico(this.value)" style="background:#020617; color:#38bdf8; border:1px solid #334155; border-radius:4px; padding:3px 6px; font-size:0.72rem; outline:none; cursor:pointer;">
+            <option value="degluticao_humana">1. Deglutição Humana</option>
+            <option value="ciclo_cardiaco">2. Ciclo Eletromecânico Cardíaco</option>
+            <option value="conducao_impulso_cardiaco">3. Condução do Impulso Cardíaco</option>
+            <option value="peristaltismo_intestinal">4. Motilidade e Peristaltismo Enteral</option>
+            <option value="filtracao_glomerular">5. Filtração Glomerular & Tubular</option>
+            <option value="hematose_alveolar">6. Hematose Alvéolo-Capilar</option>
+            <option value="sinapse_colinergica">7. Transmissão Sináptica Colinérgica</option>
+            <option value="contracao_muscular">8. Contração Muscular Esquelética</option>
+            <option value="espermatogenese">9. Espermatogênese</option>
+            <option value="coagulacao_sanguinea">10. Cascata de Coagulação Sanguínea</option>
+            <option value="resposta_inflamatoria">11. Resposta Inflamatória Aguda</option>
+            <option value="ciclo_menstrual">12. Ciclo Menstrual</option>
+            <option value="eixo_hpa">13. Eixo Hipotálamo-Hipófise-Adrenal</option>
+            <option value="reflexo_miotatico">14. Reflexo Miotático</option>
+            <option value="resposta_imune_adaptativa">15. Resposta Imune Adaptativa</option>
+          </select>
         </div>
-        <p class="timeline-desc" style="margin: 6px 0;">
-          Acompanhe o percurso do bolo alimentar: Cavidade Oral ➔ Faringe (Reflexa) ➔ Ondas Peristálticas Esofágicas ➔ Cárdia Gástrica.
+        <p class="timeline-desc" id="timelineProcessDesc" style="margin: 6px 0;">
+          Sequência neuromuscular reflexa coordenada dividida em estágios oral, faríngeo e esofágico.
         </p>
-        <div class="timeline-nav-row">
-          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('oral_cavity')">1. Oral</button>
-          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('pharynx_transit')">2. Faríngea</button>
-          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('esophagus_wave')">3. Esofágica</button>
-          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('stomach_entry')">4. Gástrica</button>
+        <div class="timeline-nav-row" id="timelineStepsRow">
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('oral_cavity')">1. Fase Oral</button>
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('pharynx_transit')">2. Fase Faríngea</button>
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('esophagus_wave')">3. Fase Esofágica</button>
+          <button class="btn-step" type="button" onclick="ThreeEngine.triggerParticleFlow('stomach_entry')">4. Relaxamento Gástrico</button>
         </div>
       </div>
 
-      <!-- Curva Farmacocinética Compartimental (Chart.js) -->
-      <div id="pk-chart-container">
-        <canvas id="pkChartCanvas"></canvas>
-      </div>
-
-      <!-- Catálogo Rápido de Alvos Cristalográficos PDB -->
+      <!-- Catálogo Completo dos 24 Alvos Cristalográficos PDB Oficiais -->
       <div style="margin-top: 14px; margin-bottom: 16px;">
         <h4 style="font-size: 0.78rem; color: #cbd5e1; text-transform: uppercase; margin-bottom: 8px;">
-          🔬 Alvos Moleculares & Co-Cristais (PDB Oficial):
+          🔬 Catálogo Completo de Alvos Moleculares & Co-Cristais (24 Estruturas PDB):
         </h4>
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px;">
-          <button type="button" class="btn-step" style="text-align: left; padding: 8px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1SMD', 'Ptialina Salivar');">
-            🧬 Ptialina (1SMD)
-          </button>
-          <button type="button" class="btn-step" style="text-align: left; padding: 8px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('4PEP', 'Pepsina Gástrica');">
-            🧬 Pepsina (4PEP)
-          </button>
-          <button type="button" class="btn-step" style="text-align: left; padding: 8px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('3LN1', 'COX-2 + Celecoxibe');">
-            🧬 COX-2 (3LN1)
-          </button>
-          <button type="button" class="btn-step" style="text-align: left; padding: 8px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('4EY7', 'AChE + Donepezila');">
-            🧬 AChE (4EY7)
-          </button>
-          <button type="button" class="btn-step" style="text-align: left; padding: 8px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1E9Z', 'Urease H. pylori');">
-            🦠 H. pylori (1E9Z)
-          </button>
-          <button type="button" class="btn-step" style="text-align: left; padding: 8px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('7VH8', 'Mpro SARS-CoV-2');">
-            🦠 Mpro Viral (7VH8)
-          </button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('4EY7', 'AChE + Donepezila');">🧬 AChE (4EY7)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1EQG', 'COX-1 + Aspirina');">🧬 COX-1 (1EQG)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('3LN1', 'COX-2 + Celecoxibe');">🧬 COX-2 (3LN1)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1TQN', 'CYP3A4 Microssomal');">🧬 CYP3A4 (1TQN)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('3B8E', 'Bomba Na+/K+-ATPase');">🧬 Na+/K+ (3B8E)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1SMD', 'Ptialina Salivar');">🧬 Ptialina (1SMD)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('4PEP', 'Pepsina Gástrica');">🧬 Pepsina (4PEP)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1SU4', 'SERCA Ca2+-ATPase');">🧬 SERCA (1SU4)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1TBF', 'PDE5 Vascular');">🧬 PDE5 (1TBF)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1E9Z', 'Urease H. pylori');">🦠 H. pylori (1E9Z)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('7VH8', 'Mpro SARS-CoV-2');">🦠 Mpro Viral (7VH8)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('5LUF', 'Complexo I Mitocondrial');">⚡ Complexo I (5LUF)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1O86', 'ECA (Angiotensina)');">🩸 ECA / ACE (1O86)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('2REN', 'Renina Humana');">💧 Renina (2REN)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1HWK', 'HMG-CoA Redutase');">💊 HMGCR (1HWK)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1BMF', 'ATP Sintase (Complexo V)');">⚡ ATP Sintase (1BMF)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1SOS', 'Superóxido Dismutase');">🛡️ SOD1 (1SOS)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1DGB', 'Catalase Peroxissomal');">🛡️ Catalase (1DGB)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1LYZ', 'Lisozima Antimicrobiana');">🛡️ Lisozima (1LYZ)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1DHF', 'Di-hidrofolato Redutase');">🧪 DHFR (1DHF)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('1CA2', 'Anidrase Carbônica II');">💧 Anidrase II (1CA2)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('3EQM', 'Aromatase (CYP19A1)');">⚗️ Aromatase (3EQM)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('2AM9', 'Receptor Androgênico');">🧬 Receptor AR (2AM9)</button>
+          <button type="button" class="btn-step" style="text-align: left; padding: 7px;" onclick="window.setBiologicalZoomLevel('nano'); MolEngine.loadPdb('2BG9', 'Receptor Nicotínico AChR');">💪 nAChR (2BG9)</button>
         </div>
       </div>
     </section>
@@ -247,7 +270,7 @@
     <section id="view-biohacking" class="view-panel hidden">
       <div class="panel-header">
         <h2>Protocolos Celulares & Bioenergética</h2>
-        <p>Vias mitocondriais de síntese de ATP, biodisponibilidade mineral e modulação nootrópica.</p>
+        <p>Vias mitocondriais de síntese de ATP, biodisponibilidade mineral, nootrópicos e NAD+.</p>
       </div>
 
       <!-- Barra de Pesquisa de Princípios Ativos -->
@@ -255,7 +278,7 @@
         <input 
           type="text" 
           id="bio-search-input" 
-          placeholder="Buscar composto ou via (ex: Treonato, ATP, CoQ10, Zinco)..."
+          placeholder="Buscar composto ou via (ex: Treonato, ATP, CoQ10, NMN, Zinco)..."
           autocomplete="off"
         >
         <button id="btn-bio-search" type="button">🔍</button>
@@ -271,7 +294,7 @@
     <section id="view-acervo" class="view-panel hidden">
       <div class="panel-header">
         <h2>Acervo de Simulações & Cômputo Curricular</h2>
-        <p>Histórico registrado de horas formativas para validação na UNINASSAU e Currículo Lattes.</p>
+        <p>Histórico registrado de horas formativas e sessões práticas com emissão de parecer PDF oficial.</p>
       </div>
 
       <!-- Botões de Ação -->
@@ -279,8 +302,8 @@
         <button id="btn-export-pdf-acervo" class="btn-primary" type="button" onclick="ApiCache.exportarDossiePDF()">
           📄 Emitir Dossiê PDF Oficial
         </button>
-        <button id="btn-sync-cloud" class="btn-secondary" type="button" onclick="ApiCache.sincronizarNuvem()">
-          🔄 Salvar na Nuvem
+        <button id="btn-sync-cloud" class="btn-secondary" type="button" onclick="ApiCache.renderizarHistoricoLocal()">
+          🔄 Atualizar Relatório Local
         </button>
       </div>
 
@@ -309,14 +332,14 @@
   </nav>
 
   <!-- =======================================================================
-       6. SCRIPTS MODULARES (ORDEM RIGOROSA DE DEPENDÊNCIA)
+       6. SCRIPTS MODULARES (ORDEM RIGOROSA DE DEPENDÊNCIA DO ECOSSISTEMA)
   ======================================================================= -->
   <script src="data/bio-database.js"></script>
   <script src="js/api-cache.js"></script>
   <script src="js/three-engine.js"></script>
   <script src="js/mol-engine.js"></script>
   <script src="js/pk-engine.js"></script>
-  <script src="js/biohacking.js"></script>
+  <script src="js/quiz-engine.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
