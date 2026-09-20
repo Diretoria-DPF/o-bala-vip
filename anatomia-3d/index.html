@@ -12,7 +12,7 @@
   <title>LAIFT — Atlas Anatômico, Fisiológico & Biohacking 3D</title>
   <link rel="icon" href="data:;base64,iVBORw0KGgo=">
 
-  <!-- CDNs Estáveis (Three.js r128, 3Dmol.js e Chart.js) -->
+  <!-- Bibliotecas Gráficas e Matemáticas Core (CDNs Estáveis) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
@@ -23,50 +23,7 @@
   <!-- Folha de Estilos Unificada -->
   <link rel="stylesheet" href="css/style.css">
 
-  <style>
-    /* Otimizações de Gestos e Isolamento Touch Mobile */
-    html, body {
-      touch-action: pan-x pan-y;
-      overscroll-behavior-y: none;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-    #canvas-3d-container, #mol-viewport-container {
-      touch-action: none; /* Bloqueia scroll acidental da página ao rotacionar os modelos 3D */
-    }
-    .zoom-pill-group {
-      display: flex;
-      gap: 6px;
-      padding: 6px 12px;
-      background: #020617;
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .zoom-btn {
-      flex: 1;
-      padding: 6px 4px;
-      background: var(--bg-surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-muted);
-      font-size: 0.7rem;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .zoom-btn.active {
-      background: #0284c7;
-      color: #ffffff;
-      border-color: #38bdf8;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
-    }
-    .fs-active-icon {
-      color: #38bdf8 !important;
-      border-color: #38bdf8 !important;
-    }
-  </style>
-
-  <!-- Controle de Tela Cheia Nativo Cross-Browser -->
+  <!-- Script Inline de Funções de Sistema (Tela Cheia e Zoom Multiescala) -->
   <script>
     window.toggleAtlasFullscreen = function() {
       const doc = document;
@@ -96,7 +53,6 @@
       }
     });
 
-    // Alternador Dinâmico entre Viewport 3D Anatômica e 3Dmol Macromolecular
     window.setBiologicalZoomLevel = function(level) {
       document.querySelectorAll('.zoom-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.level === level);
@@ -131,7 +87,7 @@
 <body>
 
   <!-- =======================================================================
-       1. CABEÇALHO COMPACTO COM CONTROLES GLOBAIS
+       1. CABEÇALHO COMPACTO
   ======================================================================= -->
   <header class="atlas-header">
     <div class="atlas-brand">
@@ -141,7 +97,7 @@
       <button id="btnFullscreenToggle" class="btn-pill-tool" type="button" onclick="window.toggleAtlasFullscreen()" title="Alternar Modo Imersivo em Tela Cheia">
         ⛶ Tela Cheia
       </button>
-      <button id="btnExportCsv" class="btn-pill-tool" type="button" title="Emitir Dossiê Curricular em PDF">
+      <button id="btnExportCsv" class="btn-pill-tool" type="button" onclick="ApiCache.exportarDossiePDF()" title="Emitir Dossiê Curricular em PDF">
         📄 Dossiê PDF
       </button>
     </div>
@@ -151,28 +107,28 @@
        2. BARRA DE SISTEMAS ANATÔMICOS (TOUCH / HORIZONTAL SCROLL)
   ======================================================================= -->
   <nav class="systems-bar" id="systemsBar" aria-label="Seletor de Sistemas Anatômicos">
-    <button class="sys-chip active" type="button" data-sys="digestorio" onclick="ThreeEngine.selectSystem('digestorio'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip active" type="button" data-sys="digestorio">
       <span>🍽️</span> <span>Digestório</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="cardiovascular" onclick="ThreeEngine.selectSystem('cardiovascular'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="cardiovascular">
       <span>❤️</span> <span>Cardiovascular</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="nervoso" onclick="ThreeEngine.selectSystem('nervoso'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="nervoso">
       <span>🧠</span> <span>Nervoso</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="respiratorio" onclick="ThreeEngine.selectSystem('respiratorio'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="respiratorio">
       <span>🫁</span> <span>Respiratório</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="urinario" onclick="ThreeEngine.selectSystem('urinario'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="urinario">
       <span>💧</span> <span>Renal / Urinário</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="musculoesqueletico" onclick="ThreeEngine.selectSystem('musculoesqueletico'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="musculoesqueletico">
       <span>🦴</span> <span>Musculoesquelético</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="imunologico" onclick="ThreeEngine.selectSystem('imunologico'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="imunologico">
       <span>🛡️</span> <span>Imunológico</span>
     </button>
-    <button class="sys-chip" type="button" data-sys="endocrino" onclick="ThreeEngine.selectSystem('endocrino'); window.setBiologicalZoomLevel('macro');">
+    <button class="sys-chip" type="button" data-sys="endocrino">
       <span>🧪</span> <span>Endócrino</span>
     </button>
   </nav>
@@ -198,12 +154,12 @@
   <main class="viewport" id="main-viewport">
 
     <!-- -------------------------------------------------------------------
-         ABA 1: ANATOMIA 3D, FISIOLOGIA, PDB & FARMACOCINÉTICA
+         ABA 1: ANATOMIA 3D, ÁRVORE DE ÓRGÃOS, VIAS & FARMACOCINÉTICA
     ------------------------------------------------------------------- -->
     <section id="view-anatomy" class="view-panel active">
       <div class="panel-header">
-        <h2>Simulação Multiescala & Fisiopatologia</h2>
-        <p>Dissecação por camadas, dinâmica de trânsito e visualização de sítios ativos de fármacos.</p>
+        <h2>Simulação Multiescala & Dissecção Virtual</h2>
+        <p>Explore camadas anatômicas, trajetórias farmacológicas e macromoléculas cristalográficas.</p>
       </div>
 
       <!-- Palco Gráfico A: WebGL Three.js (Macro / Meso) -->
@@ -214,16 +170,27 @@
         </div>
       </div>
 
-      <!-- Palco Gráfico B: Visualizador 3Dmol.js (Nível Nano / PDB) -->
+      <!-- Palco Gráfico B: Visualizador Macromolecular 3Dmol.js (Nano / PDB) -->
       <div id="mol-viewport-container" class="hidden">
         <div id="mol-viewport" style="width: 100%; height: 100%; position: relative;"></div>
       </div>
 
       <!-- Informações da Macromolécula em Foco (Nano) -->
-      <div id="molInfoDetails" style="margin-top: 8px;"></div>
+      <div id="molInfoDetails" style="margin-top: 4px; margin-bottom: 12px;"></div>
+
+      <!-- Painel Dinâmico: Seletor das 7 Vias de Administração Farmacológica -->
+      <div id="routesSelectorContainer" class="routes-selector-container"></div>
+
+      <!-- Painel Dinâmico: Árvore Anatômica Granular com Sliders de Opacidade -->
+      <div class="tree-container">
+        <div class="tree-header">
+          <h3>🌳 Árvore de Estruturas & Opacidade Granular</h3>
+        </div>
+        <div id="organTreeContainer"></div>
+      </div>
 
       <!-- Timeline Fisiológica Dinâmica (Meso) -->
-      <div class="timeline-card" style="margin: 10px 0;">
+      <div class="timeline-card">
         <div class="timeline-header">
           <span class="timeline-step-badge">⚡ Processo Fisiológico: Deglutição Humana</span>
           <button type="button" class="btn-play-sm" onclick="ThreeEngine.triggerParticleFlow('oral_cavity')">
@@ -246,8 +213,8 @@
         <canvas id="pkChartCanvas"></canvas>
       </div>
 
-      <!-- Catálogo de Alvos Cristalográficos PDB Pré-Mapeados -->
-      <div style="margin-top: 14px;">
+      <!-- Catálogo Rápido de Alvos Cristalográficos PDB -->
+      <div style="margin-top: 14px; margin-bottom: 16px;">
         <h4 style="font-size: 0.78rem; color: #cbd5e1; text-transform: uppercase; margin-bottom: 8px;">
           🔬 Alvos Moleculares & Co-Cristais (PDB Oficial):
         </h4>
@@ -312,7 +279,7 @@
         <button id="btn-export-pdf-acervo" class="btn-primary" type="button" onclick="ApiCache.exportarDossiePDF()">
           📄 Emitir Dossiê PDF Oficial
         </button>
-        <button id="btn-sync-cloud" class="btn-secondary" type="button">
+        <button id="btn-sync-cloud" class="btn-secondary" type="button" onclick="ApiCache.sincronizarNuvem()">
           🔄 Salvar na Nuvem
         </button>
       </div>
@@ -342,7 +309,7 @@
   </nav>
 
   <!-- =======================================================================
-       6. SCRIPTS MODULARES DO ECOSSISTEMA MASTER
+       6. SCRIPTS MODULARES (ORDEM RIGOROSA DE DEPENDÊNCIA)
   ======================================================================= -->
   <script src="data/bio-database.js"></script>
   <script src="js/api-cache.js"></script>
