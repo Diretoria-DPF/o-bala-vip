@@ -31,9 +31,9 @@
           <span id="headerUserName">Estudante</span>
           <span id="headerUserBadge" class="badge-role">Membro</span>
         </div>
-        <button id="navHubBtn" class="header-btn" type="button" title="Voltar ao Painel Central">🏠 Hub</button>
+        <button id="navHubBtn" class="header-btn" type="button" onclick="transitionToDashboard()" title="Voltar ao Painel Central">🏠 Hub</button>
         <button id="infoBtn" class="header-btn icon-only" type="button" title="Manual e Instruções">📖</button>
-        <button id="globalLogoutBtn" class="header-btn danger" type="button" title="Encerrar Sessão">Sair</button>
+        <button id="globalLogoutBtn" class="header-btn danger" type="button" onclick="logout()" title="Encerrar Sessão">Sair</button>
       </div>
     </div>
   </header>
@@ -130,15 +130,12 @@
           </div>
         </div>
 
-        <!-- =========================================================
-             TERMINAL FISCAL / PORTARIA & GESTÃO ADMINISTRATIVA
-        ========================================================= -->
+        <!-- Terminal Fiscal / Portaria -->
         <section id="fiscalArea" class="hidden">
           <div style="text-align: center; margin-bottom: 16px;">
             <span class="badge-admin">Terminal de Validação & Portaria Ativo</span>
           </div>
 
-          <!-- Gestão do Evento Vigente -->
           <div class="section-box" style="text-align: left;">
             <h3>Evento Vigente</h3>
             <div class="fiscal-event-row" style="display: flex; gap: 8px;">
@@ -147,7 +144,6 @@
             </div>
           </div>
 
-          <!-- Scanner de QR Code -->
           <div class="section-box">
             <h3>Check-in por QR Code</h3>
             <div id="reader" class="hidden" style="width: 100%; max-width: 360px; margin: 0 auto 12px;"></div>
@@ -159,7 +155,6 @@
             </p>
           </div>
 
-          <!-- Ações em Lote: Exportação CSV e Impressão de Crachás -->
           <div class="section-box">
             <h3 style="margin-top: 0;">Relatórios & Credenciamento em Lote</h3>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -172,7 +167,7 @@
             </div>
           </div>
 
-          <!-- Modal Gerenciador de Crachás em Lote com Filtro, Seleção e Foto -->
+          <!-- Modal Lote Crachás -->
           <div id="modalLoteCrachas" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
             <div style="background: #ffffff; padding: 20px; border-radius: 12px; width: 95%; max-width: 780px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">
@@ -215,7 +210,6 @@
             </div>
           </div>
 
-          <!-- Monitor de Saúde do Cluster Groq Cloud (7 Contas Independentes) -->
           <div class="section-box">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <h3 style="margin: 0;">Rede Neural Groq Cloud (7 Contas)</h3>
@@ -231,7 +225,6 @@
               </div>
             </div>
 
-            <!-- Grade Dinâmica dos Nós de IA -->
             <div id="aiNodesGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; max-height: 240px; overflow-y: auto;">
               <div class="small-note" style="grid-column: 1 / -1; text-align: center;">
                 Clique em "Auditar Chaves" para verificar a saúde dos nós.
@@ -239,7 +232,6 @@
             </div>
           </div>
 
-          <!-- Validação Manual & Emissão Rápida de Crachás -->
           <div class="section-box">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
               <h3 style="margin: 0;">Check-in Manual & Crachás</h3>
@@ -258,7 +250,6 @@
             </div>
           </div>
 
-          <!-- Lista Nominal Pesquisável -->
           <div class="section-box">
             <h3>Lista Nominal de Participantes</h3>
             <input id="memberSearch" class="presence-search" type="text" placeholder="Pesquisar por nome, matrícula ou CPF..." autocomplete="off" oninput="scheduleMemberSearch()">
@@ -267,9 +258,6 @@
                 Digite ao menos dois caracteres para pesquisar participantes.
               </div>
             </div>
-            <p class="small-note" style="margin-top: 8px; font-size: 0.8rem; color: var(--gray);">
-              Clique em <strong>Presença</strong> para confirmar o check-in ou em <strong>Crachá</strong> para abrir o documento formatado.
-            </p>
           </div>
 
           <button class="danger-button" style="width: 100%; margin-top: 18px;" type="button" onclick="logoutFiscal()">Encerrar Terminal Fiscal</button>
@@ -382,21 +370,6 @@
                 <span class="tag">Vias Metabólicas</span>
               </div>
             </div>
-<!-- FIM DA INSERÇÃO DO CARD -->
-
-<!-- 2. JUNTO ÀS SECTIONS DE MODULOS (após a section id="labSection"), ADICIONAR: -->
-    <!-- =========================================================
-         MÓDULO: ANATOMIA 3D E BIOHACKING (IFRAME)
-    ========================================================= -->
-    <section id="anatomiaSection" class="view-panel hidden">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="color: #3b82f6; font-size: 1.15rem;">🧬 Anatomia 3D & Farmacocinética</h3>
-        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
-      </div>
-      <!-- O iframe carrega o arquivo index.html que acabamos de criar -->
-      <iframe id="anatomiaFrame" title="Simulador Anatômico e Biohacking" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #0f172a;"></iframe>
-    </section>
-<!-- FIM DA INSERÇÃO DA SECTION -->
           </div>
         </div>
 
@@ -415,7 +388,7 @@
     </section>
 
     <!-- =========================================================
-         4. MÓDULO: SIMULADOR DE TOXICOLOGIA (IFRAME DEDICADO)
+         4. MÓDULO: SIMULADOR DE TOXICOLOGIA (IFRAME)
     ========================================================= -->
     <section id="toxicoSection" class="view-panel hidden">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
@@ -435,9 +408,20 @@
       </div>
       <iframe id="labFrame" title="Laboratório Virtual de Bancada e Ensaios Químicos" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #ffffff;"></iframe>
     </section>
+
+    <!-- =========================================================
+         6. MÓDULO: ANATOMIA 3D E BIOHACKING (IFRAME)
+    ========================================================= -->
+    <section id="anatomiaSection" class="view-panel hidden">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="color: #3b82f6; font-size: 1.15rem;">🧬 Anatomia 3D & Farmacocinética</h3>
+        <button class="btn btn-secondary btn-sm" type="button" onclick="transitionToDashboard()">🏠 Voltar ao Hub</button>
+      </div>
+      <iframe id="anatomiaFrame" title="Simulador Anatômico e Biohacking" src="" style="width: 100%; height: 84vh; border: 1px solid var(--border); border-radius: var(--radius-md); background: #0f172a;"></iframe>
+    </section>
     
     <!-- =========================================================
-         6. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE & ACERVO)
+         7. MÓDULO: CLÍNICA MÉDICA VIRTUAL (OSCE MULTIPACIENTE & ACERVO)
     ========================================================= -->
     <section id="clinicSection" class="view-panel hidden">
       
@@ -484,17 +468,12 @@
           <p style="margin: 6px 0 0; font-size: 0.75rem; color: var(--gray);">Casos do acervo são auditados pela diretoria e têm execução imediata com custo zero de tokens.</p>
         </div>
 
-        <!-- Grade Dinâmica dos Pacientes (Plantão Ativo) -->
         <div id="patientBedsGrid" class="beds-grid"></div>
-
-        <!-- Grade Dinâmica da Biblioteca (Acervo Coletivo) -->
         <div id="communityBedsGrid" class="beds-grid hidden"></div>
       </div>
 
-      <!-- Sub-tela B: Leito Ativo de Consulta (Espaço de Trabalho) -->
+      <!-- Sub-tela B: Leito Ativo de Consulta -->
       <div id="clinicWorkspaceView" class="clinic-workspace hidden">
-        
-        <!-- Barra Superior de Monitoramento do Paciente -->
         <div class="patient-monitor">
           <div class="patient-id-badge">
             <button class="btn btn-secondary btn-sm" type="button" onclick="ClinicEngine.returnToBeds()" title="Voltar ao mapa de leitos">← Leitos</button>
@@ -533,7 +512,6 @@
           </div>
         </div>
 
-        <!-- Abas da Consulta com ARIA Completo -->
         <nav class="clinic-tabs" role="tablist" aria-label="Navegação da Consulta Médica">
           <button class="clinic-tab-btn active" role="tab" aria-selected="true" aria-controls="prontuarioTab" id="tab-prontuario" data-tab="prontuarioTab">📋 Prontuário & Sinais</button>
           <button class="clinic-tab-btn" role="tab" aria-selected="false" aria-controls="dialogoTab" id="tab-dialogo" data-tab="dialogoTab">🗣️ Anamnese (Chat)</button>
@@ -542,7 +520,6 @@
         </nav>
 
         <div class="clinic-tab-viewport">
-          <!-- Aba 1: Prontuário -->
           <div id="prontuarioTab" class="clinic-tab-pane active" role="tabpanel" aria-labelledby="tab-prontuario">
             <div class="prontuario-grid">
               <div class="sheet-box">
@@ -566,7 +543,6 @@
             </div>
           </div>
 
-          <!-- Aba 2: Anamnese & Guia Semiológico Metodológico -->
           <div id="dialogoTab" class="clinic-tab-pane" role="tabpanel" aria-labelledby="tab-dialogo">
             <div class="chat-container">
               <div id="chatHistory" class="chat-viewport">
@@ -588,7 +564,6 @@
             </div>
           </div>
 
-          <!-- Aba 3: Exames -->
           <div id="examesTab" class="clinic-tab-pane" role="tabpanel" aria-labelledby="tab-exames">
             <div class="exams-workspace">
               <div class="exams-catalog">
@@ -606,7 +581,6 @@
             </div>
           </div>
 
-          <!-- Aba 4: Fechamento -->
           <div id="fechamentoTab" class="clinic-tab-pane" role="tabpanel" aria-labelledby="tab-fechamento">
             <div class="resolution-form">
               <div class="form-group">
@@ -630,11 +604,7 @@
 
   </main>
 
-  <!-- =========================================================
-       MODAIS DO SISTEMA
-  ========================================================= -->
-
-  <!-- Modal Radar Epidemiológico e Pedagógico -->
+  <!-- Modais Auxiliares -->
   <div id="modalRadarEpidemio" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(3px);">
     <div style="background: #ffffff; padding: 24px; border-radius: 12px; width: 95%; max-width: 680px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
       <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 12px;">
@@ -665,7 +635,6 @@
     </div>
   </div>
 
-  <!-- Modal de Senha Fiscal -->
   <div id="modalFiscalLogin" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(2px);">
     <div style="background: #ffffff; padding: 24px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.25); text-align: center;">
       <h3 style="margin-top: 0; color: #0f172a; font-size: 1.25rem;">Acesso Fiscal LAIFT</h3>
@@ -680,7 +649,6 @@
     </div>
   </div>
 
-  <!-- Modal de Instruções -->
   <div id="instructionsModal" class="modal" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <span class="modal-close" id="closeModal">&times;</span>
@@ -693,15 +661,14 @@
         </ul>
         <h4 style="margin-top: 14px;">Clínica Médica Virtual (OSCE):</h4>
         <ul>
-          <li><strong>Anamnese Interativa:</strong> Converse com o paciente em linguagem natural ou realize exames físicos pelo chat (ex: <em>"vou auscultar seu pulmão"</em>).</li>
-          <li><strong>Biblioteca Comunitária:</strong> Acesse dezenas de casos auditados por colegas e preceptores com carregamento imediato.</li>
-          <li><strong>Geração com IA:</strong> Sintetize novos casos clínicos inéditos sob demanda para treinar temas específicos.</li>
+          <li><strong>Anamnese Interativa:</strong> Converse com o paciente em linguagem natural ou realize exames físicos pelo chat.</li>
+          <li><strong>Biblioteca Comunitária:</strong> Acesse dezenas de casos auditados por colegas e preceptores com custo zero de tokens.</li>
+          <li><strong>Geração com IA:</strong> Sintetize novos casos clínicos inéditos sob demanda.</li>
         </ul>
       </div>
     </div>
   </div>
 
-  <!-- Modal de Credencial -->
   <div id="credentialModal" class="modal" role="dialog" aria-modal="true">
     <div class="modal-dialog text-center">
       <span class="modal-close" onclick="closeCredentialModal()">&times;</span>
@@ -714,7 +681,6 @@
     </div>
   </div>
 
-  <!-- Modal de Feedback do Preceptor -->
   <div id="preceptorModal" class="modal" role="dialog" aria-modal="true">
     <div class="modal-dialog modal-lg">
       <h2 id="preceptorModalTitle">Resultado da Avaliação Clínica</h2>
@@ -738,7 +704,6 @@
     </div>
   </div>
 
-  <!-- Rodapé Institucional -->
   <footer class="app-footer">
     <span>LAIFT — Liga Acadêmica Interdisciplinar de Farmacologia e Toxicologia</span>
     <span class="signature">DPF :)</span>
