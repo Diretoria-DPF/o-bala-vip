@@ -3,33 +3,43 @@
 /* ========================================================================= */
 
 /* -------------------------------------------------------------------------
-   1. VARIÁVEIS GLOBAIS & PALETA DARK SCIENTIFIC (LAIFT)
+   1. VARIÁVEIS GLOBAIS & TEMA DARK CIENTÍFICO (LAIFT BIO-TWIN)
    ------------------------------------------------------------------------- */
 :root {
-  --bg-main: #0f172a;       /* Slate 900 - Fundo Geral */
-  --bg-surface: #1e293b;    /* Slate 800 - Superfície dos Cards e Drawers */
-  --bg-darker: #020617;     /* Slate 950 - Viewports e Cabeçalho */
+  --bg-main: #0f172a;          /* Slate 900 */
+  --bg-surface: #1e293b;       /* Slate 800 */
+  --bg-surface-alt: #162032;   /* Slate 850 */
+  --bg-darker: #020617;        /* Slate 950 */
   
-  --primary: #38bdf8;       /* Sky 400 - Destaques Primários */
+  --primary: #38bdf8;          /* Sky 400 */
+  --primary-hover: #0ea5e9;    /* Sky 500 */
   --primary-glow: rgba(56, 189, 248, 0.25);
-  --secondary: #0284c7;     /* Sky 600 - Ações Primárias */
-  --accent: #34d399;        /* Emerald 400 - Biohacking & Fisiologia */
-  --accent-glow: rgba(52, 211, 153, 0.25);
-  --warning: #f97316;       /* Orange 500 - Digestório e Timelines */
-  --danger: #ef4444;        /* Red 500 - Cardiovascular e Alertas */
   
-  --text-main: #f8fafc;     /* Slate 50 - Leitura de Alto Contraste */
-  --text-muted: #94a3b8;    /* Slate 400 - Metadados e Legendas */
-  --border: #334155;        /* Slate 700 - Linhas Estruturais */
+  --secondary: #0284c7;        /* Sky 600 */
+  --accent: #34d399;           /* Emerald 400 */
+  --accent-glow: rgba(52, 211, 153, 0.25);
+  
+  --warning: #f59e0b;          /* Amber 500 */
+  --warning-alt: #f97316;      /* Orange 500 */
+  --danger: #ef4444;           /* Red 500 */
+  --purple: #a855f7;           /* Purple 500 */
+  
+  --text-main: #f8fafc;        /* Slate 50 */
+  --text-muted: #94a3b8;       /* Slate 400 */
+  --text-dim: #64748b;         /* Slate 500 */
+  --border: #334155;           /* Slate 700 */
+  --border-focus: #0284c7;
   
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --header-height: 50px;
+  --nav-height: calc(62px + env(safe-area-inset-bottom));
 }
 
 /* -------------------------------------------------------------------------
-   2. RESET E TRAVA DE COCKPIT (ZERO SCROLL INDESEJADO)
+   2. RESET E TRAVA NATIVA DE COCKPIT (ZERO SCROLL INDESEJADO NO MOBILE)
    ------------------------------------------------------------------------- */
 *, *::before, *::after {
   box-sizing: border-box;
@@ -39,43 +49,48 @@
 }
 
 html, body {
-  width: 100%;
+  width: 100vw;
   height: 100dvh;
   min-height: 100vh;
+  max-height: 100dvh;
   background-color: var(--bg-main);
   color: var(--text-main);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow: hidden;
   overscroll-behavior: none;
   display: flex;
   flex-direction: column;
+  -webkit-text-size-adjust: 100%;
 }
 
 input, select, textarea, button {
   font-family: inherit;
-  font-size: 16px !important; /* Previne auto-zoom no iOS/Android */
+  font-size: 16px !important; /* Previne auto-zoom indesejado no iOS Safari / Android */
 }
 
 /* -------------------------------------------------------------------------
-   3. CABEÇALHO COMPACTO DO ATLAS
+   3. CABEÇALHO MASTER DO ATLAS
    ------------------------------------------------------------------------- */
 .atlas-header {
-  height: 50px;
+  height: var(--header-height);
   background-color: var(--bg-darker);
   border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 14px;
   flex-shrink: 0;
   z-index: 50;
 }
 
 .atlas-brand h1 {
-  font-size: 1.15rem;
+  font-size: 1.12rem;
   font-weight: 800;
   color: var(--primary);
   letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .atlas-brand span {
@@ -94,27 +109,35 @@ input, select, textarea, button {
   border: 1px solid var(--border);
   color: var(--text-muted);
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   padding: 5px 10px;
   border-radius: 20px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   transition: var(--transition);
+  user-select: none;
 }
 
 .btn-pill-tool:hover {
   background: var(--border);
-  color: #fff;
+  color: var(--text-main);
+  border-color: var(--primary);
+}
+
+.btn-pill-tool.active, .fs-active-icon {
+  background: rgba(56, 189, 248, 0.15) !important;
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
 }
 
 /* -------------------------------------------------------------------------
-   4. BARRA DE SISTEMAS DESLIZÁVEL (HORIZONTAL / TOUCH)
+   4. BARRA DE SISTEMAS DESLIZÁVEL (HORIZONTAL TOUCH SCROLL)
    ------------------------------------------------------------------------- */
 .systems-bar {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 12px;
   background-color: #0b1120;
   border-bottom: 1px solid var(--border);
@@ -124,8 +147,9 @@ input, select, textarea, button {
 }
 
 .systems-bar::-webkit-scrollbar {
-  height: 4px;
+  height: 3px;
 }
+
 .systems-bar::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
@@ -138,9 +162,9 @@ input, select, textarea, button {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: 20px;
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -149,81 +173,110 @@ input, select, textarea, button {
 
 .sys-chip:hover {
   border-color: var(--primary);
-  color: #fff;
+  color: var(--text-main);
 }
 
 .sys-chip.active {
   background: var(--secondary);
-  color: #fff;
+  color: #ffffff;
   border-color: var(--primary);
-  box-shadow: 0 0 12px var(--primary-glow);
+  box-shadow: 0 0 10px var(--primary-glow);
 }
 
 /* -------------------------------------------------------------------------
-   5. CONTROLE DE NÍVEIS DE ZOOM (MACRO AO NANO)
+   5. CONTROLE DE NÍVEIS DE ZOOM (MACRO / MESO / NANO)
    ------------------------------------------------------------------------- */
-.zoom-controls {
+.zoom-pill-group {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   padding: 6px 12px;
-  background-color: var(--bg-main);
+  background: var(--bg-darker);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
-.zoom-pill {
+.zoom-btn {
   flex: 1;
-  text-align: center;
-  background: var(--bg-darker);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
   padding: 6px 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  color: var(--text-muted);
   font-size: 0.7rem;
   font-weight: 700;
   cursor: pointer;
+  text-align: center;
   transition: var(--transition);
 }
 
-.zoom-pill.active {
-  background: #0f766e;
-  color: #fff;
-  border-color: var(--accent);
-  box-shadow: 0 0 10px var(--accent-glow);
+.zoom-btn:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+.zoom-btn.active {
+  background: var(--secondary);
+  color: #ffffff;
+  border-color: var(--primary);
+  box-shadow: 0 0 10px var(--primary-glow);
 }
 
 /* -------------------------------------------------------------------------
-   6. GRID PRINCIPAL (PALCO VISUAL & DRAWER DE ANÁLISE)
+   6. VIEWPORT PRINCIPAL & GRID DE TELAS
    ------------------------------------------------------------------------- */
-.atlas-viewport-grid {
+.viewport {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  height: calc(100% - 142px);
+  position: relative;
+  width: 100%;
+  height: calc(100% - var(--header-height) - var(--nav-height) - 86px);
   overflow: hidden;
+  background: var(--bg-main);
 }
 
-/* Painel Esquerdo: Viewports Gráficas */
-.viewport-stage {
-  display: flex;
-  flex-direction: column;
+.view-panel {
+  display: none;
+  width: 100%;
+  height: 100%;
   padding: 12px;
-  gap: 12px;
-  border-right: 1px solid var(--border);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 
+.view-panel.active {
+  display: block;
+}
+
+.panel-header {
+  margin-bottom: 12px;
+}
+
+.panel-header h2 {
+  font-size: 1.15rem;
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+
+.panel-header p {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* -------------------------------------------------------------------------
+   7. PALCO 3D WEBGL & VISUALIZADOR MACROMOLECULAR (3DMOL.JS)
+   ------------------------------------------------------------------------- */
 #canvas-3d-container {
   width: 100%;
-  height: 52vh;
-  min-height: 280px;
-  background-color: var(--bg-darker);
+  height: 48vh;
+  min-height: 270px;
+  background: var(--bg-darker);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   position: relative;
   overflow: hidden;
-  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.7);
+  touch-action: none;
+  margin-bottom: 12px;
 }
 
 #loading-3d-overlay {
@@ -234,7 +287,7 @@ input, select, textarea, button {
   align-items: center;
   background: rgba(2, 6, 23, 0.88);
   color: var(--primary);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   font-weight: 600;
   z-index: 20;
   backdrop-filter: blur(4px);
@@ -242,13 +295,13 @@ input, select, textarea, button {
 
 #organ-hud {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid var(--border);
   padding: 6px 12px;
   border-radius: var(--radius-sm);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   color: var(--text-muted);
   backdrop-filter: blur(6px);
   z-index: 25;
@@ -258,20 +311,21 @@ input, select, textarea, button {
 #organ-hud strong {
   color: var(--primary);
   display: block;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   margin-top: 2px;
 }
 
-/* Container Molecular 3Dmol.js (Nível Nano) */
 #mol-viewport-container {
   width: 100%;
-  height: 52vh;
-  min-height: 280px;
-  background-color: var(--bg-darker);
+  height: 48vh;
+  min-height: 270px;
+  background: var(--bg-darker);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   position: relative;
   overflow: hidden;
+  touch-action: none;
+  margin-bottom: 12px;
 }
 
 #mol-viewport {
@@ -279,85 +333,232 @@ input, select, textarea, button {
   height: 100%;
 }
 
-/* Gráfico Farmacocinético (Chart.js) */
-#pk-chart-container {
-  width: 100%;
-  height: 180px;
-  background-color: var(--bg-surface);
-  border-radius: var(--radius-md);
-  padding: 10px;
+/* -------------------------------------------------------------------------
+   8. WIDGET DE DISSECÇÃO EM 5 CAMADAS (SLIDER NO CANVAS)
+   ------------------------------------------------------------------------- */
+#dissectionControlWidget {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(2, 6, 23, 0.9);
   border: 1px solid var(--border);
-  flex-shrink: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 30;
+  backdrop-filter: blur(6px);
+}
+
+#dissectionSlider {
+  width: 170px;
+  accent-color: var(--secondary);
+  cursor: pointer;
+  margin: 4px 0;
 }
 
 /* -------------------------------------------------------------------------
-   7. PAINEL DIREITO: DRAWER DE CONTEÚDO MULTIESCALA
+   9. PAINEL DE ÁRVORE ANATÔMICA & CONTROLE GRANULAR DE OPACIDADE
    ------------------------------------------------------------------------- */
-.atlas-drawer {
-  padding: 14px;
-  overflow-y: auto;
+.tree-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  background-color: var(--bg-main);
-  -webkit-overflow-scrolling: touch;
+  gap: 10px;
 }
 
-.atlas-drawer::-webkit-scrollbar {
-  width: 5px;
-}
-.atlas-drawer::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+.tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 
-/* Ficha do Sistema e Órgãos */
-.tag-organ {
-  display: inline-block;
+.tree-header h3 {
+  font-size: 0.86rem;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tree-system-card {
   background: var(--bg-darker);
   border: 1px solid var(--border);
-  color: #cbd5e1;
-  font-size: 0.7rem;
-  padding: 3px 8px;
   border-radius: var(--radius-sm);
+  padding: 10px;
+  margin-bottom: 6px;
 }
 
-.btn-action-sm {
+.tree-system-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.tree-organ-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 6px;
+  border-left: 2px solid rgba(56, 189, 248, 0.25);
+}
+
+.tree-organ-row {
+  display: grid;
+  grid-template-columns: auto 1fr 90px auto;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-surface-alt);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.tree-organ-title {
+  font-size: 0.76rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-organ-slider {
   width: 100%;
-  background: var(--secondary);
-  color: #fff;
-  border: none;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 0.78rem;
-  font-weight: 600;
+  accent-color: var(--primary);
   cursor: pointer;
-  text-align: left;
+}
+
+.btn-isolate-organ {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
   transition: var(--transition);
 }
 
-.btn-action-sm:hover {
-  background: #0284c7;
-  transform: translateY(-1px);
+.btn-isolate-organ:hover {
+  background: var(--border);
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* -------------------------------------------------------------------------
-   8. COMPONENTE TIMELINE FISIOLÓGICA (DEGLUTIÇÃO / CICLOS)
+   10. SELETOR E SIMULADOR DAS 7 VIAS DE ADMINISTRAÇÃO
+   ------------------------------------------------------------------------- */
+.routes-selector-container {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.routes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.route-chip-card {
+  background: var(--bg-darker);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.route-chip-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.route-chip-card.active {
+  border-color: var(--accent);
+  background: rgba(52, 211, 153, 0.08);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.route-chip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.route-chip-title {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.route-badge {
+  font-size: 0.62rem;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.route-details-panel {
+  background: var(--bg-darker);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  margin-top: 8px;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.route-details-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--primary);
+}
+
+/* -------------------------------------------------------------------------
+   11. TIMELINE FISIOLÓGICA & COMPONENTES DINÂMICOS
    ------------------------------------------------------------------------- */
 .timeline-card {
-  background-color: var(--bg-darker);
+  background-color: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-bottom: 12px;
 }
 
 .timeline-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.timeline-step-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--warning-alt);
 }
 
 .btn-play-sm {
@@ -376,60 +577,102 @@ input, select, textarea, button {
   filter: brightness(1.1);
 }
 
-.timeline-step-badge {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--warning);
-}
-
 .timeline-desc {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--text-muted);
   line-height: 1.45;
 }
 
-.timeline-meta {
-  font-size: 0.72rem;
-  color: #64748b;
-  font-family: monospace;
-  background: rgba(255, 255, 255, 0.02);
-  padding: 6px;
-  border-radius: 4px;
-  border: 1px dashed var(--border);
-}
-
 .timeline-nav-row {
   display: flex;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .btn-step {
   flex: 1;
-  background: var(--bg-surface);
-  color: #fff;
+  min-width: 80px;
+  background: var(--bg-darker);
+  color: var(--text-main);
   border: 1px solid var(--border);
-  padding: 6px 10px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
+  text-align: center;
   transition: var(--transition);
+  white-space: nowrap;
 }
 
 .btn-step:hover {
   background: var(--border);
+  border-color: var(--primary);
 }
 
 /* -------------------------------------------------------------------------
-   9. CARDS DE ALVOS MOLECULARES E BIOHACKING
+   12. GRÁFICO FARMACOCINÉTICO (CHART.JS CONTAINER)
    ------------------------------------------------------------------------- */
+#pk-chart-container {
+  width: 100%;
+  height: 180px;
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+/* -------------------------------------------------------------------------
+   13. PROTOCOLOS DE BIOHACKING & BUSCA
+   ------------------------------------------------------------------------- */
+.search-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#bio-search-input {
+  flex: 1;
+  background: var(--bg-darker);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: var(--transition);
+}
+
+#bio-search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+#btn-bio-search {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  width: 46px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: var(--transition);
+}
+
+#btn-bio-search:hover {
+  background: var(--border);
+}
+
 .bio-protocol-card {
   background: var(--bg-surface);
   border-left: 4px solid var(--accent);
   border-radius: var(--radius-sm);
-  padding: 12px;
-  margin-bottom: 8px;
+  padding: 14px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
   transition: transform var(--transition);
 }
 
@@ -437,51 +680,126 @@ input, select, textarea, button {
   transform: translateY(-2px);
 }
 
-.card-nano {
-  border-left-color: var(--primary);
-}
-
-.tag-pdb {
-  font-size: 0.68rem;
-  font-family: monospace;
+.tag-bio {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  font-size: 0.66rem;
   font-weight: 700;
-  background: var(--bg-darker);
-  color: #facc15;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(250, 204, 21, 0.3);
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
 }
 
 /* -------------------------------------------------------------------------
-   10. ADAPTAÇÃO NATIVA RESPONSIVA (< 960px)
+   14. ACERVO & AÇÕES DE EXPORTAÇÃO
    ------------------------------------------------------------------------- */
+.actions-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.btn-primary {
+  background: var(--secondary);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: var(--transition);
+  text-align: center;
+}
+
+.btn-secondary:hover {
+  background: var(--border);
+}
+
+/* -------------------------------------------------------------------------
+   15. BARRA INFERIOR PWA (BOTTOM NAVIGATION)
+   ------------------------------------------------------------------------- */
+.bottom-nav {
+  height: var(--nav-height);
+  background-color: var(--bg-darker);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding-bottom: env(safe-area-inset-bottom);
+  flex-shrink: 0;
+  z-index: 50;
+}
+
+.nav-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.nav-icon {
+  font-size: 1.3rem;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.nav-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.nav-btn.active {
+  color: var(--primary);
+}
+
+.nav-btn.active .nav-icon {
+  transform: translateY(-2px) scale(1.12);
+}
+
 .hidden {
   display: none !important;
 }
 
-@media (max-width: 960px) {
-  .atlas-viewport-grid {
-    grid-template-columns: 1fr;
-    height: calc(100% - 142px);
-    overflow-y: auto;
-  }
-
-  .viewport-stage {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    padding: 8px;
-  }
-
-  #canvas-3d-container,
-  #mol-viewport-container {
+/* -------------------------------------------------------------------------
+   16. ADAPTAÇÕES RESPONSIVAS (< 900px & MOBILE)
+   ------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  #canvas-3d-container, #mol-viewport-container {
     height: 40vh;
     min-height: 240px;
   }
 
-  .atlas-drawer {
-    padding: 10px;
+  .routes-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tree-organ-row {
+    grid-template-columns: auto 1fr 75px auto;
   }
 }
-/* ========================================================================= */
-/* FIM DO ARQUIVO: anatomia-3d/css/style.css                                 */
-/* ========================================================================= */
