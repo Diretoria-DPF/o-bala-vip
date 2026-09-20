@@ -1,48 +1,53 @@
 /* ========================================================================= */
 /* ARQUIVO: anatomia-3d/js/app.js                                            */
+/* VERSÃO:  2.3.0 — COMPLETA: 14 SISTEMAS, 18 VIAS, CRISE PK/PD & QUIZ 3D   */
 /* ========================================================================= */
 
 /**
- * CONTROLADOR MESTRE DE INTERFACE, ÁRVORE ANATÔMICA & VIAS FARMACOLÓGICAS
+ * CONTROLADOR MESTRE DE INTERFACE, NAVEGAÇÃO & INTEGRAÇÃO DE MOTORES
  * Ecossistema LAIFT - Módulo Master 3D / Bio-Twin
  * - Orquestração de abas SPA com suporte a gestos Swipe protegidos
- * - Geração e sincronização da Árvore Anatômica (Visibilidade e Opacidade 0-100%)
- * - Gerenciamento dinâmico do Seletor das 7 Vias de Administração Farmacológica
- * - Sincronização de zoom biológico (Macro ➔ Meso ➔ Nano com ThreeEngine / MolEngine)
- * - Integração dos controles de dissecção tecidual em 5 camadas
+ * - Mapeamento dinâmico dos 14 Sistemas Anatômicos na barra de chips e árvore
+ * - Árvore de Dissecção Granular (Visibilidade, Sliders de Opacidade 0-100% e Foco)
+ * - Seletor categorizado das 18 Vias de Administração Farmacológica
+ * - Painel de Controle de Crise Toxicológica (Organofosforados, Atropina e 2-PAM)
+ * - Integração do Quiz 3D Gamificado e Visualização Macromolecular PDB
+ * - Busca de Protocolos de Biohacking e Emissão de Dossiê Curricular em PDF
  */
 
 const AppController = (() => {
-  // Mapeamento de Telas Gerenciadas
+  // -------------------------------------------------------------------------
+  // 1. ESTADO DE NAVEGAÇÃO E COCKPIT SPA
+  // -------------------------------------------------------------------------
   const tabs = ["view-anatomy", "view-biohacking", "view-acervo"];
   let currentTabIndex = 0;
 
-  // Estado da Navegação Gestual (Touch / Swipe)
+  // Estado dos Gestos de Toque (Swipe)
   let touchStartX = 0;
   let touchStartY = 0;
   let touchEndX = 0;
   let touchEndY = 0;
   let isTouchInside3D = false;
-  const SWIPE_THRESHOLD_PX = 55;
+  const SWIPE_THRESHOLD_PX = 50;
 
-  // Estado Local das Vias e da Árvore
-  let selectedRouteId = "ORAL";
+  // Estado Local de Seleção
   let activeSystemId = "digestorio";
+  let activeRouteId = "ORAL";
+  let activeRouteCategory = "todas";
 
   // =========================================================================
-  // 1. GESTÃO DE ABAS & TRANSIÇÕES SPA
+  // 2. GESTÃO DE ABAS & CICLO DE VIDA DE TELAS
   // =========================================================================
   /**
    * Alterna a visualização ativa entre Anatomia, Biohacking e Acervo
-   * @param {String} targetId - ID da seção de destino
-   * @param {Boolean} force - Forçar recálculo mesmo se já estiver ativa
+   * @param {String} targetId - ID do contêiner da aba
+   * @param {Boolean} force - Força recálculo do layout
    */
   function switchTab(targetId, force = false) {
     const targetIndex = tabs.indexOf(targetId);
     if (targetIndex === -1) return;
     if (!force && targetIndex === currentTabIndex) return;
 
-    // Atualiza classes dos painéis principais
     tabs.forEach((id) => {
       const panel = document.getElementById(id);
       if (panel) {
@@ -56,16 +61,14 @@ const AppController = (() => {
       }
     });
 
-    // Atualiza botões da barra de navegação inferior
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.target === targetId);
     });
 
     currentTabIndex = targetIndex;
 
-    // Resposta tátil em dispositivos móveis compatíveis
     if (navigator.vibrate) {
-      navigator.vibrate(12);
+      navigator.vibrate(10);
     }
 
     handleTabLifecycle(targetId);
@@ -76,12 +79,10 @@ const AppController = (() => {
       if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.onWindowResize === "function") {
         setTimeout(() => {
           ThreeEngine.onWindowResize();
-        }, 60);
+        }, 50);
       }
     } else if (tabId === "view-biohacking") {
-      if (typeof BiohackingController !== "undefined" && typeof BiohackingController.renderAllProtocols === "function") {
-        BiohackingController.renderAllProtocols();
-      }
+      renderBiohackingCards();
     } else if (tabId === "view-acervo") {
       if (typeof ApiCache !== "undefined" && typeof ApiCache.renderizarHistoricoLocal === "function") {
         ApiCache.renderizarHistoricoLocal();
@@ -89,58 +90,84 @@ const AppController = (() => {
     }
   }
 
-  // =========================================================================
-  // 2. DETECÇÃO DE GESTOS SWIPE COM BLINDAGEM DE ROTAÇÃO 3D
-  // =========================================================================
   function handleGesture() {
-    // Se o toque iniciou sobre a viewport WebGL do Three.js ou do 3Dmol,
-    // o swipe é abortado para não interromper a rotação/dissecção anatômica
     if (isTouchInside3D) return;
 
     const deltaX = touchEndX - touchStartX;
     const deltaY = touchEndY - touchStartY;
 
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      if (Math.abs(deltaX) > SWIPE_THRESHOLD_PX) {
-        if (deltaX > 0) {
-          // Deslize para a direita: Retrocede
-          if (currentTabIndex > 0) {
-            switchTab(tabs[currentTabIndex - 1]);
-          }
-        } else {
-          // Deslize para a esquerda: Avança
-          if (currentTabIndex < tabs.length - 1) {
-            switchTab(tabs[currentTabIndex + 1]);
-          }
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > SWIPE_THRESHOLD_PX) {
+      if (deltaX > 0) {
+        if (currentTabIndex > 0) {
+          switchTab(tabs[currentTabIndex - 1]);
+        }
+      } else {
+        if (currentTabIndex < tabs.length - 1) {
+          switchTab(tabs[currentTabIndex + 1]);
         }
       }
     }
   }
 
   // =========================================================================
-  // 3. GERAÇÃO E CONTROLE DA ÁRVORE ANATÔMICA (ÓRGÃOS & OPACIDADE)
+  // 3. BARRA DE SISTEMAS ANATÔMICOS (14 SISTEMAS DINÂMICOS)
+  // =========================================================================
+  function renderSystemsBar() {
+    const container = document.getElementById("systemsBar");
+    if (!container || typeof ATLAS_DATABASE === "undefined" || !Array.isArray(ATLAS_DATABASE.sistemas)) return;[cite: 1]
+
+    container.innerHTML = ATLAS_DATABASE.sistemas.map((sys) => {[cite: 1]
+      const isActive = sys.id === activeSystemId;
+      return `
+        <button 
+          class="sys-chip ${isActive ? "active" : ""}" 
+          type="button" 
+          data-sys="${sys.id}"
+          onclick="AppController.selectSystem('${sys.id}')"
+        >
+          <span>${sys.icone || "🧬"}</span>
+          <span>${sys.nome}</span>
+        </button>
+      `;
+    }).join("");
+  }
+
+  function selectSystem(systemId) {
+    activeSystemId = systemId;
+
+    document.querySelectorAll(".sys-chip").forEach((chip) => {
+      chip.classList.toggle("active", chip.dataset.sys === systemId);
+    });
+
+    if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.selectSystem === "function") {
+      ThreeEngine.selectSystem(systemId);
+    }
+
+    renderOrganTree(systemId);
+  }
+
+  // =========================================================================
+  // 4. ÁRVORE ANATÔMICA GRANULAR COM SLIDERS DE OPACIDADE & FOCO
   // =========================================================================
   function renderOrganTree(systemId) {
     const container = document.getElementById("organTreeContainer");
     if (!container) return;
 
-    if (typeof ATLAS_DATABASE === "undefined" || !Array.isArray(ATLAS_DATABASE.sistemas)) {
-      container.innerHTML = '<div style="font-size:0.75rem; color:#64748b;">Base de dados anatômica indisponível.</div>';
+    if (typeof ATLAS_DATABASE === "undefined" || !Array.isArray(ATLAS_DATABASE.sistemas)) {[cite: 1]
+      container.innerHTML = '<div style="font-size:0.75rem; color:#64748b; padding:8px;">Base de dados anatômica indisponível.</div>';
       return;
     }
 
-    const sys = ATLAS_DATABASE.sistemas.find((s) => s.id === (systemId || activeSystemId));
+    const sys = ATLAS_DATABASE.sistemas.find((s) => s.id === (systemId || activeSystemId));[cite: 1]
     if (!sys) return;
 
-    activeSystemId = sys.id;
-
-    let treeHtml = `
+    let html = `
       <div class="tree-system-card">
         <div class="tree-system-header">
-          <strong style="color:${sys.cor || '#38bdf8'}; font-size:0.84rem; display:flex; align-items:center; gap:6px;">
-            <span>${sys.icone || '🧬'}</span> ${sys.nome}
+          <strong style="color:${sys.cor || "#38bdf8"}; font-size:0.84rem; display:flex; align-items:center; gap:6px;">
+            <span>${sys.icone || "🧬"}</span> ${sys.nome}
           </strong>
-          <button type="button" class="btn-isolate-organ" onclick="AppController.resetEntireTree()">
+          <button type="button" class="btn-isolate-organ" onclick="AppController.resetEntireTree()" title="Restaurar visibilidade de todos os órgãos">
             Restaurar
           </button>
         </div>
@@ -149,13 +176,13 @@ const AppController = (() => {
 
     (sys.orgaos || []).forEach((orgao) => {
       const organKey = orgao.meshKey || orgao.id;
-      treeHtml += `
+      html += `
         <div class="tree-organ-row" data-organ="${organKey}">
           <input 
             type="checkbox" 
             checked 
             id="chk_${orgao.id}" 
-            title="Exibir/Ocultar órgão"
+            title="Exibir/Ocultar ${orgao.nome}"
             onchange="AppController.onOrganVisibilityChange('${organKey}', this.checked)"
           >
           <div class="tree-organ-title" title="${orgao.nome}">
@@ -174,7 +201,7 @@ const AppController = (() => {
           <button 
             type="button" 
             class="btn-isolate-organ" 
-            title="Isolar esta estrutura"
+            title="Focar e isolar estrutura"
             onclick="AppController.onOrganIsolate('${organKey}')"
           >
             Foco
@@ -183,12 +210,12 @@ const AppController = (() => {
       `;
     });
 
-    treeHtml += `
+    html += `
         </div>
       </div>
     `;
 
-    container.innerHTML = treeHtml;
+    container.innerHTML = html;
   }
 
   function onOrganVisibilityChange(organKey, isVisible) {
@@ -222,34 +249,50 @@ const AppController = (() => {
   }
 
   // =========================================================================
-  // 4. SELETOR E SIMULADOR DAS 7 VIAS DE ADMINISTRAÇÃO
+  // 5. SELETOR DAS 18 VIAS DE ADMINISTRAÇÃO FARMACOLÓGICA
   // =========================================================================
   function renderRoutesSelector() {
     const container = document.getElementById("routesSelectorContainer");
     if (!container) return;
 
-    if (typeof ATLAS_DATABASE === "undefined" || !ATLAS_DATABASE.viasAdministracao) return;
+    if (typeof ATLAS_DATABASE === "undefined" || !ATLAS_DATABASE.viasAdministracao) return;[cite: 1]
 
-    const vias = ATLAS_DATABASE.viasAdministracao;
-    const keys = Object.keys(vias);
+    const vias = ATLAS_DATABASE.viasAdministracao;[cite: 1]
+    const allKeys = Object.keys(vias);[cite: 1]
+
+    // Filtragem por Categoria
+    const filteredKeys = allKeys.filter((key) => {
+      if (activeRouteCategory === "todas") return true;
+      return (vias[key].categoria || "").toLowerCase() === activeRouteCategory;
+    });
 
     let html = `
       <div class="tree-header">
-        <h3>💉 Vias de Administração Farmacológica (7 Vias)</h3>
+        <h3>💉 Vias de Administração Farmacológica (${allKeys.length} Vias)</h3>
         <button type="button" class="btn-isolate-organ" onclick="AppController.stopRoute()">
           Parar Fluxo
         </button>
       </div>
+
+      <!-- Abas de Filtro de Categoria -->
+      <div class="routes-category-tabs">
+        <button class="route-cat-btn ${activeRouteCategory === "todas" ? "active" : ""}" onclick="AppController.filterRouteCategory('todas')">Todas (${allKeys.length})</button>
+        <button class="route-cat-btn ${activeRouteCategory === "enteral" ? "active" : ""}" onclick="AppController.filterRouteCategory('enteral')">Enterais</button>
+        <button class="route-cat-btn ${activeRouteCategory === "parenteral" ? "active" : ""}" onclick="AppController.filterRouteCategory('parenteral')">Parenterais</button>
+        <button class="route-cat-btn ${activeRouteCategory === "mucosa" ? "active" : ""}" onclick="AppController.filterRouteCategory('mucosa')">Mucosas</button>
+        <button class="route-cat-btn ${activeRouteCategory === "topica" ? "active" : ""}" onclick="AppController.filterRouteCategory('topica')">Tópicas</button>
+      </div>
+
       <div class="routes-grid">
     `;
 
-    keys.forEach((key) => {
-      const rota = vias[key];
-      const isActive = rota.id === selectedRouteId;
+    filteredKeys.forEach((key) => {
+      const rota = vias[key];[cite: 1]
+      const isActive = rota.id === activeRouteId;[cite: 1]
 
       html += `
         <div 
-          class="route-chip-card ${isActive ? 'active' : ''}" 
+          class="route-chip-card ${isActive ? "active" : ""}" 
           id="route_card_${rota.id}" 
           onclick="AppController.selectRoute('${rota.id}')"
         >
@@ -265,41 +308,46 @@ const AppController = (() => {
       `;
     });
 
-    html += `</div><div id="routeDetailsPanel" class="route-details-panel"></div>`;
-    container.innerHTML = html;
+    html += `
+      </div>
+      <div id="routeDetailsPanel" class="route-details-panel"></div>
+    `;
 
-    // Atualiza painel descritivo da via inicial
-    updateRouteDetailsPanel(selectedRouteId);
+    container.innerHTML = html;
+    updateRouteDetailsPanel(activeRouteId);
+  }
+
+  function filterRouteCategory(cat) {
+    activeRouteCategory = cat;
+    renderRoutesSelector();
   }
 
   function selectRoute(routeId) {
-    selectedRouteId = routeId.toUpperCase();
+    activeRouteId = routeId.toUpperCase();
 
-    // Atualiza classes ativas nos cards
     document.querySelectorAll(".route-chip-card").forEach((c) => {
       c.classList.remove("active");
     });
-    const activeCard = document.getElementById(`route_card_${selectedRouteId}`);
+    const activeCard = document.getElementById(`route_card_${activeRouteId}`);
     if (activeCard) activeCard.classList.add("active");
 
-    updateRouteDetailsPanel(selectedRouteId);
+    updateRouteDetailsPanel(activeRouteId);
 
-    // Dispara a simulação física das partículas 3D no ThreeEngine
     if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.simulateAdministrationRoute === "function") {
-      ThreeEngine.simulateAdministrationRoute(selectedRouteId);
+      ThreeEngine.simulateAdministrationRoute(activeRouteId);
     }
   }
 
   function updateRouteDetailsPanel(routeId) {
     const panel = document.getElementById("routeDetailsPanel");
-    if (!panel || typeof ATLAS_DATABASE === "undefined" || !ATLAS_DATABASE.viasAdministracao) return;
+    if (!panel || typeof ATLAS_DATABASE === "undefined" || !ATLAS_DATABASE.viasAdministracao) return;[cite: 1]
 
-    const rota = ATLAS_DATABASE.viasAdministracao[routeId];
+    const rota = ATLAS_DATABASE.viasAdministracao[routeId] || ATLAS_DATABASE.viasAdministracao["ORAL"];[cite: 1]
     if (!rota) return;
 
     panel.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
-        <strong style="color:${rota.corFluxo}; font-size:0.82rem;">${rota.nome}</strong>
+        <strong style="color:${rota.corFluxo}; font-size:0.84rem;">${rota.nome}</strong>
         <span style="font-size:0.68rem; color:#94a3b8;">tMax Estimado: <strong>${rota.tMaxMedio}</strong></span>
       </div>
       <p style="margin:0 0 6px 0; color:#cbd5e1; font-size:0.75rem;">${rota.descricaoClinica}</p>
@@ -307,7 +355,7 @@ const AppController = (() => {
         <strong style="color:#f8fafc;">Barreiras de Absorção:</strong> ${rota.barreirasBiologicas}
       </div>
       <div class="route-details-meta">
-        <span>1ª Passagem Hepática: <strong>${rota.primeiraPassagemHepatica ? 'SIM (Intensa)' : 'NÃO (Bypass)'}</strong></span>
+        <span>1ª Passagem Hepática: <strong>${typeof rota.primeiraPassagemHepatica === "boolean" ? (rota.primeiraPassagemHepatica ? "SIM" : "NÃO") : rota.primeiraPassagemHepatica}</strong></span>
         <span>•</span>
         <span>Biodisponibilidade (F): <strong>${rota.biodisponibilidadeMedia}</strong></span>
       </div>
@@ -321,11 +369,190 @@ const AppController = (() => {
     document.querySelectorAll(".route-chip-card").forEach((c) => c.classList.remove("active"));
   }
 
-  // =========================================================
-  // 5. INICIALIZAÇÃO DE EVENTOS & LISTENERS GLOBAIS
-  // =========================================================
+  // =========================================================================
+  // 6. MODO CRISE TOXICOLÓGICA (SIMULADOR CLÍNICO LAIFT)
+  // =========================================================================
+  function renderCrisisPanel() {
+    const container = document.getElementById("crisisPanelContainer");
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="crisis-panel-card">
+        <div class="crisis-panel-header">
+          <div class="crisis-title">
+            <span>🚨</span>
+            <span>Simulador de Crise: Intoxicação por Organofosforados</span>
+          </div>
+          <button 
+            type="button" 
+            id="btnToggleCrisis" 
+            class="btn-crisis-toggle" 
+            onclick="AppController.toggleCrisisState()"
+          >
+            Iniciar Crise
+          </button>
+        </div>
+
+        <div id="crisisTelemetryHUD">
+          <div style="font-size:0.72rem; color:#94a3b8;">
+            Simulação de inibição irreversível da AChE, broncorreia e bradicardia severa. Clique em "Iniciar Crise" para monitorar a curva e intervir com antídotos.
+          </div>
+        </div>
+
+        <div class="crisis-actions-row">
+          <button 
+            type="button" 
+            class="btn-antidote atropina" 
+            onclick="AppController.applyAntidoteAction('atropina')"
+            title="Antagonista competitivo muscarínico"
+          >
+            <span>💉 Atropina 2mg IV</span>
+            <span style="font-size:0.62rem; color:#94a3b8; font-weight:normal;">Bloqueio Receptores M2/M3</span>
+          </button>
+          <button 
+            type="button" 
+            class="btn-antidote pralidoxima" 
+            onclick="AppController.applyAntidoteAction('pralidoxima')"
+            title="Reativador da acetilcolinesterase"
+          >
+            <span>💉 Pralidoxima 1g IV</span>
+            <span style="font-size:0.62rem; color:#94a3b8; font-weight:normal;">Reativação Enzimática AChE</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function toggleCrisisState() {
+    const btn = document.getElementById("btnToggleCrisis");
+    if (typeof PkEngine === "undefined") return;
+
+    if (!PkEngine.isCrisisActive()) {
+      PkEngine.startCrisisSimulation("organofosforado");
+      if (btn) {
+        btn.innerText = "Interromper Crise";
+        btn.style.background = "#64748b";
+      }
+    } else {
+      PkEngine.stopCrisisSimulation();
+      if (btn) {
+        btn.innerText = "Iniciar Crise";
+        btn.style.background = "var(--danger)";
+      }
+    }
+  }
+
+  function applyAntidoteAction(type) {
+    if (typeof PkEngine !== "undefined" && typeof PkEngine.applyAntidote === "function") {
+      PkEngine.applyAntidote(type);
+    }
+  }
+
+  // =========================================================================
+  // 7. QUIZ 3D GAMIFICADO & DESAFIOS CLÍNICOS
+  // =========================================================================
+  function renderQuizLauncher() {
+    const container = document.getElementById("quizLauncherContainer");
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="quiz-launcher-banner">
+        <div class="quiz-launcher-info">
+          <h4>🎯 Quiz 3D Interativo: Aponte e Diagnostique</h4>
+          <p>Casos clínicos toxicológicos, farmacocinética e semiologia espacial.</p>
+        </div>
+        <button 
+          type="button" 
+          class="btn-primary" 
+          onclick="AppController.launchQuiz()"
+          style="padding:8px 16px; font-size:0.78rem;"
+        >
+          ▶ Iniciar Quiz 3D
+        </button>
+      </div>
+    `;
+  }
+
+  function launchQuiz() {
+    if (typeof QuizEngine !== "undefined" && typeof QuizEngine.startQuiz === "function") {
+      QuizEngine.startQuiz();
+    }
+  }
+
+  // =========================================================================
+  // 8. PROTOCOLOS DE BIOHACKING & OTIMIZAÇÃO METABÓLICA
+  // =========================================================================
+  function renderBiohackingCards(filtro = "") {
+    const container = document.getElementById("biohacking-results-grid");
+    if (!container) return;
+
+    if (typeof ATLAS_DATABASE === "undefined" || !Array.isArray(ATLAS_DATABASE.protocols)) {[cite: 1]
+      container.innerHTML = '<div style="color:#64748b; font-size:0.8rem;">Nenhum protocolo disponível.</div>';
+      return;
+    }
+
+    const termo = filtro.toLowerCase().trim();
+    const protocolos = ATLAS_DATABASE.protocols.filter((p) => {[cite: 1]
+      if (!termo) return true;
+      return (
+        p.nome.toLowerCase().includes(termo) ||
+        (p.tags && p.tags.some((t) => t.toLowerCase().includes(termo))) ||
+        (p.viaMetabolica && p.viaMetabolica.toLowerCase().includes(termo))
+      );
+    });
+
+    if (protocolos.length === 0) {
+      container.innerHTML = `
+        <div style="font-size:0.78rem; color:#64748b; padding:16px; text-align:center; border:1px dashed #334155; border-radius:8px;">
+          Nenhum protocolo encontrado para "${filtro}".
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = protocolos.map((p) => `
+      <div class="bio-protocol-card" onclick="AppController.simulateBioProtocol('${p.id}')">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <strong style="color:#f8fafc; font-size:0.86rem; display:flex; align-items:center; gap:6px;">
+            <span>${p.icone || "⚡"}</span> ${p.nome}
+          </strong>
+          <span style="font-size:0.68rem; color:#38bdf8; font-family:monospace; background:rgba(56,189,248,0.1); padding:2px 6px; border-radius:4px;">
+            ${p.pkData ? p.pkData.route : "ORAL"}
+          </span>
+        </div>
+        <div style="font-size:0.74rem; color:#34d399; margin-bottom:6px; font-weight:600;">
+          ${p.viaMetabolica}
+        </div>
+        <p style="font-size:0.72rem; color:#94a3b8; line-height:1.45; margin-bottom:8px;">
+          ${p.mecanismoAcao}
+        </p>
+        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;">
+          ${(p.tags || []).map((t) => `<span class="tag-bio">${t}</span>`).join("")}
+        </div>
+        <div style="font-size:0.68rem; color:#64748b;">
+          Cofatores sinérgicos: <span style="color:#cbd5e1;">${(p.cofatores || []).join(", ") || "Nenhum"}</span>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function simulateBioProtocol(protocolId) {
+    if (typeof ATLAS_DATABASE === "undefined" || !Array.isArray(ATLAS_DATABASE.protocols)) return;[cite: 1]
+    const proto = ATLAS_DATABASE.protocols.find((p) => p.id === protocolId);[cite: 1]
+    if (!proto) return;
+
+    switchTab("view-anatomy");
+
+    if (typeof PkEngine !== "undefined" && typeof PkEngine.simulateProtocol === "function") {
+      PkEngine.simulateProtocol(proto);
+    }
+  }
+
+  // =========================================================================
+  // 9. LISTENERS GLOBAIS & BLINDAGEM DE TOQUE
+  // =========================================================================
   function initListeners() {
-    // Botões de navegação inferior
+    // Navegação Inferior
     document.querySelectorAll(".nav-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         const target = e.currentTarget.dataset.target;
@@ -333,7 +560,7 @@ const AppController = (() => {
       });
     });
 
-    // Touch events com proteção para a rotação de modelos 3D
+    // Touch events com proteção para o canvas 3D e sliders
     const viewport = document.getElementById("main-viewport");
     const container3D = document.getElementById("canvas-3d-container");
     const containerMol = document.getElementById("mol-viewport-container");
@@ -351,7 +578,8 @@ const AppController = (() => {
           isTouchInside3D = !!(
             (container3D && container3D.contains(target)) ||
             (containerMol && containerMol.contains(target)) ||
-            (target.classList && target.classList.contains("tree-organ-slider"))
+            (target.classList && target.classList.contains("tree-organ-slider")) ||
+            target.id === "dissectionSlider"
           );
         },
         { passive: true }
@@ -372,42 +600,54 @@ const AppController = (() => {
       );
     }
 
-    // Vinculação dos chips de sistemas anatômicos superiores
-    document.querySelectorAll(".sys-chip").forEach((chip) => {
-      chip.addEventListener("click", (e) => {
-        const sysId = e.currentTarget.dataset.sys;
-        if (sysId) {
-          activeSystemId = sysId;
-          document.querySelectorAll(".sys-chip").forEach((c) => c.classList.toggle("active", c.dataset.sys === sysId));
-          if (typeof ThreeEngine !== "undefined" && typeof ThreeEngine.selectSystem === "function") {
-            ThreeEngine.selectSystem(sysId);
-          }
-          renderOrganTree(sysId);
-        }
+    // Busca de Protocolos
+    const searchInput = document.getElementById("bio-search-input");
+    const searchBtn = document.getElementById("btn-bio-search");
+
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        renderBiohackingCards(e.target.value);
       });
-    });
+    }
+
+    if (searchBtn && searchInput) {
+      searchBtn.addEventListener("click", () => {
+        renderBiohackingCards(searchInput.value);
+      });
+    }
   }
 
-  // =========================================================
-  // 6. BOOTSTRAP MASTER
-  // =========================================================
+  // =========================================================================
+  // 10. BOOTSTRAP MASTER
+  // =========================================================================
   function init() {
-    console.log("[AppController] Inicializando Controlador Mestre de Navegação...");
+    console.log("[AppController v2.3] Inicializando Controlador Master LAIFT...");
     initListeners();
+    renderSystemsBar();
     renderRoutesSelector();
     renderOrganTree("digestorio");
+    renderCrisisPanel();
+    renderQuizLauncher();
+    renderBiohackingCards();
 
-    // Inicialização direta na tela de anatomia
+    // Inicia diretamente na aba de Anatomia 3D
     switchTab("view-anatomy", true);
   }
 
   return {
     init,
     switchTab,
+    selectSystem,
     renderOrganTree,
     renderRoutesSelector,
+    filterRouteCategory,
     selectRoute,
     stopRoute,
+    toggleCrisisState,
+    applyAntidoteAction,
+    launchQuiz,
+    renderBiohackingCards,
+    simulateBioProtocol,
     onOrganVisibilityChange,
     onOrganOpacityChange,
     onOrganIsolate,
