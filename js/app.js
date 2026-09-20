@@ -20,10 +20,19 @@ const appState = {
 // =========================================================
 
 function navigateTo(viewId) {
-  const views = ['authSection', 'dashboardSection', 'quizSection', 'toxicoSection', 'clinicSection', 'labSection', 'anatomiaSection'];
-  const target = document.getElementById(viewId);
+  const views = [
+    'authSection',
+    'dashboardSection',
+    'quizSection',
+    'toxicoSection',
+    'clinicSection',
+    'labSection',
+    'anatomiaSection'
+  ];
 
-  // Proteção contra tela em branco: se o container não existir no HTML, redireciona ao Hub
+  let target = document.getElementById(viewId);
+
+  // Proteção contra tela em branco: se o contêiner não existir, redireciona ao Hub
   if (!target) {
     console.warn(`[LAIFT] Tentativa de navegar para tela inexistente: #${viewId}. Redirecionando para o Hub.`);
     if (viewId !== 'dashboardSection') {
@@ -32,7 +41,13 @@ function navigateTo(viewId) {
     return;
   }
 
-  // Oculta todos os painéis e sincroniza classes .hidden e .active
+  // Autocorreção: se a seção estiver aninhada por engano dentro de outra, move para a raiz da viewport
+  const viewport = document.querySelector('.app-viewport');
+  if (viewport && target.parentElement && target.parentElement.closest('#dashboardSection')) {
+    viewport.appendChild(target);
+  }
+
+  // Oculta todos os painéis gerenciados
   views.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
@@ -46,7 +61,7 @@ function navigateTo(viewId) {
   target.classList.add('active');
   appState.activeView = viewId;
 
-  // Gerenciamento do cabeçalho de controle
+  // Gerenciamento do cabeçalho de controle de sessão
   const controls = document.getElementById('sessionHeaderControls');
   if (viewId === 'authSection') {
     if (controls) controls.classList.add('hidden');
@@ -60,74 +75,54 @@ function navigateTo(viewId) {
 
 function launchModule(moduleType) {
   switch (moduleType) {
-    case 'farmaco':
+    case 'farmaco': {
       document.body.className = 'theme-default';
       const quizFrame = document.getElementById('quizFrame');
-      if (quizFrame) {
-        if (!quizFrame.src || quizFrame.src === 'about:blank' || quizFrame.src.endsWith('/')) {
-          quizFrame.src = 'quiz/index.html';
-        } else if (quizFrame.contentWindow) {
-          quizFrame.contentWindow.location.reload();
-        }
+      if (quizFrame && (!quizFrame.src || !quizFrame.src.includes('quiz/index.html'))) {
+        quizFrame.src = 'quiz/index.html';
       }
       navigateTo('quizSection');
       break;
+    }
 
-    case 'toxico':
+    case 'toxico': {
       document.body.className = 'theme-toxico';
       const toxFrame = document.getElementById('toxicoFrame');
-      if (toxFrame && document.getElementById('toxicoSection')) {
-        if (!toxFrame.src || toxFrame.src === 'about:blank' || toxFrame.src.endsWith('/')) {
-          toxFrame.src = 'toxicologia/index.html';
-        } else if (toxFrame.contentWindow) {
-          toxFrame.contentWindow.location.reload();
-        }
-        navigateTo('toxicoSection');
-      } else {
-        const fallbackFrame = document.getElementById('quizFrame');
-        if (fallbackFrame) {
-          fallbackFrame.src = 'toxicologia/index.html';
-          navigateTo('quizSection');
-        } else {
-          alert('Módulo de toxicologia não encontrado na estrutura do HTML.');
-        }
+      if (toxFrame && (!toxFrame.src || !toxFrame.src.includes('toxicologia/index.html'))) {
+        toxFrame.src = 'toxicologia/index.html';
       }
+      navigateTo('toxicoSection');
       break;
+    }
 
-    case 'clinica':
+    case 'clinica': {
       document.body.className = 'theme-clinic';
       navigateTo('clinicSection');
-      // Abre o mapa de leitos do plantão em vez de ir para um paciente fixo
       if (typeof ClinicEngine !== 'undefined' && typeof ClinicEngine.showBedsDashboard === 'function') {
         ClinicEngine.showBedsDashboard();
       }
       break;
+    }
 
-    case 'lab':
+    case 'lab': {
       document.body.className = 'theme-default';
       const labFrame = document.getElementById('labFrame') || document.querySelector('#labSection iframe');
-      if (labFrame) {
-        if (!labFrame.src || labFrame.src === 'about:blank' || labFrame.src.endsWith('/')) {
-          labFrame.src = 'laboratorio/index.html';
-        } else if (labFrame.contentWindow) {
-          labFrame.contentWindow.location.reload();
-        }
+      if (labFrame && (!labFrame.src || !labFrame.src.includes('laboratorio/index.html'))) {
+        labFrame.src = 'laboratorio/index.html';
       }
       navigateTo('labSection');
       break;
+    }
 
-    case 'anatomia':
-      document.body.className = 'theme-default'; // Pode criar um 'theme-anatomy' no futuro
+    case 'anatomia': {
+      document.body.className = 'theme-default';
       const anatomiaFrame = document.getElementById('anatomiaFrame');
-      if (anatomiaFrame) {
-        if (!anatomiaFrame.src || anatomiaFrame.src === 'about:blank' || anatomiaFrame.src.endsWith('/')) {
-          anatomiaFrame.src = 'anatomia-3d/index.html';
-        } else if (anatomiaFrame.contentWindow) {
-          anatomiaFrame.contentWindow.location.reload();
-        }
+      if (anatomiaFrame && (!anatomiaFrame.src || !anatomiaFrame.src.includes('anatomia-3d/index.html'))) {
+        anatomiaFrame.src = 'anatomia-3d/index.html';
       }
       navigateTo('anatomiaSection');
       break;
+    }
 
     default:
       navigateTo('dashboardSection');
@@ -153,8 +148,6 @@ function checkExistingSession() {
     if (session && session.identifier && (!session.expiresAt || Date.now() < session.expiresAt)) {
       appState.user = session;
       applyUserToUI(session);
-      
-      // Exibe a tela de credencial com o botão de acesso aos estudos
       showCredentialScreen();
       return true;
     } else {
@@ -393,7 +386,6 @@ async function validateAccessCode() {
         sessionToken: res.sessao
       });
 
-      // Abre a tela de credencial com o botão de entrada na plataforma
       showCredentialScreen();
     } else {
       showStatus((res && res.mensagem) || 'Código incorreto ou expirado.', 'error');
@@ -559,7 +551,6 @@ function initApp() {
     }
   });
 
-  // Verifica se há sessão ativa salva; caso contrário, exibe o login
   const hasSession = checkExistingSession();
   if (!hasSession) {
     navigateTo('authSection');
