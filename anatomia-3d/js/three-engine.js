@@ -1,21 +1,18 @@
 /* ========================================================================= */
 /* ARQUIVO: anatomia-3d/js/three-engine.js                                   */
-/* VERSÃO:  2.2.0 — COMPLETA: 14 SISTEMAS, 18 VIAS & ECOSSISTEMA LAIFT      */
+/* VERSÃO:  2.5.0 — CORREÇÃO DEFINITIVA DE ESCOPO E RENDERIZAÇÃO IMEDIATA    */
 /* ========================================================================= */
 
 /**
- * MOTOR GRÁFICO 3D MASTER: 14 SISTEMAS, 18 VIAS & SIMULAÇÃO DE CRISES
- * Ecossistema LAIFT - Módulo Master 3D / Bio-Twin
- * - Suporte nativo a Regex com wildcards (* / globs) para qualquer malha
- * - Trajetórias Spline 3D com emissores de partículas para as 18 Vias de Administração
- * - Controle granular contínuo de opacidade (0% a 100%), visibilidade e foco/isolamento
- * - Simulação dinâmica de crises fisiopatológicas (choque colinérgico, bradicardia, cianose)
- * - Ganchos para Quiz 3D Gamificado com feedback luminoso (acerto/erro) e Raycasting
- * - Manequim procedural de contingência cobrindo os 14 sistemas biológicos
- * - Carregamento modular assíncrono de modelos GLB com suporte a IndexedDB (ApiCache)
+ * MOTOR GRÁFICO 3D MASTER — LAIFT BIO-TWIN
+ * - Renderização 3D instantânea com Manequim Anatômico Multicamadas nativo
+ * - Exposição global obrigatória em window.ThreeEngine
+ * - Controle dinâmico de 14 Sistemas e 5 Camadas de Dissecção
+ * - Trajetória de partículas para 18 Vias de Administração
+ * - Simulação de crises fisiopatológicas (bradicardia, choque, hipersecreção)
  */
 
-const ThreeEngine = (() => {
+(function (global) {
   // -------------------------------------------------------------------------
   // 1. ESTADO E AMBIENTE THREE.JS
   // -------------------------------------------------------------------------
@@ -24,15 +21,12 @@ const ThreeEngine = (() => {
   let hoveredMesh = null;
   let raycaster, mouse;
 
-  // Dicionário de Sistemas e Modelos Modulares Carregados
-  const loadedSystems = {};
-
-  // Hotspots / Marcadores Anatômicos 3D
+  // Pins / Hotspots
   let pinsGroup = null;
   let pinsPulseTime = 0;
   let arePinsVisible = true;
 
-  // Sistema de Partículas para as 18 Vias Farmacológicas
+  // Partículas das 18 Vias de Administração
   let routeCurve = null;
   let routeParticles = null;
   let routeParticlePositions = null;
@@ -41,14 +35,14 @@ const ThreeEngine = (() => {
   let activeRouteId = null;
   const ROUTE_PARTICLE_COUNT = 150;
 
-  // Sistema de Partículas Fisiológicas (Deglutição, Hemodinâmica, Secreções)
+  // Partículas Fisiológicas
   let physioParticles = null;
   let physioPositions = null;
   let physioVelocities = null;
   let activePhysioAction = null;
   const PHYSIO_PARTICLE_COUNT = 120;
 
-  // Interpolação de Câmera Cinematográfica (Tween)
+  // Interpolação de Câmera (Tween)
   let isCameraTweening = false;
   let cameraStartPos = null;
   let cameraEndPos = null;
@@ -57,184 +51,68 @@ const ThreeEngine = (() => {
   let tweenStartTime = 0;
   let tweenDuration = 800;
 
-  // Camadas de Dissecção Anatômica (1: Pele a 5: Vísceras)
+  // Camadas de Dissecção (1: Pele a 5: Vísceras)
   let currentDissectionLevel = 5;
-
-  // Registro Granular de Estados das Malhas (Opacidade e Visibilidade)
   const organStates = {};
 
-  // Estado Fisiopatológico & Crises Toxicológicas
+  // Fisiopatologia & Crise
   let isCrisisActive = false;
   let crisisType = null;
   let cardiacCycleTime = 0;
-  let heartRateBpm = 75; // Frequência basal padrão (BPM)
-  let originalSkinColors = new Map();
+  let heartRateBpm = 75;
+  const originalColors = new Map();
 
   // Elementos do DOM
   let container, loadingOverlay, organHud, organNameEl;
 
-  // Paleta Visual Biomédica
   const COLOR_HIGHLIGHT = 0x38bdf8;
-  const COLOR_SUCCESS = 0x10b981;
-  const COLOR_ERROR = 0xef4444;
   const COLOR_PIN_CORE = 0xffffff;
   const COLOR_PIN_GLOW = 0x00e5ff;
   const DEFAULT_EMISSIVE = 0x000000;
 
-  // Classificação Taxonômica das 5 Camadas de Dissecção
+  // -------------------------------------------------------------------------
+  // 2. CLASSIFICAÇÃO TAXONÔMICA DAS CAMADAS
+  // -------------------------------------------------------------------------
   const DISSECTION_LAYERS = {
     1: { id: "pele", nome: "Pele & Tegumento", keywords: ["*skin*", "*integum*", "*derma*", "*epiderm*", "*pele*"] },
-    2: { id: "musculo", nome: "Musculatura & Fáscias", keywords: ["*muscl*", "*tendon*", "*fascia*", "*myo*", "*bicep*", "*pectoral*", "*quadriceps*", "*diafrag*"] },
-    3: { id: "esqueleto", nome: "Esqueleto & Articulações", keywords: ["*bone*", "*skelet*", "*cartilage*", "*joint*", "*ligament*", "*skull*", "*spine*", "*femur*", "*rib*", "*pelvis*", "*tibia*"] },
-    4: { id: "vasos", nome: "Vasos & Sistema Linfático", keywords: ["*vessel*", "*arter*", "*vein*", "*aort*", "*cava*", "*vascular*", "*lymph*", "*capillar*", "*jugular*"] },
-    5: { id: "visceras", nome: "Vísceras & Órgãos Nobres", keywords: ["*lung*", "*heart*", "*brain*", "*stomach*", "*liver*", "*kidney*", "*intestin*", "*pancrea*", "*spleen*", "*bladder*", "*ovary*", "*testis*", "*thyroid*", "*adrenal*", "*uterus*"] }
+    2: { id: "musculo", nome: "Musculatura & Fáscias", keywords: ["*muscl*", "*tendon*", "*fascia*", "*myo*", "*bicep*", "*pectoral*", "*quadriceps*"] },
+    3: { id: "esqueleto", nome: "Esqueleto & Articulações", keywords: ["*bone*", "*skelet*", "*cartilage*", "*joint*", "*ligament*", "*skull*", "*spine*", "*femur*", "*rib*"] },
+    4: { id: "vasos", nome: "Vasos & Linfáticos", keywords: ["*vessel*", "*arter*", "*vein*", "*aort*", "*cava*", "*vascular*", "*lymph*", "*capillar*"] },
+    5: { id: "visceras", nome: "Vísceras & Órgãos", keywords: ["*lung*", "*heart*", "*brain*", "*stomach*", "*liver*", "*kidney*", "*intestin*", "*pancrea*", "*spleen*", "*bladder*"] }
   };
 
-  // Coordenadas Espaciais Nativas de Contingência para as 18 Vias de Administração[cite: 1]
+  // Coordenadas Espaciais Nativas para as 18 Vias de Administração[cite: 1]
   const DEFAULT_ROUTE_WAYPOINTS = {
-    ORAL: {[cite: 1]
-      nome: "Via Oral", cor: "#f59e0b",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 1.74, z: 0.12 }, { x: 0.0, y: 1.54, z: 0.06 }, { x: -0.06, y: 1.05, z: 0.08 },
-        { x: 0.02, y: 0.88, z: 0.07 }, { x: 0.05, y: 0.98, z: 0.04 }, { x: 0.09, y: 1.06, z: 0.06 }, { x: 0.04, y: 1.25, z: 0.08 }
-      ]
-    },
-    SUBLINGUAL: {[cite: 1]
-      nome: "Via Sublingual", cor: "#f59e0b",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 1.68, z: 0.08 }, { x: 0.03, y: 1.66, z: 0.05 }, { x: 0.08, y: 1.58, z: 0.04 },
-        { x: 0.09, y: 1.42, z: 0.04 }, { x: 0.05, y: 1.30, z: 0.06 }
-      ]
-    },
-    RETAL: {[cite: 1]
-      nome: "Via Retal", cor: "#f59e0b",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 0.72, z: -0.10 }, { x: 0.03, y: 0.74, z: -0.07 }, { x: 0.05, y: 0.82, z: -0.05 },
-        { x: 0.04, y: 1.00, z: -0.02 }, { x: 0.04, y: 1.25, z: 0.06 }
-      ]
-    },
-    INTRAGASTRICA: {[cite: 1]
-      nome: "Via Intragástrica (SNG/PEG)", cor: "#f59e0b",[cite: 1]
-      waypoints: [
-        { x: 0.02, y: 1.76, z: 0.14 }, { x: 0.01, y: 1.52, z: 0.06 }, { x: -0.06, y: 1.05, z: 0.08 },
-        { x: 0.02, y: 0.88, z: 0.07 }, { x: 0.04, y: 1.25, z: 0.08 }
-      ]
-    },
-    INTRAVENOSA: {[cite: 1]
-      nome: "Via Intravenosa (IV)", cor: "#ef4444",[cite: 1]
-      waypoints: [
-        { x: 0.32, y: 1.12, z: 0.05 }, { x: 0.22, y: 1.22, z: 0.04 }, { x: 0.08, y: 1.30, z: 0.05 },
-        { x: 0.05, y: 1.25, z: 0.07 }, { x: 0.0, y: 1.28, z: 0.04 }, { x: 0.04, y: 1.24, z: 0.08 }, { x: 0.02, y: 1.35, z: 0.05 }
-      ]
-    },
-    INTRAMUSCULAR: {[cite: 1]
-      nome: "Via Intramuscular (IM)", cor: "#a855f7",[cite: 1]
-      waypoints: [
-        { x: 0.38, y: 1.35, z: 0.03 }, { x: 0.28, y: 1.32, z: 0.04 }, { x: 0.15, y: 1.30, z: 0.05 },
-        { x: 0.05, y: 1.25, z: 0.07 }, { x: 0.03, y: 1.32, z: 0.06 }
-      ]
-    },
-    SUBCUTANEA: {[cite: 1]
-      nome: "Via Subcutânea (SC)", cor: "#a855f7",[cite: 1]
-      waypoints: [
-        { x: 0.08, y: 0.95, z: 0.11 }, { x: 0.07, y: 0.97, z: 0.09 }, { x: 0.06, y: 1.08, z: 0.05 },
-        { x: 0.04, y: 1.25, z: 0.06 }
-      ]
-    },
-    INTRADERMICA: {[cite: 1]
-      nome: "Via Intradérmica (ID)", cor: "#a855f7",[cite: 1]
-      waypoints: [
-        { x: 0.30, y: 1.15, z: 0.10 }, { x: 0.28, y: 1.16, z: 0.08 }, { x: 0.20, y: 1.22, z: 0.06 }
-      ]
-    },
-    INTRAARTERIAL: {[cite: 1]
-      nome: "Via Intra-arterial", cor: "#ef4444",[cite: 1]
-      waypoints: [
-        { x: 0.02, y: 1.35, z: 0.05 }, { x: 0.05, y: 1.10, z: 0.04 }, { x: 0.09, y: 1.05, z: 0.06 }
-      ]
-    },
-    INTRACARDIACA: {[cite: 1]
-      nome: "Via Intracardíaca", cor: "#ef4444",[cite: 1]
-      waypoints: [
-        { x: 0.04, y: 1.25, z: 0.15 }, { x: 0.04, y: 1.25, z: 0.09 }, { x: 0.02, y: 1.35, z: 0.05 }
-      ]
-    },
-    INTRAOSSEA: {[cite: 1]
-      nome: "Via Intraóssea (IO)", cor: "#a855f7",[cite: 1]
-      waypoints: [
-        { x: -0.10, y: 0.60, z: 0.08 }, { x: -0.08, y: 0.65, z: 0.05 }, { x: 0.03, y: 0.95, z: 0.04 },
-        { x: 0.04, y: 1.25, z: 0.06 }
-      ]
-    },
-    INTRATECAL: {[cite: 1]
-      nome: "Via Intratecal (IT)", cor: "#38bdf8",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 0.85, z: -0.10 }, { x: 0.0, y: 1.15, z: -0.06 }, { x: 0.0, y: 1.50, z: -0.03 },
-        { x: 0.0, y: 1.74, z: 0.02 }
-      ]
-    },
-    EPIDURAL: {[cite: 1]
-      nome: "Via Epidural", cor: "#38bdf8",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 0.88, z: -0.11 }, { x: 0.0, y: 1.10, z: -0.07 }, { x: 0.0, y: 1.30, z: -0.04 }
-      ]
-    },
-    TOPICA: {[cite: 1]
-      nome: "Via Tópica & Transdérmica", cor: "#fbbf24",[cite: 1]
-      waypoints: [
-        { x: 0.35, y: 0.95, z: 0.08 }, { x: 0.33, y: 0.96, z: 0.05 }, { x: 0.22, y: 1.08, z: 0.04 },
-        { x: 0.05, y: 1.25, z: 0.07 }
-      ]
-    },
-    NASAL: {[cite: 1]
-      nome: "Via Nasal (Inalação / Spray)", cor: "#06b6d4",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 1.76, z: 0.15 }, { x: 0.0, y: 1.75, z: 0.10 }, { x: 0.0, y: 1.78, z: 0.07 },
-        { x: 0.0, y: 1.82, z: 0.05 }, { x: 0.03, y: 1.55, z: 0.04 }
-      ]
-    },
-    PULMONAR_INALATORIA: {[cite: 1]
-      nome: "Via Pulmonar (Inalatória)", cor: "#06b6d4",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 1.72, z: 0.12 }, { x: 0.01, y: 1.55, z: 0.06 }, { x: -0.04, y: 1.40, z: 0.03 },
-        { x: -0.10, y: 1.35, z: 0.05 }, { x: 0.04, y: 1.25, z: 0.07 }
-      ]
-    },
-    OCULAR: {[cite: 1]
-      nome: "Via Ocular", cor: "#38bdf8",[cite: 1]
-      waypoints: [
-        { x: -0.04, y: 1.78, z: 0.16 }, { x: -0.035, y: 1.78, z: 0.14 }, { x: -0.02, y: 1.75, z: 0.12 },
-        { x: 0.0, y: 1.70, z: 0.10 }
-      ]
-    },
-    OTOLOGICA: {[cite: 1]
-      nome: "Via Otológica", cor: "#e2e8f0",[cite: 1]
-      waypoints: [
-        { x: 0.16, y: 1.76, z: 0.02 }, { x: 0.13, y: 1.75, z: 0.01 }, { x: 0.10, y: 1.74, z: 0.00 }
-      ]
-    },
-    VAGINAL: {[cite: 1]
-      nome: "Via Vaginal", cor: "#fd79a8",[cite: 1]
-      waypoints: [
-        { x: 0.0, y: 0.72, z: 0.02 }, { x: 0.0, y: 0.76, z: 0.03 }, { x: 0.03, y: 0.88, z: 0.04 },
-        { x: 0.04, y: 1.15, z: 0.05 }
-      ]
-    }
+    ORAL: { cor: "#f59e0b", waypoints: [{ x: 0.0, y: 1.74, z: 0.12 }, { x: 0.0, y: 1.54, z: 0.06 }, { x: -0.06, y: 1.05, z: 0.08 }, { x: 0.02, y: 0.88, z: 0.07 }, { x: 0.05, y: 0.98, z: 0.04 }, { x: 0.09, y: 1.06, z: 0.06 }, { x: 0.04, y: 1.25, z: 0.08 }] },[cite: 1]
+    SUBLINGUAL: { cor: "#f59e0b", waypoints: [{ x: 0.0, y: 1.68, z: 0.08 }, { x: 0.03, y: 1.66, z: 0.05 }, { x: 0.08, y: 1.58, z: 0.04 }, { x: 0.09, y: 1.42, z: 0.04 }, { x: 0.05, y: 1.30, z: 0.06 }] },[cite: 1]
+    RETAL: { cor: "#f59e0b", waypoints: [{ x: 0.0, y: 0.72, z: -0.10 }, { x: 0.03, y: 0.74, z: -0.07 }, { x: 0.05, y: 0.82, z: -0.05 }, { x: 0.04, y: 1.00, z: -0.02 }, { x: 0.04, y: 1.25, z: 0.06 }] },[cite: 1]
+    INTRAGASTRICA: { cor: "#f59e0b", waypoints: [{ x: 0.02, y: 1.76, z: 0.14 }, { x: 0.01, y: 1.52, z: 0.06 }, { x: -0.06, y: 1.05, z: 0.08 }, { x: 0.02, y: 0.88, z: 0.07 }, { x: 0.04, y: 1.25, z: 0.08 }] },[cite: 1]
+    INTRAVENOSA: { cor: "#ef4444", waypoints: [{ x: 0.32, y: 1.12, z: 0.05 }, { x: 0.22, y: 1.22, z: 0.04 }, { x: 0.08, y: 1.30, z: 0.05 }, { x: 0.05, y: 1.25, z: 0.07 }, { x: 0.0, y: 1.28, z: 0.04 }, { x: 0.04, y: 1.24, z: 0.08 }, { x: 0.02, y: 1.35, z: 0.05 }] },[cite: 1]
+    INTRAMUSCULAR: { cor: "#a855f7", waypoints: [{ x: 0.38, y: 1.35, z: 0.03 }, { x: 0.28, y: 1.32, z: 0.04 }, { x: 0.15, y: 1.30, z: 0.05 }, { x: 0.05, y: 1.25, z: 0.07 }, { x: 0.03, y: 1.32, z: 0.06 }] },[cite: 1]
+    SUBCUTANEA: { cor: "#a855f7", waypoints: [{ x: 0.08, y: 0.95, z: 0.11 }, { x: 0.07, y: 0.97, z: 0.09 }, { x: 0.06, y: 1.08, z: 0.05 }, { x: 0.04, y: 1.25, z: 0.06 }] },[cite: 1]
+    INTRADERMICA: { cor: "#a855f7", waypoints: [{ x: 0.30, y: 1.15, z: 0.10 }, { x: 0.28, y: 1.16, z: 0.08 }, { x: 0.20, y: 1.22, z: 0.06 }] },[cite: 1]
+    INTRAARTERIAL: { cor: "#ef4444", waypoints: [{ x: 0.02, y: 1.35, z: 0.05 }, { x: 0.05, y: 1.10, z: 0.04 }, { x: 0.09, y: 1.05, z: 0.06 }] },[cite: 1]
+    INTRACARDIACA: { cor: "#ef4444", waypoints: [{ x: 0.04, y: 1.25, z: 0.15 }, { x: 0.04, y: 1.25, z: 0.09 }, { x: 0.02, y: 1.35, z: 0.05 }] },[cite: 1]
+    INTRAOSSEA: { cor: "#a855f7", waypoints: [{ x: -0.10, y: 0.60, z: 0.08 }, { x: -0.08, y: 0.65, z: 0.05 }, { x: 0.03, y: 0.95, z: 0.04 }, { x: 0.04, y: 1.25, z: 0.06 }] },[cite: 1]
+    INTRATECAL: { cor: "#38bdf8", waypoints: [{ x: 0.0, y: 0.85, z: -0.10 }, { x: 0.0, y: 1.15, z: -0.06 }, { x: 0.0, y: 1.50, z: -0.03 }, { x: 0.0, y: 1.74, z: 0.02 }] },[cite: 1]
+    EPIDURAL: { cor: "#38bdf8", waypoints: [{ x: 0.0, y: 0.88, z: -0.11 }, { x: 0.0, y: 1.10, z: -0.07 }, { x: 0.0, y: 1.30, z: -0.04 }] },[cite: 1]
+    TOPICA: { cor: "#fbbf24", waypoints: [{ x: 0.35, y: 0.95, z: 0.08 }, { x: 0.33, y: 0.96, z: 0.05 }, { x: 0.22, y: 1.08, z: 0.04 }, { x: 0.05, y: 1.25, z: 0.07 }] },[cite: 1]
+    NASAL: { cor: "#06b6d4", waypoints: [{ x: 0.0, y: 1.76, z: 0.15 }, { x: 0.0, y: 1.75, z: 0.10 }, { x: 0.0, y: 1.78, z: 0.07 }, { x: 0.0, y: 1.82, z: 0.05 }, { x: 0.03, y: 1.55, z: 0.04 }] },[cite: 1]
+    PULMONAR_INALATORIA: { cor: "#06b6d4", waypoints: [{ x: 0.0, y: 1.72, z: 0.12 }, { x: 0.01, y: 1.55, z: 0.06 }, { x: -0.04, y: 1.40, z: 0.03 }, { x: -0.10, y: 1.35, z: 0.05 }, { x: 0.04, y: 1.25, z: 0.07 }] },[cite: 1]
+    OCULAR: { cor: "#38bdf8", waypoints: [{ x: -0.04, y: 1.78, z: 0.16 }, { x: -0.035, y: 1.78, z: 0.14 }, { x: -0.02, y: 1.75, z: 0.12 }, { x: 0.0, y: 1.70, z: 0.10 }] },[cite: 1]
+    OTOLOGICA: { cor: "#e2e8f0", waypoints: [{ x: 0.16, y: 1.76, z: 0.02 }, { x: 0.13, y: 1.75, z: 0.01 }, { x: 0.10, y: 1.74, z: 0.00 }] },[cite: 1]
+    VAGINAL: { cor: "#fd79a8", waypoints: [{ x: 0.0, y: 0.72, z: 0.02 }, { x: 0.0, y: 0.76, z: 0.03 }, { x: 0.03, y: 0.88, z: 0.04 }, { x: 0.04, y: 1.15, z: 0.05 }] }[cite: 1]
   };
 
-  // Hotspots Anatômicos Chave com Câmera e Metadados Semiomédicos
   const PIN_DEFINITIONS = [
-    { id: "pin_brain", organKey: "brain", label: "Encéfalo (SNC)", pos: { x: 0, y: 1.76, z: 0.08 }, cam: { x: 0, y: 1.8, z: 1.1 }, look: { x: 0, y: 1.75, z: 0 }, desc: "Centro integrador neuroendócrino e barreira hematoencefálica (BHE)." },
-    { id: "pin_heart", organKey: "heart", label: "Coração & Miocárdio", pos: { x: 0.045, y: 1.26, z: 0.11 }, cam: { x: 0.15, y: 1.28, z: 1.0 }, look: { x: 0.04, y: 1.25, z: 0 }, desc: "Bomba eletromecânica sincicial; débito cardíaco e receptores β1/M2." },
-    { id: "pin_lungs", organKey: "lung", label: "Pulmões & Alvéolos", pos: { x: -0.11, y: 1.32, z: 0.09 }, cam: { x: -0.2, y: 1.35, z: 1.1 }, look: { x: -0.1, y: 1.3, z: 0 }, desc: "Hematose alvéolo-capilar, surfactante pulmonar e receptores β2/M3." },
-    { id: "pin_stomach", organKey: "stomach", label: "Estômago", pos: { x: -0.065, y: 1.05, z: 0.1 }, cam: { x: -0.18, y: 1.08, z: 1.0 }, look: { x: -0.06, y: 1.02, z: 0 }, desc: "Clivagem ácida (pH 1.5-2.0), digestão proteica e bomba H+/K+-ATPase." },
-    { id: "pin_liver", organKey: "liver", label: "Fígado & Sistema Porta", pos: { x: 0.095, y: 1.06, z: 0.1 }, cam: { x: 0.22, y: 1.1, z: 1.05 }, look: { x: 0.09, y: 1.04, z: 0 }, desc: "Metabolismo pré-sistêmico de primeira passagem e citocromo P450." },
-    { id: "pin_kidneys", organKey: "kidney", label: "Rins & Néfrons", pos: { x: 0.12, y: 0.94, z: -0.07 }, cam: { x: 0.25, y: 0.98, z: -0.85 }, look: { x: 0.11, y: 0.93, z: 0 }, desc: "Ultrafiltração glomerular, depuração plasmática e regulação de volume." }
+    { id: "pin_brain", organKey: "*brain*", label: "Encéfalo (SNC)", pos: { x: 0, y: 1.76, z: 0.08 }, cam: { x: 0, y: 1.8, z: 1.1 }, look: { x: 0, y: 1.75, z: 0 }, desc: "Centro integrador neuroendócrino e Barreira Hematoencefálica." },
+    { id: "pin_heart", organKey: "*heart*", label: "Coração & Miocárdio", pos: { x: 0.045, y: 1.26, z: 0.11 }, cam: { x: 0.15, y: 1.28, z: 1.0 }, look: { x: 0.04, y: 1.25, z: 0 }, desc: "Bomba mecânica quadricameral e receptores adrenérgicos/muscarínicos." },
+    { id: "pin_lungs", organKey: "*lung*", label: "Pulmões & Vias Aéreas", pos: { x: -0.11, y: 1.32, z: 0.09 }, cam: { x: -0.2, y: 1.35, z: 1.1 }, look: { x: -0.1, y: 1.3, z: 0 }, desc: "Superfície alveolar de troca gasosa e receptores β2." },
+    { id: "pin_stomach", organKey: "*stomach*", label: "Estômago", pos: { x: -0.065, y: 1.05, z: 0.1 }, cam: { x: -0.18, y: 1.08, z: 1.0 }, look: { x: -0.06, y: 1.02, z: 0 }, desc: "Digestão cloridropéptica (pH 1.5-2.0) e bomba H+/K+-ATPase." },
+    { id: "pin_liver", organKey: "*liver*", label: "Fígado & Eixo Portal", pos: { x: 0.095, y: 1.06, z: 0.1 }, cam: { x: 0.22, y: 1.1, z: 1.05 }, look: { x: 0.09, y: 1.04, z: 0 }, desc: "Biotransformação pré-sistêmica de 1ª passagem e citocromo P450." },
+    { id: "pin_kidneys", organKey: "*kidney*", label: "Rins & Néfrons", pos: { x: 0.12, y: 0.94, z: -0.07 }, cam: { x: 0.25, y: 0.98, z: -0.85 }, look: { x: 0.11, y: 0.93, z: 0 }, desc: "Filtração glomerular e depuração plasmática de fármacos." }
   ];
 
-  // =========================================================================
-  // 2. AUXILIAR: COMPARADOR DE WILDCARDS (RESOLVE GLOBS mesh_*)
-  // =========================================================================
   function matchesWildcard(meshName, pattern) {
     if (!meshName || !pattern) return false;
     const cleanPattern = pattern.trim().toLowerCase().replace(/\*/g, ".*");
@@ -242,9 +120,9 @@ const ThreeEngine = (() => {
     return regex.test(meshName.toLowerCase().trim()) || meshName.toLowerCase().includes(pattern.replace(/\*/g, "").toLowerCase());
   }
 
-  // =========================================================================
-  // 3. INICIALIZAÇÃO DO MOTOR WEBGL
-  // =========================================================================
+  // -------------------------------------------------------------------------
+  // 3. INICIALIZAÇÃO WEBGL & CONSTRUÇÃO IMEDIATA DO CORPO 3D
+  // -------------------------------------------------------------------------
   function init() {
     container = document.getElementById("canvas-3d-container");
     loadingOverlay = document.getElementById("loading-3d-overlay");
@@ -252,27 +130,29 @@ const ThreeEngine = (() => {
     organNameEl = document.getElementById("organ-name");
 
     if (!container || typeof THREE === "undefined") {
-      console.warn("[ThreeEngine] WebGL ou container DOM indisponível.");
+      console.warn("[ThreeEngine] Contêiner ou biblioteca Three.js indisponível.");
       return;
     }
 
     const width = container.clientWidth || 380;
     const height = container.clientHeight || 280;
 
-    // Cena & Câmera Perspectiva
     scene = new THREE.Scene();
+
     camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     camera.position.set(0, 1.25, 3.2);
 
-    // Renderizador WebGL com Alto Rendimento
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height);
     if (THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+
+    // Limpa instâncias anteriores se houver reinicialização
+    container.innerHTML = "";
     container.appendChild(renderer.domElement);
 
-    // Sistema de Iluminação Tripla de Estúdio Anatômico
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+    // Luzes de Estúdio Anatômico
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
     scene.add(ambientLight);
 
     const dirFront = new THREE.DirectionalLight(0xffffff, 0.95);
@@ -283,7 +163,7 @@ const ThreeEngine = (() => {
     dirBack.position.set(-5, 5, -5);
     scene.add(dirBack);
 
-    // Controles Orbitais
+    // Controles de Rotação Orbital
     if (typeof THREE.OrbitControls === "function") {
       controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
@@ -296,59 +176,126 @@ const ThreeEngine = (() => {
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
 
-    // Inicialização de Submotores
     setupRouteParticleSystem();
     setupPhysioParticleSystem();
     setupPinsGroup();
-    loadAnatomicalModel();
 
-    // Listeners Globais
-    window.addEventListener("resize", onWindowResize);
-    container.addEventListener("click", onSceneClick);
-    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    // Constrói o Manequim Humano Imediatamente (Zero Espera / Zero Travamento)
+    buildComprehensiveMannequin();
 
-    if (window.ResizeObserver) {
-      const observer = new ResizeObserver(() => onWindowResize());
-      observer.observe(container);
+    // Oculta o overlay de carregamento na hora
+    if (loadingOverlay) {
+      loadingOverlay.classList.add("hidden");
     }
+
+    // Tenta em segundo plano carregar GLB se estiver em servidor HTTP
+    if (location.protocol.startsWith("http")) {
+      attemptLoadExternalGLB();
+    }
+
+    window.addEventListener("resize", onWindowResize);
+    renderer.domElement.addEventListener("click", onSceneClick);
+    renderer.domElement.addEventListener("touchstart", onTouchStart, { passive: true });
 
     injectDissectionSliderUI();
     animate();
-    console.log("[ThreeEngine v2.2] Motor Master 3D Operacional.");
+
+    console.log("[ThreeEngine] Corpo Humano 3D Renderizado com Sucesso.");
   }
 
-  // =========================================================================
-  // 4. CARREGAMENTO MODULAR / MESTRE COM FALLBACK COMPLETO
-  // =========================================================================
-  async function loadAnatomicalModel() {
-    let modelUrl = "models/body.glb";
-
-    // Verifica persistência IndexedDB via ApiCache
-    if (typeof ApiCache !== "undefined" && typeof ApiCache.obterModelo3DBinario === "function") {
-      modelUrl = await ApiCache.obterModelo3DBinario("z_anatomy_master", modelUrl);
+  // -------------------------------------------------------------------------
+  // 4. CONSTRUÇÃO PROCEDURAL COMPLETA DOS 14 SISTEMAS[cite: 1]
+  // -------------------------------------------------------------------------
+  function buildComprehensiveMannequin() {
+    if (bodyModel) {
+      scene.remove(bodyModel);
     }
 
-    if (typeof THREE.GLTFLoader !== "function") {
-      buildComprehensiveMannequin();
-      if (loadingOverlay) loadingOverlay.classList.add("hidden");
-      return;
+    const group = new THREE.Group();
+    group.name = "Comprehensive_Human_Anatomy";
+
+    function addPart(name, geom, color, pos, opt = {}) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: color,
+        transparent: true,
+        opacity: opt.opacity !== undefined ? opt.opacity : 1.0,
+        wireframe: opt.wireframe || false,
+        emissive: opt.emissive || 0x000000,
+        roughness: 0.4,
+        metalness: 0.1,
+        depthWrite: true
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.name = name;
+      mesh.position.set(pos.x, pos.y, pos.z);
+      if (opt.rot) mesh.rotation.set(opt.rot.x, opt.rot.y, opt.rot.z);
+      group.add(mesh);
+
+      organStates[name] = { visible: true, opacity: opt.opacity !== undefined ? opt.opacity : 1.0 };
+      originalColors.set(name, color);
+      return mesh;
     }
 
+    // 1. Camada Tegumentar: Pele & Silhueta
+    addPart("mesh_skin_trunk", new THREE.CylinderGeometry(0.3, 0.24, 1.15, 16), 0x475569, { x: 0, y: 1.05, z: 0 }, { opacity: 0.25, wireframe: true });
+    addPart("mesh_skin_head", new THREE.SphereGeometry(0.2, 16, 16), 0x475569, { x: 0, y: 1.75, z: 0 }, { opacity: 0.2, wireframe: true });
+
+    // 2. Camada Muscular & Fáscias
+    addPart("mesh_muscle_pectoral", new THREE.CylinderGeometry(0.27, 0.22, 1.05, 16), 0x991b1b, { x: 0, y: 1.05, z: 0 }, { opacity: 0.85 });
+    addPart("mesh_fascia_lata", new THREE.CylinderGeometry(0.12, 0.09, 0.8, 12), 0xdbeafe, { x: -0.15, y: 0.45, z: 0 }, { opacity: 0.4 });
+
+    // 3. Camada Esquelética & Articular
+    addPart("mesh_skull_bone", new THREE.SphereGeometry(0.18, 16, 16), 0xe2e8f0, { x: 0, y: 1.75, z: 0 }, { opacity: 0.95 });
+    addPart("mesh_rib_cage", new THREE.CylinderGeometry(0.24, 0.19, 0.6, 12, 1, true), 0xe2e8f0, { x: 0, y: 1.25, z: 0 }, { opacity: 0.9 });
+    addPart("mesh_spine_vertebrae", new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8), 0xe2e8f0, { x: 0, y: 1.1, z: -0.12 }, { opacity: 0.95 });
+    addPart("mesh_pelvis_bone", new THREE.CylinderGeometry(0.22, 0.18, 0.25, 12), 0xe2e8f0, { x: 0, y: 0.65, z: 0 }, { opacity: 0.95 });
+    addPart("mesh_femur_bone", new THREE.CylinderGeometry(0.04, 0.035, 0.75, 8), 0xe2e8f0, { x: 0.15, y: 0.38, z: 0 }, { opacity: 0.95 });
+
+    // 4. Camada Vascular & Linfática
+    addPart("mesh_heart_organ", new THREE.SphereGeometry(0.09, 14, 14), 0xef4444, { x: 0.045, y: 1.26, z: 0.08 }, { emissive: 0x450a0a });
+    addPart("mesh_aorta_vessel", new THREE.CylinderGeometry(0.02, 0.02, 0.7, 8), 0xdc2626, { x: 0.01, y: 1.15, z: 0.02 }, { emissive: 0x7f1d1d });
+    addPart("mesh_vein_cava", new THREE.CylinderGeometry(0.02, 0.02, 0.65, 8), 0x2563eb, { x: 0.05, y: 1.15, z: 0.02 }, { emissive: 0x1e3a8a });
+    addPart("mesh_spleen_organ", new THREE.SphereGeometry(0.06, 12, 12), 0x10b981, { x: 0.12, y: 1.12, z: -0.04 }, { emissive: 0x064e3b });
+    addPart("mesh_thymus_organ", new THREE.BoxGeometry(0.05, 0.08, 0.03), 0x34d399, { x: 0, y: 1.40, z: 0.07 });
+
+    // 5. Camada Nervosa & Sentidos
+    addPart("mesh_brain_organ", new THREE.SphereGeometry(0.14, 14, 14), 0x38bdf8, { x: 0, y: 1.76, z: 0.02 }, { emissive: 0x075985 });
+    addPart("mesh_spinal_cord", new THREE.CylinderGeometry(0.015, 0.015, 0.85, 8), 0x7dd3fc, { x: 0, y: 1.12, z: -0.10 });
+    addPart("mesh_eye_orbit", new THREE.SphereGeometry(0.03, 10, 10), 0xf8fafc, { x: -0.05, y: 1.78, z: 0.16 });
+
+    // 6. Camada Respiratória
+    addPart("mesh_lung_organ", new THREE.SphereGeometry(0.085, 12, 12), 0x06b6d4, { x: -0.11, y: 1.3, z: 0.05 }, { opacity: 0.8 });
+    addPart("mesh_trachea_organ", new THREE.CylinderGeometry(0.025, 0.025, 0.25, 8), 0x22d3ee, { x: 0, y: 1.52, z: 0.05 });
+
+    // 7. Camada Digestória
+    addPart("mesh_stomach_organ", new THREE.SphereGeometry(0.11, 14, 14), 0xf97316, { x: -0.065, y: 1.05, z: 0.08 }, { emissive: 0x431407 });
+    addPart("mesh_liver_organ", new THREE.BoxGeometry(0.15, 0.1, 0.12), 0x854d0e, { x: 0.095, y: 1.06, z: 0.07 }, { emissive: 0x422006 });
+    addPart("mesh_pancreas_organ", new THREE.BoxGeometry(0.12, 0.03, 0.04), 0xfbbf24, { x: -0.02, y: 0.98, z: 0.04 });
+    addPart("mesh_intestine_small", new THREE.TorusGeometry(0.1, 0.04, 8, 16), 0xd97706, { x: 0, y: 0.85, z: 0.06 });
+    addPart("mesh_colon_organ", new THREE.CylinderGeometry(0.15, 0.15, 0.22, 12, 1, true), 0xb45309, { x: 0, y: 0.85, z: 0.04 });
+
+    // 8. Camada Renal / Urinária
+    addPart("mesh_kidney_organ", new THREE.SphereGeometry(0.055, 12, 12), 0xeab308, { x: 0.11, y: 0.94, z: -0.06 }, { emissive: 0x422006 });
+    addPart("mesh_bladder_organ", new THREE.SphereGeometry(0.06, 12, 12), 0xfacc15, { x: 0, y: 0.60, z: 0.05 });
+
+    // 9. Camada Endócrina & Reprodutora
+    addPart("mesh_thyroid_organ", new THREE.BoxGeometry(0.06, 0.04, 0.02), 0xec4899, { x: 0, y: 1.58, z: 0.07 });
+    addPart("mesh_adrenal_organ", new THREE.ConeGeometry(0.025, 0.03, 6), 0xf472b6, { x: 0.11, y: 1.01, z: -0.06 });
+    addPart("mesh_prostate_organ", new THREE.SphereGeometry(0.03, 8, 8), 0x6366f1, { x: 0, y: 0.54, z: 0.04 });
+
+    bodyModel = group;
+    scene.add(bodyModel);
+    setDissectionDepth(currentDissectionLevel);
+  }
+
+  function attemptLoadExternalGLB() {
+    if (typeof THREE.GLTFLoader !== "function") return;
     const loader = new THREE.GLTFLoader();
 
-    if (typeof THREE.DRACOLoader === "function") {
-      try {
-        const draco = new THREE.DRACOLoader();
-        draco.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.4.1/");
-        loader.setDRACOLoader(draco);
-      } catch (e) {
-        console.warn("[ThreeEngine] DRACOLoader ignorado:", e);
-      }
-    }
-
     loader.load(
-      modelUrl,
+      "models/body.glb",
       (gltf) => {
+        if (bodyModel) scene.remove(bodyModel);
         bodyModel = gltf.scene;
         bodyModel.position.set(0, 0, 0);
 
@@ -357,118 +304,25 @@ const ThreeEngine = (() => {
             child.material = child.material.clone();
             child.material.transparent = true;
             child.material.depthWrite = true;
-            child.material.opacity = 1.0;
-            organStates[child.name] = { visible: true, opacity: 1.0 };
-            if (child.material.color) {
-              originalSkinColors.set(child.name, child.material.color.getHex());
-            }
+            organStates[child.name] = { visible: true, opacity: child.material.opacity || 1.0 };
+            if (child.material.color) originalColors.set(child.name, child.material.color.getHex());
           }
         });
 
         scene.add(bodyModel);
-        if (loadingOverlay) loadingOverlay.classList.add("hidden");
         setDissectionDepth(currentDissectionLevel);
-        console.log("[ThreeEngine] Malhas do Atlas carregadas com sucesso.");
+        console.log("[ThreeEngine] Modelo GLB externo substituído com sucesso.");
       },
-      (xhr) => {
-        if (loadingOverlay && xhr.total > 0) {
-          const pct = Math.round((xhr.loaded / xhr.total) * 100);
-          loadingOverlay.innerText = `Carregando Malhas 3D... ${pct}%`;
-        }
-      },
-      () => {
-        console.warn("[ThreeEngine] body.glb ausente. Ativando Manequim Anatômico Completo.");
-        buildComprehensiveMannequin();
-        if (loadingOverlay) loadingOverlay.classList.add("hidden");
+      undefined,
+      (err) => {
+        console.log("[ThreeEngine] Operando com o Manequim Nativo:", err.message);
       }
     );
   }
 
-  /**
-   * Constrói Manequim Procedural Completo cobrindo os 14 Sistemas[cite: 1]
-   */
-  function buildComprehensiveMannequin() {
-    const group = new THREE.Group();
-    group.name = "Comprehensive_Anatomy_Group";
-
-    function createPart(name, geometry, color, pos, opt = {}) {
-      const mat = new THREE.MeshStandardMaterial({
-        color: color,
-        transparent: true,
-        opacity: opt.opacity || 1.0,
-        wireframe: opt.wireframe || false,
-        emissive: opt.emissive || 0x000000,
-        depthWrite: true
-      });
-      const mesh = new THREE.Mesh(geometry, mat);
-      mesh.name = name;
-      mesh.position.set(pos.x, pos.y, pos.z);
-      if (opt.rot) mesh.rotation.set(opt.rot.x, opt.rot.y, opt.rot.z);
-      group.add(mesh);
-      organStates[name] = { visible: true, opacity: opt.opacity || 1.0 };
-      originalSkinColors.set(name, color);
-      return mesh;
-    }
-
-    // 1. Tegumentar: Pele
-    createPart("mesh_skin_trunk", new THREE.CylinderGeometry(0.3, 0.24, 1.15, 16), 0x334155, { x: 0, y: 1.05, z: 0 }, { opacity: 0.22, wireframe: true });
-    createPart("mesh_skin_head", new THREE.SphereGeometry(0.21, 16, 16), 0x334155, { x: 0, y: 1.75, z: 0 }, { opacity: 0.18, wireframe: true });
-
-    // 2. Muscular & Fascial
-    createPart("mesh_muscle_pectoral", new THREE.CylinderGeometry(0.27, 0.22, 1.05, 16), 0x991b1b, { x: 0, y: 1.05, z: 0 }, { opacity: 0.85 });
-    createPart("mesh_fascia_lata", new THREE.CylinderGeometry(0.12, 0.09, 0.8, 12), 0xdbeafe, { x: -0.15, y: 0.45, z: 0 }, { opacity: 0.35 });
-
-    // 3. Esquelético & Articular
-    createPart("mesh_skull_bone", new THREE.SphereGeometry(0.19, 16, 16), 0xe2e8f0, { x: 0, y: 1.75, z: 0 }, { opacity: 0.95 });
-    createPart("mesh_rib_cage", new THREE.CylinderGeometry(0.24, 0.19, 0.6, 12, 1, true), 0xe2e8f0, { x: 0, y: 1.25, z: 0 }, { opacity: 0.9 });
-    createPart("mesh_spine_vertebrae", new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8), 0xe2e8f0, { x: 0, y: 1.1, z: -0.12 }, { opacity: 0.95 });
-    createPart("mesh_pelvis_bone", new THREE.CylinderGeometry(0.22, 0.18, 0.25, 12), 0xe2e8f0, { x: 0, y: 0.65, z: 0 }, { opacity: 0.95 });
-    createPart("mesh_femur_bone", new THREE.CylinderGeometry(0.04, 0.035, 0.75, 8), 0xe2e8f0, { x: 0.15, y: 0.38, z: 0 }, { opacity: 0.95 });
-
-    // 4. Cardiovascular
-    createPart("mesh_heart_organ", new THREE.SphereGeometry(0.09, 14, 14), 0xef4444, { x: 0.045, y: 1.26, z: 0.08 }, { emissive: 0x450a0a });
-    createPart("mesh_aorta_vessel", new THREE.CylinderGeometry(0.02, 0.02, 0.7, 8), 0xdc2626, { x: 0.01, y: 1.15, z: 0.02 }, { emissive: 0x7f1d1d });
-    createPart("mesh_vein_cava", new THREE.CylinderGeometry(0.02, 0.02, 0.65, 8), 0x2563eb, { x: 0.05, y: 1.15, z: 0.02 }, { emissive: 0x1e3a8a });
-
-    // 5. Linfático & Imunológico
-    createPart("mesh_spleen_organ", new THREE.SphereGeometry(0.06, 12, 12), 0x10b981, { x: 0.12, y: 1.12, z: -0.04 }, { emissive: 0x064e3b });
-    createPart("mesh_thymus_organ", new THREE.BoxGeometry(0.05, 0.08, 0.03), 0x34d399, { x: 0, y: 1.40, z: 0.07 });
-
-    // 6. Nervoso & Sentidos
-    createPart("mesh_brain_organ", new THREE.SphereGeometry(0.14, 14, 14), 0x38bdf8, { x: 0, y: 1.76, z: 0.02 }, { emissive: 0x075985 });
-    createPart("mesh_spinal_cord", new THREE.CylinderGeometry(0.015, 0.015, 0.85, 8), 0x7dd3fc, { x: 0, y: 1.12, z: -0.10 });
-    createPart("mesh_eye_orbit", new THREE.SphereGeometry(0.03, 10, 10), 0xf8fafc, { x: -0.05, y: 1.78, z: 0.16 });
-
-    // 7. Respiratório
-    createPart("mesh_lung_organ", new THREE.SphereGeometry(0.085, 12, 12), 0x06b6d4, { x: -0.11, y: 1.3, z: 0.05 }, { opacity: 0.75 });
-    createPart("mesh_trachea_organ", new THREE.CylinderGeometry(0.025, 0.025, 0.25, 8), 0x22d3ee, { x: 0, y: 1.52, z: 0.05 });
-
-    // 8. Digestório
-    createPart("mesh_stomach_organ", new THREE.SphereGeometry(0.11, 14, 14), 0xf97316, { x: -0.065, y: 1.05, z: 0.08 }, { emissive: 0x431407 });
-    createPart("mesh_liver_organ", new THREE.BoxGeometry(0.15, 0.1, 0.12), 0x854d0e, { x: 0.095, y: 1.06, z: 0.07 }, { emissive: 0x422006 });
-    createPart("mesh_pancreas_organ", new THREE.BoxGeometry(0.12, 0.03, 0.04), 0xfbbf24, { x: -0.02, y: 0.98, z: 0.04 });
-    createPart("mesh_intestine_small", new THREE.TorusGeometry(0.1, 0.04, 8, 16), 0xd97706, { x: 0, y: 0.85, z: 0.06 });
-    createPart("mesh_colon_organ", new THREE.CylinderGeometry(0.15, 0.15, 0.22, 12, 1, true), 0xb45309, { x: 0, y: 0.85, z: 0.04 });
-
-    // 9. Urinário / Renal
-    createPart("mesh_kidney_organ", new THREE.SphereGeometry(0.055, 12, 12), 0xeab308, { x: 0.11, y: 0.94, z: -0.06 }, { emissive: 0x422006 });
-    createPart("mesh_bladder_organ", new THREE.SphereGeometry(0.06, 12, 12), 0xfacc15, { x: 0, y: 0.60, z: 0.05 });
-
-    // 10. Endócrino
-    createPart("mesh_thyroid_organ", new THREE.BoxGeometry(0.06, 0.04, 0.02), 0xec4899, { x: 0, y: 1.58, z: 0.07 });
-    createPart("mesh_adrenal_organ", new THREE.ConeGeometry(0.025, 0.03, 6), 0xf472b6, { x: 0.11, y: 1.01, z: -0.06 });
-
-    // 11. Reprodutor
-    createPart("mesh_prostate_organ", new THREE.SphereGeometry(0.03, 8, 8), 0x6366f1, { x: 0, y: 0.54, z: 0.04 });
-
-    bodyModel = group;
-    scene.add(bodyModel);
-    setDissectionDepth(currentDissectionLevel);
-  }
-
-  // =========================================================================
-  // 5. CONTROLE GRANULAR DE ÓRGÃOS, OPACIDADE E SELEÇÃO DE SISTEMAS
-  // =========================================================================
+  // -------------------------------------------------------------------------
+  // 5. CONTROLES DINÂMICOS DE EXIBIÇÃO DO CORPO HUMANO
+  // -------------------------------------------------------------------------
   function setOrganVisibility(organKey, isVisible) {
     if (!bodyModel) return;
     bodyModel.traverse((child) => {
@@ -529,6 +383,41 @@ const ThreeEngine = (() => {
     setDissectionDepth(currentDissectionLevel);
   }
 
+  function setDissectionDepth(depth) {
+    currentDissectionLevel = Math.max(1, Math.min(5, parseInt(depth, 10)));
+    if (!bodyModel) return;
+
+    bodyModel.traverse((child) => {
+      if (child.isMesh && child.material) {
+        let meshLayer = 5;
+
+        for (let l = 1; l <= 5; l++) {
+          if (DISSECTION_LAYERS[l].keywords.some((k) => matchesWildcard(child.name, k))) {
+            meshLayer = l;
+            break;
+          }
+        }
+
+        if (meshLayer < currentDissectionLevel) {
+          child.visible = false;
+        } else if (meshLayer === currentDissectionLevel) {
+          child.visible = true;
+          child.material.transparent = false;
+          child.material.opacity = 1.0;
+        } else {
+          child.visible = true;
+          child.material.transparent = true;
+          child.material.opacity = currentDissectionLevel === 5 ? 1.0 : 0.4;
+        }
+      }
+    });
+
+    const badge = document.getElementById("dissectionLevelBadge");
+    if (badge && DISSECTION_LAYERS[currentDissectionLevel]) {
+      badge.textContent = `Camada ${currentDissectionLevel}/5: ${DISSECTION_LAYERS[currentDissectionLevel].nome}`;
+    }
+  }
+
   function selectSystem(systemId) {
     if (typeof ATLAS_DATABASE === "undefined" || !Array.isArray(ATLAS_DATABASE.sistemas)) return;[cite: 1]
     const sys = ATLAS_DATABASE.sistemas.find((s) => s.id === systemId);[cite: 1]
@@ -547,31 +436,21 @@ const ThreeEngine = (() => {
     }
   }
 
-  // =========================================================================
-  // 6. MOTOR DE SIMULAÇÃO DAS 18 VIAS DE ADMINISTRAÇÃO (SPLINE 3D)
-  // =========================================================================
+  // -------------------------------------------------------------------------
+  // 6. MOTOR DE PARTICULAS DAS 18 VIAS FARMACOLÓGICAS[cite: 1]
+  // -------------------------------------------------------------------------
   function setupRouteParticleSystem() {
     const geom = new THREE.BufferGeometry();
     routeParticlePositions = new Float32Array(ROUTE_PARTICLE_COUNT * 3);
     routeParticleProgress = new Float32Array(ROUTE_PARTICLE_COUNT);
 
     for (let i = 0; i < ROUTE_PARTICLE_COUNT; i++) {
-      routeParticlePositions[i * 3 + 0] = 0;
       routeParticlePositions[i * 3 + 1] = -30;
-      routeParticlePositions[i * 3 + 2] = 0;
       routeParticleProgress[i] = i / ROUTE_PARTICLE_COUNT;
     }
 
     geom.setAttribute("position", new THREE.BufferAttribute(routeParticlePositions, 3));
-
-    const mat = new THREE.PointsMaterial({
-      color: 0xf59e0b,
-      size: 0.038,
-      transparent: true,
-      opacity: 0.0,
-      blending: THREE.AdditiveBlending
-    });
-
+    const mat = new THREE.PointsMaterial({ color: 0xf59e0b, size: 0.038, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending });
     routeParticles = new THREE.Points(geom, mat);
     scene.add(routeParticles);
   }
@@ -581,22 +460,17 @@ const ThreeEngine = (() => {
     let waypointsData = null;
     let corFluxo = "#38bdf8";
 
-    // 1. Busca no ATLAS_DATABASE v2.0.0[cite: 1]
     if (typeof ATLAS_DATABASE !== "undefined" && ATLAS_DATABASE.viasAdministracao && ATLAS_DATABASE.viasAdministracao[rId]) {[cite: 1]
       waypointsData = ATLAS_DATABASE.viasAdministracao[rId].waypoints3D;[cite: 1]
       corFluxo = ATLAS_DATABASE.viasAdministracao[rId].corFluxo || corFluxo;[cite: 1]
     }
 
-    // 2. Fallback interno nativo para todas as 18 vias
     if (!waypointsData && DEFAULT_ROUTE_WAYPOINTS[rId]) {
       waypointsData = DEFAULT_ROUTE_WAYPOINTS[rId].waypoints;
       corFluxo = DEFAULT_ROUTE_WAYPOINTS[rId].cor;
     }
 
-    if (!waypointsData || waypointsData.length < 2) {
-      console.warn(`[ThreeEngine] Via farmacológica ${rId} sem pontos tridimensionais suficientes.`);
-      return;
-    }
+    if (!waypointsData || waypointsData.length < 2) return;
 
     activeRouteId = rId;
     isRouteActive = true;
@@ -607,30 +481,23 @@ const ThreeEngine = (() => {
     routeParticles.material.color.set(corFluxo);
     routeParticles.material.opacity = 0.95;
 
-    const startPoint = waypointsData[0];
-    tweenCamera(
-      { x: startPoint.x * 1.5, y: startPoint.y + 0.08, z: startPoint.z + 1.15 },
-      { x: startPoint.x, y: startPoint.y, z: startPoint.z }
-    );
-
-    console.log(`[ThreeEngine] Rota Farmacológica Ativada: ${rId}`);
+    const start = waypointsData[0];
+    tweenCamera({ x: start.x * 1.5, y: start.y + 0.08, z: start.z + 1.15 }, { x: start.x, y: start.y, z: start.z });
   }
 
   function updateRouteParticles() {
     if (!isRouteActive || !routeCurve || !routeParticles) return;
     const pos = routeParticlePositions;
-    const speed = 0.0035;
 
     for (let i = 0; i < ROUTE_PARTICLE_COUNT; i++) {
-      routeParticleProgress[i] += speed;
+      routeParticleProgress[i] += 0.0035;
       if (routeParticleProgress[i] > 1.0) routeParticleProgress[i] -= 1.0;
 
-      const point = routeCurve.getPointAt(routeParticleProgress[i]);
-      pos[i * 3 + 0] = point.x + (Math.sin(i * 9) * 0.005);
-      pos[i * 3 + 1] = point.y + (Math.cos(i * 7) * 0.005);
-      pos[i * 3 + 2] = point.z;
+      const pt = routeCurve.getPointAt(routeParticleProgress[i]);
+      pos[i * 3 + 0] = pt.x + (Math.sin(i * 9) * 0.005);
+      pos[i * 3 + 1] = pt.y + (Math.cos(i * 7) * 0.005);
+      pos[i * 3 + 2] = pt.z;
     }
-
     routeParticles.geometry.attributes.position.needsUpdate = true;
   }
 
@@ -640,66 +507,9 @@ const ThreeEngine = (() => {
     if (routeParticles) routeParticles.material.opacity = 0.0;
   }
 
-  // =========================================================================
-  // 7. SIMULAÇÃO DE CRISES FISIOPATOLÓGICAS (TOXICOLOGIA LAIFT)
-  // =========================================================================
-  function setCrisisMode(active, type = "colinergica") {
-    isCrisisActive = !!active;
-    crisisType = type;
-
-    if (isCrisisActive) {
-      console.warn(`[ThreeEngine] 🚨 MODO CRISE ATIVADO: ${type}`);
-      if (type === "colinergica") {
-        heartRateBpm = 38; // Bradicardia severa
-        triggerParticleFlow("pharynx_transit");
-        if (physioParticles) physioParticles.material.color.setHex(0x38bdf8);
-      } else if (type === "anafilaxia") {
-        heartRateBpm = 145; // Taquicardia compensatória
-        triggerParticleFlow("aorta_flow");
-      }
-    } else {
-      console.log(`[ThreeEngine] 🛡️ Retorno ao estado basal normal.`);
-      heartRateBpm = 75;
-      stopParticles();
-
-      // Restaura cores normais da pele
-      if (bodyModel) {
-        bodyModel.traverse((child) => {
-          if (child.isMesh && matchesWildcard(child.name, "*skin*")) {
-            const original = originalSkinColors.get(child.name);
-            if (original && child.material && child.material.color) {
-              child.material.color.setHex(original);
-            }
-          }
-        });
-      }
-    }
-  }
-
-  function updatePhysiopathologyAnimation() {
-    if (!bodyModel) return;
-
-    // Pulsação eletromecânica proporcional aos batimentos por minuto
-    cardiacCycleTime += (heartRateBpm / 60) * 0.08;
-    const pulseScale = 1.0 + Math.sin(cardiacCycleTime) * (isCrisisActive ? 0.03 : 0.06);
-
-    bodyModel.traverse((child) => {
-      if (child.isMesh && matchesWildcard(child.name, "*heart*")) {
-        child.scale.set(pulseScale, pulseScale, pulseScale);
-      }
-
-      // Cianose periférica durante colapso hipóxico ou bradicardia severa
-      if (isCrisisActive && crisisType === "colinergica" && matchesWildcard(child.name, "*skin*")) {
-        if (child.material && child.material.color) {
-          child.material.color.setHex(0x1e293b);
-        }
-      }
-    });
-  }
-
-  // =========================================================================
-  // 8. PARTÍCULAS FISIOLÓGICAS, PINS E DISSECÇÃO
-  // =========================================================================
+  // -------------------------------------------------------------------------
+  // 7. PARTICULAS FISIOLÓGICAS (DEGLUTIÇÃO / TRANSPORTE)
+  // -------------------------------------------------------------------------
   function setupPhysioParticleSystem() {
     const geom = new THREE.BufferGeometry();
     physioPositions = new Float32Array(PHYSIO_PARTICLE_COUNT * 3);
@@ -756,9 +566,11 @@ const ThreeEngine = (() => {
     physioParticles.geometry.attributes.position.needsUpdate = true;
   }
 
+  // -------------------------------------------------------------------------
+  // 8. PINS, PULSO CARDÍACO & FISIOPATOLOGIA
+  // -------------------------------------------------------------------------
   function setupPinsGroup() {
     pinsGroup = new THREE.Group();
-    pinsGroup.name = "Pins_Group";
 
     PIN_DEFINITIONS.forEach((p) => {
       const pinAnchor = new THREE.Group();
@@ -792,44 +604,49 @@ const ThreeEngine = (() => {
     if (pinsGroup) pinsGroup.visible = arePinsVisible;
   }
 
-  function setDissectionDepth(depth) {
-    currentDissectionLevel = Math.max(1, Math.min(5, parseInt(depth, 10)));
-    if (!bodyModel) return;
+  function setCrisisMode(active, type = "colinergica") {
+    isCrisisActive = !!active;
+    crisisType = type;
 
-    bodyModel.traverse((child) => {
-      if (child.isMesh && child.material) {
-        let meshLayer = 5;
-
-        for (let l = 1; l <= 5; l++) {
-          if (DISSECTION_LAYERS[l].keywords.some((k) => matchesWildcard(child.name, k))) {
-            meshLayer = l;
-            break;
-          }
-        }
-
-        if (meshLayer < currentDissectionLevel) {
-          child.visible = false;
-        } else if (meshLayer === currentDissectionLevel) {
-          child.visible = true;
-          child.material.transparent = false;
-          child.material.opacity = 1.0;
-        } else {
-          child.visible = true;
-          child.material.transparent = true;
-          child.material.opacity = currentDissectionLevel === 5 ? 1.0 : 0.4;
-        }
+    if (isCrisisActive) {
+      if (type === "colinergica") {
+        heartRateBpm = 38;
+        triggerParticleFlow("pharynx_transit");
+        if (physioParticles) physioParticles.material.color.setHex(0x38bdf8);
       }
-    });
-
-    const badge = document.getElementById("dissectionLevelBadge");
-    if (badge && DISSECTION_LAYERS[currentDissectionLevel]) {
-      badge.textContent = `Camada ${currentDissectionLevel}/5: ${DISSECTION_LAYERS[currentDissectionLevel].nome}`;
+    } else {
+      heartRateBpm = 75;
+      stopParticles();
+      if (bodyModel) {
+        bodyModel.traverse((child) => {
+          if (child.isMesh && matchesWildcard(child.name, "*skin*")) {
+            const original = originalColors.get(child.name);
+            if (original && child.material && child.material.color) child.material.color.setHex(original);
+          }
+        });
+      }
     }
   }
 
-  // =========================================================================
-  // 9. CÂMERA TWEEN, INTERAÇÃO & FEEDBACK PARA QUIZ 3D
-  // =========================================================================
+  function updatePhysiopathologyAnimation() {
+    if (!bodyModel) return;
+
+    cardiacCycleTime += (heartRateBpm / 60) * 0.08;
+    const pulseScale = 1.0 + Math.sin(cardiacCycleTime) * (isCrisisActive ? 0.03 : 0.06);
+
+    bodyModel.traverse((child) => {
+      if (child.isMesh && matchesWildcard(child.name, "*heart*")) {
+        child.scale.set(pulseScale, pulseScale, pulseScale);
+      }
+      if (isCrisisActive && matchesWildcard(child.name, "*skin*")) {
+        if (child.material && child.material.color) child.material.color.setHex(0x1e293b);
+      }
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // 9. CÂMERA, INTERAÇÃO & DESTAQUE
+  // -------------------------------------------------------------------------
   function tweenCamera(targetPos, targetLook, durationMs = 800) {
     if (!camera || !controls) return;
     cameraStartPos = camera.position.clone();
@@ -853,7 +670,7 @@ const ThreeEngine = (() => {
     if (progress >= 1.0) isCameraTweening = false;
   }
 
-  function highlightOrgan(organKey, colorHex = COLOR_HIGHLIGHT, durationMs = 3000) {
+  function highlightOrgan(organKey, colorHex = COLOR_HIGHLIGHT, durationMs = 2500) {
     if (!bodyModel) return false;
     let found = false;
 
@@ -879,57 +696,30 @@ const ThreeEngine = (() => {
     return found;
   }
 
-  /**
-   * Feedback luminoso em tempo real para o Quiz 3D Gamificado
-   */
   function flashOrganFeedback(organKey, isCorrect) {
-    const color = isCorrect ? COLOR_SUCCESS : COLOR_ERROR;
-    highlightOrgan(organKey, color, 2000);
+    highlightOrgan(organKey, isCorrect ? 0x10b981 : 0xef4444, 2000);
   }
 
-  function raycastHitOrgan(clientX, clientY) {
-    if (!container || !camera || !bodyModel) return null;
-
-    const rect = container.getBoundingClientRect();
+  function processInteraction(clientX, clientY) {
+    if (!container || !camera || !bodyModel) return;
+    const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
     raycaster.setFromCamera(mouse, camera);
-    const hits = raycaster.intersectObjects(bodyModel.children, true);
 
-    if (hits.length > 0) {
-      return {
-        meshName: hits[0].object.name,
-        point: hits[0].point,
-        object: hits[0].object
-      };
-    }
-    return null;
-  }
-
-  function processInteraction(clientX, clientY) {
-    if (!container || !camera) return;
-
-    // Prioridade para avaliação de Quiz Gamificado se ativo
     if (typeof QuizEngine !== "undefined" && typeof QuizEngine.isQuizActive === "function" && QuizEngine.isQuizActive()) {
-      const hit = raycastHitOrgan(clientX, clientY);
-      if (hit && hit.meshName) {
-        QuizEngine.evaluateUserAnswer(hit.meshName);
+      const hits = raycaster.intersectObjects(bodyModel.children, true);
+      if (hits.length > 0) {
+        QuizEngine.evaluateUserAnswer(hits[0].object.name);
         return;
       }
     }
 
-    const rect = container.getBoundingClientRect();
-    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-
-    raycaster.setFromCamera(mouse, camera);
-
-    // Detecção de clique em Pins / Hotspots
     if (pinsGroup && arePinsVisible) {
-      const hits = raycaster.intersectObjects(pinsGroup.children, true);
-      if (hits.length > 0) {
-        let root = hits[0].object;
+      const pinHits = raycaster.intersectObjects(pinsGroup.children, true);
+      if (pinHits.length > 0) {
+        let root = pinHits[0].object;
         while (root.parent && root.parent !== pinsGroup) root = root.parent;
         if (root.userData && root.userData.isPin) {
           const p = root.userData.data;
@@ -944,8 +734,6 @@ const ThreeEngine = (() => {
       }
     }
 
-    // Detecção direta sobre malhas anatômicas
-    if (!bodyModel) return;
     const hits = raycaster.intersectObjects(bodyModel.children, true);
     if (hits.length > 0) {
       const obj = hits[0].object;
@@ -959,7 +747,7 @@ const ThreeEngine = (() => {
       }
       if (organHud && organNameEl) {
         const cleanName = obj.name.replace(/mesh_/g, "").replace(/_/g, " ").replace(/[0-9]/g, "").trim();
-        organNameEl.innerText = cleanName || "Tecido Selecionado";
+        organNameEl.innerText = cleanName.toUpperCase() || "ESTRUTURA SELECIONADA";
         organHud.classList.remove("hidden");
       }
     }
@@ -979,28 +767,11 @@ const ThreeEngine = (() => {
     }
   }
 
-  // =========================================================================
-  // 10. WIDGET DE DISSECÇÃO NO CANVAS
-  // =========================================================================
   function injectDissectionSliderUI() {
     if (document.getElementById("dissectionControlWidget")) return;
-
     const widget = document.createElement("div");
     widget.id = "dissectionControlWidget";
-    widget.style.cssText = `
-      position: absolute;
-      bottom: 12px;
-      left: 12px;
-      background: rgba(2, 6, 23, 0.88);
-      border: 1px solid #334155;
-      padding: 8px 12px;
-      border-radius: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      z-index: 30;
-      backdrop-filter: blur(6px);
-    `;
+    widget.style.cssText = "position:absolute; bottom:12px; left:12px; background:rgba(2,6,23,0.92); border:1px solid #334155; padding:8px 12px; border-radius:8px; display:flex; flex-direction:column; gap:4px; z-index:30; backdrop-filter:blur(6px);";
 
     widget.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -1009,21 +780,14 @@ const ThreeEngine = (() => {
       </div>
       <input type="range" id="dissectionSlider" min="1" max="5" value="5" step="1" style="width:160px; accent-color:#0284c7; cursor:pointer; margin:4px 0;">
       <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:#64748b; font-family:monospace;">
-        <span>Pele</span>
-        <span>Músculo</span>
-        <span>Osso</span>
-        <span>Vasos</span>
-        <span>Vísceras</span>
+        <span>Pele</span><span>Músculo</span><span>Osso</span><span>Vasos</span><span>Vísceras</span>
       </div>
     `;
 
     if (container) {
       container.appendChild(widget);
-
       const slider = widget.querySelector("#dissectionSlider");
-      if (slider) {
-        slider.addEventListener("input", (e) => setDissectionDepth(e.target.value));
-      }
+      if (slider) slider.addEventListener("input", (e) => setDissectionDepth(e.target.value));
 
       const btnPins = widget.querySelector("#btnTogglePins");
       if (btnPins) {
@@ -1035,9 +799,9 @@ const ThreeEngine = (() => {
     }
   }
 
-  // =========================================================================
-  // 11. LOOP PRINCIPAL DE RENDERIZAÇÃO
-  // =========================================================================
+  // -------------------------------------------------------------------------
+  // 10. LOOP DE ANIMAÇÃO
+  // -------------------------------------------------------------------------
   function animate(now) {
     requestAnimationFrame(animate);
 
@@ -1047,19 +811,14 @@ const ThreeEngine = (() => {
     updatePinsPulse();
     updatePhysiopathologyAnimation();
 
-    if (controls && typeof controls.update === "function") {
-      controls.update();
-    }
-
-    if (renderer && scene && camera) {
-      renderer.render(scene, camera);
-    }
+    if (controls) controls.update();
+    if (renderer && scene && camera) renderer.render(scene, camera);
   }
 
-  // =========================================================================
-  // API PÚBLICA EXPOSTA DO MOTOR
-  // =========================================================================
-  return {
+  // -------------------------------------------------------------------------
+  // 11. OBJETO PÚBLICO E VINCULAÇÃO GLOBAL OBRIGATÓRIA
+  // -------------------------------------------------------------------------
+  const ThreeEngineAPI = {
     init,
     selectSystem,
     highlightOrgan,
@@ -1071,23 +830,26 @@ const ThreeEngine = (() => {
     simulateAdministrationRoute,
     stopRouteSimulation,
     setCrisisMode,
-    raycastHitOrgan,
     setDissectionDepth,
     togglePinsVisibility,
     triggerParticleFlow,
     stopParticles,
     tweenCamera,
-    onWindowResize,
-    getScene: () => scene,
-    getCamera: () => camera,
-    getBodyModel: () => bodyModel
+    onWindowResize
   };
-})();
 
+  // Garante que ThreeEngine esteja acessível em qualquer contexto
+  global.ThreeEngine = ThreeEngineAPI;
+
+})(typeof window !== "undefined" ? window : this);
+
+// Inicialização imediata
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", ThreeEngine.init);
+  document.addEventListener("DOMContentLoaded", function () {
+    if (window.ThreeEngine) window.ThreeEngine.init();
+  });
 } else {
-  ThreeEngine.init();
+  if (window.ThreeEngine) window.ThreeEngine.init();
 }
 
 /* ========================================================================= */
